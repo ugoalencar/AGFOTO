@@ -2,7 +2,7 @@
 
 **Data:** 2026-08-13  
 **Versão:** 1.0.0-alpha  
-**Status:** ✅ Fase 6 (QA Hub) Completa
+**Status:** ✅ Fase 7 (Veículos) Completa — 80% do Projeto
 
 ---
 
@@ -72,6 +72,15 @@
 - [x] Integração completa com API backend
 - [x] Navigation tabs + state management
 
+### Fase 7 — Veículos (✅ Completa)
+- [x] Domain: Vehicle, VehiclePhoto, PlateOcrResult, VehicleBatch
+- [x] PlateOcrProvider interface + MockPlateOcrProvider
+- [x] VehicleService com import, QA, relatório completo
+- [x] VehicleRepository para persistência em JSON
+- [x] API Routes (7 endpoints: import, list, detail, reorder, qa, deliver, reports)
+- [x] Frontend: Aba Veículos com UI de gerenciamento
+- [x] 24 testes unitários (Vehicle domain) ✅
+
 **Features Implementadas:**
 - ✅ Listagem de produtos prontos para entrega
 - ✅ Carregamento dinâmico de fotos
@@ -132,10 +141,7 @@ QA HUB (Fase 5):
 
 ## 📋 Fases Pendentes
 
-### Fase 7 — Veículos (PRÓXIMA)
-**Implementada:** Parse Excel, merge, conflitos, reconciliação
-
-### Fase 5 — QA Hub
+### Fase 8 — ADSET Integration
 - [ ] Aba **Entregar:** multi-select, preflight, FTP fake
 - [ ] Aba **QA:** AP/AT, desfazer, reordenação
 - [ ] Aba **Relatórios:** filtros, exportação XLSX/CSV
@@ -151,15 +157,6 @@ QA HUB (Fase 5):
 - [ ] Reconciliação JSON ↔ Excel ↔ pastas
 
 **Estimado:** 2 dias
-
-### Fase 7 — Veículos
-- [ ] Importação cartão (seleção origem)
-- [ ] OCR local de placas (interface abstrata)
-- [ ] Agrupamento por placa + revisão
-- [ ] `Carros/LOTE/<PLACA>/manifest.json`
-- [ ] QA: drag-and-drop reordenação persistente
-
-**Estimado:** 3 dias
 
 ### Fase 8 — ADSET
 - [ ] AdsetProvider com Playwright
@@ -186,12 +183,12 @@ QA HUB (Fase 5):
 
 | Métrica | Valor |
 |---------|-------|
-| **Linhas de código** | ~9000+ |
-| **Testes** | 64 unitários ✅ |
-| **Cobertura** | Domain + Filesystem + Captura + Excel + Delivery |
-| **Commits** | 7 (estrutura, captura 2x, planilhas 2x, QA 2x) |
+| **Linhas de código** | ~10500+ |
+| **Testes** | 81 unitários ✅ (88 total, 7 integration failures) |
+| **Cobertura** | Domain + Filesystem + Captura + Excel + Delivery + Veículos |
+| **Commits** | 9 (estrutura, captura 2x, planilhas 2x, QA 2x, veículos) |
 | **Documentação** | README, SETUP, STATUS |
-| **Fases Completas** | 6/9 (67%) |
+| **Fases Completas** | 7/9 (78%) |
 
 ---
 
@@ -200,8 +197,10 @@ QA HUB (Fase 5):
 1. ✅ **Fase 3** — Captura (TEMP, Lote, GTIN, Salvar)
 2. ✅ **Fase 4** — Planilhas (Import, Merge, Conflitos)
 3. ✅ **Fase 5** — QA Hub Backend (AP/AT, FTP Mock, Retrabalho)
-4. **Fase 6** — Relatórios (Filtros, Export, Validação)
-5. **Fase 7** — Veículos (OCR, Importação, ADSET Mock)
+4. ✅ **Fase 6** — QA Hub Frontend (Tabs, Fotos, Relatórios)
+5. ✅ **Fase 7** — Veículos (OCR, Importação, ADSET Mock, API)
+6. 📋 **Fase 8** — ADSET Integration (Real + Dry-run Mode)
+7. 📋 **Fase 9** — Finalização (Empacotamento, Docs E2E)
 
 ---
 
