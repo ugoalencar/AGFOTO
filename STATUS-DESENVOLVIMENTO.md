@@ -2,7 +2,7 @@
 
 **Data:** 2026-08-13  
 **Versão:** 1.0.0-alpha  
-**Status:** ✅ Fase 4 (Planilhas) Completa
+**Status:** ✅ Fase 5 (QA Hub Backend) Completa
 
 ---
 
@@ -50,6 +50,20 @@
 
 **Commits:** `fea0fce` (backend), `b5a47dc` (frontend)
 
+### Fase 5 — QA Hub (✅ Backend Completo)
+- [x] Domain: Delivery, Manifest, DeliveryRecord, QaPhoto
+- [x] DeliveryService — QA, classificação (AP/AT), retrabalho
+- [x] FtpService — MockFtpProvider + contrato real
+- [x] ReportService — Filtros, estatísticas, exportação CSV
+- [x] API Routes — 19 endpoints para QA/Entrega/Relatórios
+- [x] Testes — 21 testes delivery/FTP ✅
+
+**Status:**
+- Backend: 100% funcional com mock FTP
+- Frontend: Planejado (3 tabs: Entregar, QA, Relatórios)
+
+**Commits:** `50106f3` (backend completo)
+
 **API Implementada:**
 ```
 CAPTURA (Fase 3):
@@ -66,6 +80,22 @@ PLANILHAS (Fase 4):
 ✅ GET    /api/planilhas/conflitos   — Listar conflitos
 ✅ GET    /api/planilhas/controle    — Gerar controle-lotes.xlsx
 ✅ GET    /api/planilhas/reconciliar — Validar divergências
+
+QA HUB (Fase 5):
+✅ GET    /api/qa/produtos/:lote              — Listar prontos p/ entrega
+✅ GET    /api/qa/fotos/:lote/:gtin           — Carregar fotos QA
+✅ POST   /api/qa/classificar                 — Marcar AP/AT
+✅ POST   /api/qa/desclassificar              — Remover classificação
+✅ POST   /api/qa/concluir                    — Completar QA
+✅ POST   /api/entregas/preparar              — Montar staging
+✅ POST   /api/entregas/executar              — FTP upload
+✅ POST   /api/retrabalhos                    — Reiniciar retrabalho
+✅ GET    /api/relatorios/produtos            — Filtros + estatísticas
+✅ GET    /api/relatorios/lotes               — Resumo por lote
+✅ GET    /api/relatorios/status              — Contagem por status
+✅ GET    /api/relatorios/exportar            — Dados export XLSX
+✅ GET    /api/relatorios/csv                 — Download CSV
+✅ GET    /api/relatorios/validar/:lote       — Validar consistência
 ```
 
 **Testes Passando:**
@@ -84,7 +114,7 @@ PLANILHAS (Fase 4):
 
 ## 📋 Fases Pendentes
 
-### Fase 5 — QA Hub (PRÓXIMA)
+### Fase 6 — Relatórios e Reconciliação (PRÓXIMA)
 **Implementada:** Parse Excel, merge, conflitos, reconciliação
 
 ### Fase 5 — QA Hub
@@ -138,20 +168,22 @@ PLANILHAS (Fase 4):
 
 | Métrica | Valor |
 |---------|-------|
-| **Linhas de código** | ~5000+ |
-| **Testes** | 43 unitários ✅ |
-| **Cobertura** | Domain + Filesystem + Captura + Excel |
-| **Commits** | 5 (estrutura, captura 2x, planilhas 2x) |
+| **Linhas de código** | ~7500+ |
+| **Testes** | 64 unitários ✅ |
+| **Cobertura** | Domain + Filesystem + Captura + Excel + Delivery |
+| **Commits** | 6 (estrutura, captura 2x, planilhas 2x, QA 1x) |
 | **Documentação** | README, SETUP, STATUS |
-| **Fases Completas** | 4/9 (44%) |
+| **Fases Completas** | 5/9 (55%) |
 
 ---
 
 ## 🎯 Próximos Passos
 
-1. ✅ **Fase 3** — Captura completa (TEMP, Lote, GTIN, Salvar)
-2. ✅ **Fase 4** — Planilhas (Import, Merge, Conflitos, Reconciliação)
-3. **Fase 5** — QA Hub (AP/AT, Entrega FTP mock, Retrabalho)
+1. ✅ **Fase 3** — Captura (TEMP, Lote, GTIN, Salvar)
+2. ✅ **Fase 4** — Planilhas (Import, Merge, Conflitos)
+3. ✅ **Fase 5** — QA Hub Backend (AP/AT, FTP Mock, Retrabalho)
+4. **Fase 6** — Relatórios (Filtros, Export, Validação)
+5. **Fase 7** — Veículos (OCR, Importação, ADSET Mock)
 
 ---
 
