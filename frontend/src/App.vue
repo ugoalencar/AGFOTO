@@ -20,6 +20,11 @@
             :style="{ background: activePage === 'planilhas' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
             📊 Planilhas
           </button>
+          <button
+            @click="activePage = 'qa-hub'"
+            :style="{ background: activePage === 'qa-hub' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
+            ✓ QA Hub
+          </button>
         </div>
       </div>
     </header>
@@ -210,6 +215,225 @@
       </div>
     </main>
 
+    <!-- QA Hub Page -->
+    <main v-if="activePage === 'qa-hub'" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
+      <!-- Sub-tabs -->
+      <div style="display: flex; gap: 0; background: #333; border-bottom: 2px solid #FF0000;">
+        <button
+          @click="qaHubTab = 'entregar'"
+          :style="{ flex: 1, background: qaHubTab === 'entregar' ? '#FF0000' : '#444', color: '#fff', border: 'none', padding: '1rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }">
+          📤 Entregar
+        </button>
+        <button
+          @click="qaHubTab = 'qa'"
+          :style="{ flex: 1, background: qaHubTab === 'qa' ? '#FF0000' : '#444', color: '#fff', border: 'none', padding: '1rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }">
+          🔍 QA
+        </button>
+        <button
+          @click="qaHubTab = 'relatorios'"
+          :style="{ flex: 1, background: qaHubTab === 'relatorios' ? '#FF0000' : '#444', color: '#fff', border: 'none', padding: '1rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }">
+          📊 Relatórios
+        </button>
+      </div>
+
+      <!-- Tab Content -->
+      <div style="flex: 1; overflow-y: auto; padding: 2rem;">
+        <!-- Aba Entregar -->
+        <div v-if="qaHubTab === 'entregar'">
+          <h2 style="color: #FF0000;">📤 Entrega de Produtos</h2>
+
+          <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+            <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Selecione Lote:</label>
+            <input
+              v-model="qaSelectedLote"
+              type="text"
+              placeholder="Digite número do lote"
+              style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
+
+            <button
+              @click="onLoadQaProducts"
+              :disabled="!qaSelectedLote"
+              class="btn-action primary"
+              style="width: 100%;">
+              Carregar Produtos
+            </button>
+          </div>
+
+          <div v-if="qaProducts.length > 0" style="margin-top: 2rem;">
+            <h3>Produtos Prontos para Entrega ({{ qaProducts.length }})</h3>
+            <div style="overflow-x: auto; border: 1px solid var(--ag-border);">
+              <table style="width: 100%; font-size: 0.875rem;">
+                <thead style="background: var(--ag-dark-gray);">
+                  <tr>
+                    <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">GTIN</th>
+                    <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">Código</th>
+                    <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">Qtd Fotos</th>
+                    <th style="padding: 0.75rem; text-align: left;">Ação</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(product, idx) in qaProducts" :key="idx" style="border-bottom: 1px solid var(--ag-border);">
+                    <td style="padding: 0.75rem;">{{ product.gtin }}</td>
+                    <td style="padding: 0.75rem;">{{ product.codigo }}</td>
+                    <td style="padding: 0.75rem;">{{ product.quantidadeFotos }}</td>
+                    <td style="padding: 0.75rem;">
+                      <button
+                        @click="onPrepareDelivery(product)"
+                        style="background: #FF8800; color: #000; border: none; padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; font-size: 0.75rem;">
+                        Preparar
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- Aba QA -->
+        <div v-if="qaHubTab === 'qa'">
+          <h2 style="color: #FF0000;">🔍 Classificação de Fotos</h2>
+
+          <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+              <div>
+                <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+                <input
+                  v-model="qaPhotoLote"
+                  type="text"
+                  placeholder="Lote"
+                  style="width: 100%; padding: 0.75rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
+              </div>
+              <div>
+                <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">GTIN:</label>
+                <input
+                  v-model="qaPhotoGtin"
+                  type="text"
+                  placeholder="GTIN"
+                  style="width: 100%; padding: 0.75rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
+              </div>
+            </div>
+
+            <button
+              @click="onLoadQaPhotos"
+              :disabled="!qaPhotoLote || !qaPhotoGtin"
+              class="btn-action primary"
+              style="width: 100%; margin-top: 1rem;">
+              Carregar Fotos
+            </button>
+          </div>
+
+          <div v-if="qaPhotos.length > 0" style="margin-top: 2rem;">
+            <h3>Fotos para QA ({{ qaPhotos.length }})</h3>
+            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 1rem;">
+              <div
+                v-for="(photo, idx) in qaPhotos"
+                :key="idx"
+                style="border: 2px solid var(--ag-border); padding: 0.5rem; text-align: center; font-size: 0.75rem;">
+                <div style="background: var(--ag-dark-gray); height: 100px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem;">
+                  📷
+                </div>
+                <div style="margin-bottom: 0.5rem;">{{ photo.filename.substring(0, 15) }}...</div>
+                <div style="display: flex; gap: 0.25rem; margin-bottom: 0.5rem;">
+                  <button
+                    @click="onClassifyPhoto(photo, 'AP')"
+                    style="flex: 1; background: #FFB400; color: #000; border: none; padding: 0.25rem; cursor: pointer; font-size: 0.7rem;">
+                    AP
+                  </button>
+                  <button
+                    @click="onClassifyPhoto(photo, 'AT')"
+                    style="flex: 1; background: #00AA00; color: #fff; border: none; padding: 0.25rem; cursor: pointer; font-size: 0.7rem;">
+                    AT
+                  </button>
+                </div>
+                <div style="padding: 0.25rem; background: var(--ag-border); border-radius: 2px;">
+                  {{ photo.classification || '—' }}
+                </div>
+              </div>
+            </div>
+
+            <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+              <button
+                @click="onCompleteQa"
+                class="btn-action primary"
+                style="flex: 1;">
+                Concluir QA
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Aba Relatórios -->
+        <div v-if="qaHubTab === 'relatorios'">
+          <h2 style="color: #FF0000;">📊 Relatórios</h2>
+
+          <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+            <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Filtrar por Status:</label>
+            <select
+              v-model="reportStatus"
+              style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
+              <option value="">— Todos —</option>
+              <option value="pendente_qa">Pendente QA</option>
+              <option value="pronto_para_entrega">Pronto para Entrega</option>
+              <option value="entregue">Entregue</option>
+              <option value="erro_entrega">Erro na Entrega</option>
+              <option value="retrabalho">Retrabalho</option>
+            </select>
+
+            <button
+              @click="onLoadReport"
+              class="btn-action primary"
+              style="width: 100%;">
+              Gerar Relatório
+            </button>
+          </div>
+
+          <div v-if="reportStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
+            <div style="background: #FF0000; padding: 1rem; border-radius: 4px; color: #fff;">
+              <div style="font-size: 0.75rem; opacity: 0.8;">Total Itens</div>
+              <div style="font-size: 1.5rem; font-weight: bold;">{{ reportStats.totalItens }}</div>
+            </div>
+            <div style="background: #00AA00; padding: 1rem; border-radius: 4px; color: #fff;">
+              <div style="font-size: 0.75rem; opacity: 0.8;">Entregues</div>
+              <div style="font-size: 1.5rem; font-weight: bold;">{{ reportStats.entregues }}</div>
+            </div>
+            <div style="background: #FFB400; padding: 1rem; border-radius: 4px; color: #000;">
+              <div style="font-size: 0.75rem; opacity: 0.8;">Pendentes</div>
+              <div style="font-size: 1.5rem; font-weight: bold;">{{ reportStats.pendentes }}</div>
+            </div>
+            <div style="background: #FF6600; padding: 1rem; border-radius: 4px; color: #fff;">
+              <div style="font-size: 0.75rem; opacity: 0.8;">Erros</div>
+              <div style="font-size: 1.5rem; font-weight: bold;">{{ reportStats.erros }}</div>
+            </div>
+          </div>
+
+          <div v-if="reportItems.length > 0" style="margin-top: 2rem;">
+            <h3>Resultados ({{ reportItems.length }} itens)</h3>
+            <div style="overflow-x: auto; border: 1px solid var(--ag-border); max-height: 400px; overflow-y: auto;">
+              <table style="width: 100%; font-size: 0.75rem;">
+                <thead style="background: var(--ag-dark-gray); position: sticky; top: 0;">
+                  <tr>
+                    <th style="padding: 0.5rem; text-align: left;">GTIN</th>
+                    <th style="padding: 0.5rem; text-align: left;">Código</th>
+                    <th style="padding: 0.5rem; text-align: left;">Status</th>
+                    <th style="padding: 0.5rem; text-align: left;">Fotos</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(item, idx) in reportItems.slice(0, 20)" :key="idx" style="border-bottom: 1px solid var(--ag-border);">
+                    <td style="padding: 0.5rem;">{{ item.gtin }}</td>
+                    <td style="padding: 0.5rem;">{{ item.codigo }}</td>
+                    <td style="padding: 0.5rem;"><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td>
+                    <td style="padding: 0.5rem;">{{ item.quantidadeFotos }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
     <!-- Modal de Imagem -->
     <div v-if="modalImage" class="modal-overlay" @click="closeModal">
       <div class="modal-content" @click.stop>
@@ -234,7 +458,8 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 export default {
   name: 'App',
   setup() {
-    const activePage = ref('captura'); // 'captura' or 'planilhas'
+    const activePage = ref('captura'); // 'captura', 'planilhas', 'qa-hub'
+    const qaHubTab = ref('entregar'); // 'entregar', 'qa', 'relatorios'
     const selectedLote = ref('');
     const selectedGtin = ref('');
     const inputGtin = ref('');
@@ -248,6 +473,17 @@ export default {
     const excelFile = ref(null);
     const excelItems = ref([]);
     const excelConflicts = ref([]);
+
+    // QA Hub state
+    const qaSelectedLote = ref('');
+    const qaProducts = ref([]);
+    const qaPhotoLote = ref('');
+    const qaPhotoGtin = ref('');
+    const qaPhotos = ref([]);
+    const reportStatus = ref('');
+    const reportItems = ref([]);
+    const reportStats = ref(null);
+
     let refreshInterval = null;
 
     // Computed
@@ -452,6 +688,133 @@ export default {
       }
     };
 
+    // QA Hub methods
+    const onLoadQaProducts = async () => {
+      if (!qaSelectedLote.value) return;
+
+      try {
+        const response = await this.$api.request(`/api/qa/produtos/${qaSelectedLote.value}`);
+        if (response.ok) {
+          qaProducts.value = response.data.ready || [];
+          showStatus(`✓ ${qaProducts.value.length} produtos carregados`, 'success');
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onLoadQaPhotos = async () => {
+      if (!qaPhotoLote.value || !qaPhotoGtin.value) return;
+
+      try {
+        const response = await this.$api.request(
+          `/api/qa/fotos/${qaPhotoLote.value}/${qaPhotoGtin.value}`
+        );
+        if (response.ok) {
+          qaPhotos.value = response.data.photos || [];
+          showStatus(`✓ ${qaPhotos.value.length} fotos carregadas`, 'success');
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onClassifyPhoto = async (photo, classification) => {
+      try {
+        const response = await this.$api.request(
+          '/api/qa/classificar',
+          {
+            method: 'POST',
+            data: {
+              lote: qaPhotoLote.value,
+              gtin: qaPhotoGtin.value,
+              filename: photo.filename,
+              classification
+            }
+          }
+        );
+        if (response.ok) {
+          photo.classification = classification;
+          showStatus(`✓ Foto classificada como ${classification}`, 'success');
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onCompleteQa = async () => {
+      if (!qaPhotoLote.value || !qaPhotoGtin.value) return;
+
+      try {
+        const response = await this.$api.request(
+          '/api/qa/concluir',
+          {
+            method: 'POST',
+            data: {
+              lote: qaPhotoLote.value,
+              gtin: qaPhotoGtin.value,
+              deliveryType: 'normal'
+            }
+          }
+        );
+        if (response.ok) {
+          showStatus(`✓ QA concluído - Pronto para entrega`, 'success');
+          qaPhotos.value = [];
+          qaPhotoGtin.value = '';
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onPrepareDelivery = async (product) => {
+      try {
+        const response = await this.$api.request(
+          '/api/entregas/preparar',
+          {
+            method: 'POST',
+            data: {
+              lote: qaSelectedLote.value,
+              gtin: product.gtin,
+              codigo: product.codigo,
+              deliveryType: 'normal'
+            }
+          }
+        );
+        if (response.ok) {
+          showStatus(`✓ Entrega preparada - ${response.data.manifest.fileCount} arquivos`, 'success');
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onLoadReport = async () => {
+      try {
+        const query = reportStatus.value ? `?status=${reportStatus.value}` : '';
+        const response = await this.$api.request(`/api/relatorios/produtos${query}`);
+        if (response.ok) {
+          reportItems.value = response.data.items || [];
+          reportStats.value = response.data.stats || {};
+          showStatus(`✓ Relatório gerado - ${reportItems.value.length} itens`, 'success');
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
     onMounted(async () => {
       // Load initial data
       await loadTempImages();
@@ -482,6 +845,15 @@ export default {
       excelFile,
       excelItems,
       excelConflicts,
+      qaHubTab,
+      qaSelectedLote,
+      qaProducts,
+      qaPhotoLote,
+      qaPhotoGtin,
+      qaPhotos,
+      reportStatus,
+      reportItems,
+      reportStats,
       onLoteSelected,
       onGtinEnter,
       onSaveCapture,
@@ -492,7 +864,13 @@ export default {
       openModal,
       closeModal,
       onExcelFileSelected,
-      onImportExcel
+      onImportExcel,
+      onLoadQaProducts,
+      onLoadQaPhotos,
+      onClassifyPhoto,
+      onCompleteQa,
+      onPrepareDelivery,
+      onLoadReport
     };
   }
 };
