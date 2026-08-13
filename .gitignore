@@ -8,6 +8,7 @@ package-lock.json
 .env.*.local
 ftp-config.json
 adset-config.json
+adset.md
 caminhos-locais.json
 
 # Operational data

@@ -11,6 +11,7 @@ import capturaRoutes from './routes/captura.js';
 import planilhasRoutes from './routes/planilhas.js';
 import qaHubRoutes from './routes/qa-hub.js';
 import vehiclesRoutes from './routes/vehicles.js';
+import adsetRoutes from './routes/adset.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -77,6 +78,9 @@ app.use('/api/relatorios', qaHubRoutes);
 
 // Vehicles routes
 app.use('/api/carros', vehiclesRoutes);
+
+// ADSET routes
+app.use('/api/adset', adsetRoutes);
 
 // Rota 404
 app.use((req, res) => {
