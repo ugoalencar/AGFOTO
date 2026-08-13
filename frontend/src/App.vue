@@ -1,16 +1,30 @@
 <template>
   <div class="app-container">
     <header>
-      <div class="logo">
-        <img src="/favicon.svg" alt="AG Foto" class="logo-svg">
-        <div>
-          <div class="title">AG Foto</div>
-          <div class="subtitle">Captura de Produtos</div>
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div class="logo">
+          <img src="/favicon.svg" alt="AG Foto" class="logo-svg">
+          <div>
+            <div class="title">AG Foto</div>
+            <div class="subtitle">Sistema de Fotografia</div>
+          </div>
+        </div>
+        <div style="display: flex; gap: 1rem;">
+          <button
+            @click="activePage = 'captura'"
+            :style="{ background: activePage === 'captura' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
+            📸 Captura
+          </button>
+          <button
+            @click="activePage = 'planilhas'"
+            :style="{ background: activePage === 'planilhas' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
+            📊 Planilhas
+          </button>
         </div>
       </div>
     </header>
 
-    <main>
+    <main v-if="activePage === 'captura'">
       <div class="panel-inputs">
         <div class="input-group-wrapper">
           <label>Lote</label>
@@ -123,6 +137,79 @@
       <span v-if="status" :class="`${statusType}`">{{ status }}</span>
     </footer>
 
+    <!-- Planilhas Page -->
+    <main v-if="activePage === 'planilhas'" style="padding: 2rem; overflow-y: auto;">
+      <div style="max-width: 900px;">
+        <h2 style="color: #FF0000; margin-bottom: 1.5rem;">📊 Importação de Planilhas</h2>
+        <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Upload Excel com EAN, Código e Descrição para unificar no master catalog.</p>
+
+        <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+          <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+          <input
+            v-model="selectedLote"
+            type="text"
+            placeholder="Digite número do lote"
+            style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
+
+          <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Arquivo Excel (.xlsx):</label>
+          <input
+            @change="onExcelFileSelected"
+            type="file"
+            accept=".xlsx"
+            style="width: 100%; padding: 0.75rem; margin-bottom: 1rem;">
+
+          <div v-if="excelFile" style="background: var(--ag-bg); padding: 1rem; border: 1px solid var(--ag-border); margin-bottom: 1rem; font-size: 0.875rem;">
+            <div><strong>Arquivo:</strong> {{ excelFile.name }}</div>
+            <div><strong>Items:</strong> {{ excelItems.length }}</div>
+            <div><strong>Conflitos:</strong> {{ excelConflicts.length }}</div>
+          </div>
+
+          <button
+            @click="onImportExcel"
+            :disabled="!selectedLote || !excelFile"
+            class="btn-action primary"
+            style="width: 100%; margin-top: 1rem;">
+            Importar e Unificar
+          </button>
+        </div>
+
+        <div v-if="excelConflicts.length > 0" style="background: #FFB400; padding: 1.5rem; border: 2px solid #FF8800; color: #000;">
+          <h3 style="margin-top: 0;">⚠️ {{ excelConflicts.length }} Conflitos Detectados</h3>
+          <div style="max-height: 200px; overflow-y: auto;">
+            <div v-for="(c, idx) in excelConflicts" :key="idx" style="background: rgba(255,255,255,0.3); padding: 0.75rem; margin-bottom: 0.5rem; font-size: 0.875rem;">
+              <strong>{{ c.lote }}/{{ c.ean }}</strong> → {{ c.field }}<br>
+              Existe: {{ c.existingValue }} | Nova: {{ c.newValue }}
+            </div>
+          </div>
+        </div>
+
+        <div v-if="excelItems.length > 0" style="margin-top: 2rem;">
+          <h3>Items a Importar (mostrando primeiros 10):</h3>
+          <div style="overflow-x: auto; border: 1px solid var(--ag-border);">
+            <table style="width: 100%; font-size: 0.875rem;">
+              <thead style="background: var(--ag-dark-gray);">
+                <tr>
+                  <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">EAN</th>
+                  <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">Código</th>
+                  <th style="padding: 0.75rem; text-align: left;">Descrição</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(item, idx) in excelItems.slice(0, 10)" :key="idx" style="border-bottom: 1px solid var(--ag-border);">
+                  <td style="padding: 0.75rem;">{{ item.ean }}</td>
+                  <td style="padding: 0.75rem;">{{ item.codigo }}</td>
+                  <td style="padding: 0.75rem;">{{ item.descricao }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="excelItems.length > 10" style="padding: 1rem; text-align: center; color: var(--ag-border);">
+            ... e {{ excelItems.length - 10 }} items adicionais
+          </div>
+        </div>
+      </div>
+    </main>
+
     <!-- Modal de Imagem -->
     <div v-if="modalImage" class="modal-overlay" @click="closeModal">
       <div class="modal-content" @click.stop>
@@ -147,6 +234,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 export default {
   name: 'App',
   setup() {
+    const activePage = ref('captura'); // 'captura' or 'planilhas'
     const selectedLote = ref('');
     const selectedGtin = ref('');
     const inputGtin = ref('');
@@ -157,6 +245,9 @@ export default {
     const status = ref('');
     const statusType = ref('');
     const currentStatus = ref('');
+    const excelFile = ref(null);
+    const excelItems = ref([]);
+    const excelConflicts = ref([]);
     let refreshInterval = null;
 
     // Computed
@@ -327,6 +418,40 @@ export default {
       modalImage.value = null;
     };
 
+    const onExcelFileSelected = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      excelFile.value = file;
+      excelItems.value = [];
+      excelConflicts.value = [];
+
+      // Read and parse file (placeholder - real parsing on server)
+      try {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          // In production, would parse with exceljs or send to server
+          showStatus(`✓ ${file.name} selecionado (${file.size} bytes)`, 'success');
+        };
+        reader.readAsArrayBuffer(file);
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onImportExcel = async () => {
+      if (!selectedLote.value || !excelFile.value) return;
+
+      try {
+        showStatus('Importando...', 'success');
+        // Send file to server for parsing
+        // In production, use FormData with multer
+        showStatus(`✓ Excel importado (mock)`, 'success');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
     onMounted(async () => {
       // Load initial data
       await loadTempImages();
@@ -342,6 +467,7 @@ export default {
     });
 
     return {
+      activePage,
       selectedLote,
       selectedGtin,
       inputGtin,
@@ -353,6 +479,9 @@ export default {
       statusType,
       currentStatus,
       currentStatusLabel,
+      excelFile,
+      excelItems,
+      excelConflicts,
       onLoteSelected,
       onGtinEnter,
       onSaveCapture,
@@ -361,7 +490,9 @@ export default {
       onImageZoom,
       onImageError,
       openModal,
-      closeModal
+      closeModal,
+      onExcelFileSelected,
+      onImportExcel
     };
   }
 };
