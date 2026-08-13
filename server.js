@@ -8,6 +8,7 @@ import { config, initConfig, createExampleConfigs } from './server/config.js';
 import { auditLogger } from './server/audit-logger.js';
 import { getWatcher } from './services/filesystem-watcher.js';
 import capturaRoutes from './routes/captura.js';
+import planilhasRoutes from './routes/planilhas.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,6 +63,9 @@ app.get('/api/status/camera', (req, res) => {
 app.use('/api/captura', capturaRoutes);
 app.use('/api/lotes', capturaRoutes);
 app.use('/api/imagens', capturaRoutes);
+
+// Planilhas routes
+app.use('/api/planilhas', planilhasRoutes);
 
 // Rota 404
 app.use((req, res) => {
