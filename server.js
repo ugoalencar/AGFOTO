@@ -6,6 +6,8 @@ import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 import { config, initConfig, createExampleConfigs } from './server/config.js';
 import { auditLogger } from './server/audit-logger.js';
+import { getWatcher } from './services/filesystem-watcher.js';
+import capturaRoutes from './routes/captura.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -56,16 +58,10 @@ app.get('/api/status/camera', (req, res) => {
   });
 });
 
-// Placeholder para rotas futuras
-app.get('/api/captura/temp', (req, res) => {
-  res.json({
-    ok: true,
-    data: {
-      temp: [],
-      message: 'Captura module not yet implemented'
-    }
-  });
-});
+// Captura routes
+app.use('/api/captura', capturaRoutes);
+app.use('/api/lotes', capturaRoutes);
+app.use('/api/imagens', capturaRoutes);
 
 // Rota 404
 app.use((req, res) => {
@@ -103,6 +99,10 @@ async function start() {
     console.log(`Root: ${config.paths.root}`);
     console.log(`LAN Enabled: ${config.server.lanEnabled}\n`);
 
+    // Inicia watcher de filesystem
+    const watcher = getWatcher();
+    await watcher.start();
+
     // Inicia servidor
     const host = config.server.lanEnabled ? '0.0.0.0' : config.server.host;
     app.listen(config.server.port, host, () => {
@@ -123,6 +123,10 @@ async function start() {
 // Tratamento de sinais
 process.on('SIGINT', () => {
   console.log('\n\nServer stopping...');
+  const watcher = getWatcher();
+  if (watcher) {
+    watcher.stop();
+  }
   auditLogger.log('SERVER_STOP', { reason: 'SIGINT' });
   process.exit(0);
 });
