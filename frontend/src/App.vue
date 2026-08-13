@@ -25,6 +25,11 @@
             :style="{ background: activePage === 'qa-hub' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
             ✓ QA Hub
           </button>
+          <button
+            @click="activePage = 'veiculos'"
+            :style="{ background: activePage === 'veiculos' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
+            🚗 Veículos
+          </button>
         </div>
       </div>
     </header>
@@ -434,6 +439,78 @@
       </div>
     </main>
 
+    <!-- Veículos Page -->
+    <main v-if="activePage === 'veiculos'" style="padding: 2rem; overflow-y: auto;">
+      <div style="max-width: 1000px;">
+        <h2 style="color: #FF0000; margin-bottom: 1.5rem;">🚗 Gerenciamento de Veículos</h2>
+        <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Importar fotos de cartão de memória, processar OCR de placas, QA e entregar para ADSET.</p>
+
+        <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+          <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+          <input
+            v-model="vehiclesLote"
+            type="text"
+            placeholder="Digite número do lote"
+            style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
+
+          <button
+            @click="onLoadVehicles"
+            :disabled="!vehiclesLote"
+            class="btn-action primary"
+            style="width: 100%;">
+            Carregar Veículos
+          </button>
+        </div>
+
+        <div v-if="vehicles.length > 0" style="margin-top: 2rem;">
+          <h3>Veículos no Lote ({{ vehicles.length }})</h3>
+          <div style="overflow-x: auto; border: 1px solid var(--ag-border);">
+            <table style="width: 100%; font-size: 0.875rem;">
+              <thead style="background: var(--ag-dark-gray);">
+                <tr>
+                  <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">Placa</th>
+                  <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">Fotos</th>
+                  <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">OCR</th>
+                  <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">Status</th>
+                  <th style="padding: 0.75rem; text-align: left;">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(vehicle, idx) in vehicles" :key="idx" style="border-bottom: 1px solid var(--ag-border);">
+                  <td style="padding: 0.75rem; font-weight: bold;">{{ vehicle.placa }}</td>
+                  <td style="padding: 0.75rem;">{{ vehicle.fotos }}</td>
+                  <td style="padding: 0.75rem;">{{ vehicle.ocrConfidence ? vehicle.ocrConfidence + '%' : 'Não' }}</td>
+                  <td style="padding: 0.75rem;">
+                    <span :style="{ background: vehicle.status === 'entregue' ? '#00AA00' : '#FFB400', color: vehicle.status === 'entregue' ? '#fff' : '#000', padding: '0.25rem 0.5rem', borderRadius: '2px', fontSize: '0.75rem', fontWeight: 'bold' }">
+                      {{ vehicle.status === 'entregue' ? 'Entregue' : 'Pendente' }}
+                    </span>
+                  </td>
+                  <td style="padding: 0.75rem;">
+                    <button
+                      @click="onCompleteVehicleQa(vehicle.placa)"
+                      :disabled="vehicle.status === 'entregue'"
+                      style="background: #FF8800; color: #000; border: none; padding: 0.4rem 0.8rem; cursor: pointer; font-weight: bold; font-size: 0.7rem; margin-right: 0.25rem;">
+                      QA ✓
+                    </button>
+                    <button
+                      @click="onDeliverVehicle(vehicle.placa)"
+                      :disabled="vehicle.status !== 'pronto_para_entrega'"
+                      style="background: #00AA00; color: #fff; border: none; padding: 0.4rem 0.8rem; cursor: pointer; font-weight: bold; font-size: 0.7rem;">
+                      Entregar
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div v-if="vehicles.length === 0 && vehiclesLote" style="padding: 2rem; text-align: center; color: var(--ag-border);">
+          Nenhum veículo encontrado para este lote.
+        </div>
+      </div>
+    </main>
+
     <!-- Modal de Imagem -->
     <div v-if="modalImage" class="modal-overlay" @click="closeModal">
       <div class="modal-content" @click.stop>
@@ -458,7 +535,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 export default {
   name: 'App',
   setup() {
-    const activePage = ref('captura'); // 'captura', 'planilhas', 'qa-hub'
+    const activePage = ref('captura'); // 'captura', 'planilhas', 'qa-hub', 'veiculos'
     const qaHubTab = ref('entregar'); // 'entregar', 'qa', 'relatorios'
     const selectedLote = ref('');
     const selectedGtin = ref('');
@@ -483,6 +560,10 @@ export default {
     const reportStatus = ref('');
     const reportItems = ref([]);
     const reportStats = ref(null);
+
+    // Vehicles state
+    const vehiclesLote = ref('');
+    const vehicles = ref([]);
 
     let refreshInterval = null;
 
@@ -815,6 +896,53 @@ export default {
       }
     };
 
+    // Vehicle methods
+    const onLoadVehicles = async () => {
+      try {
+        const response = await this.$api.request(`/api/carros/${vehiclesLote.value}`);
+        if (response.ok) {
+          vehicles.value = response.data.vehicles || [];
+          showStatus(`✓ ${vehicles.value.length} veículos carregados`, 'success');
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onCompleteVehicleQa = async (placa) => {
+      try {
+        const response = await this.$api.request(`/api/carros/${vehiclesLote.value}/${placa}/qa`, {
+          method: 'POST'
+        });
+        if (response.ok) {
+          showStatus(`✓ QA concluído para ${placa}`, 'success');
+          await onLoadVehicles();
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onDeliverVehicle = async (placa) => {
+      try {
+        const response = await this.$api.request(`/api/carros/${vehiclesLote.value}/${placa}/entregar`, {
+          method: 'POST'
+        });
+        if (response.ok) {
+          showStatus(`✓ ${placa} entregue para ADSET`, 'success');
+          await onLoadVehicles();
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
     onMounted(async () => {
       // Load initial data
       await loadTempImages();
@@ -854,6 +982,8 @@ export default {
       reportStatus,
       reportItems,
       reportStats,
+      vehiclesLote,
+      vehicles,
       onLoteSelected,
       onGtinEnter,
       onSaveCapture,
@@ -870,7 +1000,10 @@ export default {
       onClassifyPhoto,
       onCompleteQa,
       onPrepareDelivery,
-      onLoadReport
+      onLoadReport,
+      onLoadVehicles,
+      onCompleteVehicleQa,
+      onDeliverVehicle
     };
   }
 };

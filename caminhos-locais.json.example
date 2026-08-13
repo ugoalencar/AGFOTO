@@ -1,0 +1,10 @@
+{
+  "paths": {
+    "imagesTemp": "D:/Cameras/temp",
+    "finalizadas": "D:/Fotos/Finalizadas"
+  },
+  "server": {
+    "port": 3000,
+    "host": "127.0.0.1"
+  }
+}

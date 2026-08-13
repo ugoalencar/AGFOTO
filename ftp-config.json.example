@@ -1,0 +1,8 @@
+{
+  "host": "ftp.example.com",
+  "port": 21,
+  "username": "user@example.com",
+  "password": "CHANGE_ME",
+  "secure": true,
+  "remoteRoot": "/fotos"
+}

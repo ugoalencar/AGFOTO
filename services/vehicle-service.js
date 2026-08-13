@@ -3,6 +3,7 @@ import { VehicleBatch, Vehicle } from '../domain/vehicle.js';
 import { config } from '../server/config.js';
 import { createSecureDirectory } from '../server/secure-filesystem.js';
 import { PlateOcrService, MockPlateOcrProvider } from './plate-ocr-service.js';
+import { VehicleRepository } from '../repositories/vehicle-repository.js';
 import { auditLogger } from '../server/audit-logger.js';
 
 /**
@@ -54,7 +55,10 @@ export class VehicleService {
       }
 
       // Salva batch
-      // TODO: Implementar persistência em JSON
+      const saveResult = await VehicleRepository.saveBatch(batch);
+      if (!saveResult.ok) {
+        throw new Error(`Failed to save batch: ${saveResult.error}`);
+      }
 
       await auditLogger.log('VEHICLE_IMPORT', {
         lote,
@@ -81,9 +85,12 @@ export class VehicleService {
    */
   static async loadVehicles(lote) {
     try {
-      // TODO: Carregar de JSON persistido
-      // Por agora retorna batch vazio
-      const batch = new VehicleBatch(lote);
+      const batchResult = await VehicleRepository.loadBatch(lote);
+      if (!batchResult.ok) {
+        return { ok: false, error: batchResult.error };
+      }
+
+      const batch = batchResult.data;
 
       return {
         ok: true,
@@ -92,9 +99,11 @@ export class VehicleService {
           vehicles: batch.getAllVehicles().map(v => ({
             placa: v.placa,
             fotos: v.photos.length,
-            status: v.status
+            status: v.status,
+            ocrConfidence: v.plateOcr?.confidence
           })),
-          count: batch.getAllVehicles().length
+          count: batch.getAllVehicles().length,
+          totalPhotos: batch.getTotalPhotos()
         }
       };
     } catch (err) {
@@ -107,7 +116,23 @@ export class VehicleService {
    */
   static async reorderPhotos(lote, placa, reorderList) {
     try {
-      // TODO: Carregar vehicle, reordenar, salvar
+      const vehicleResult = await VehicleRepository.loadVehicle(lote, placa);
+      if (!vehicleResult.ok) {
+        return { ok: false, error: vehicleResult.error };
+      }
+
+      const vehicle = vehicleResult.data;
+
+      // Aplica reordenação
+      for (const change of reorderList) {
+        vehicle.reorderPhoto(change.from, change.to);
+      }
+
+      // Persiste
+      const saveResult = await VehicleRepository.saveVehicle(lote, vehicle);
+      if (!saveResult.ok) {
+        return { ok: false, error: saveResult.error };
+      }
 
       await auditLogger.log('VEHICLE_REORDER', {
         lote,
@@ -132,7 +157,22 @@ export class VehicleService {
    */
   static async completeVehicleQa(lote, placa) {
     try {
-      // TODO: Carregar vehicle, mudar status, salvar
+      const vehicleResult = await VehicleRepository.loadVehicle(lote, placa);
+      if (!vehicleResult.ok) {
+        return { ok: false, error: vehicleResult.error };
+      }
+
+      const vehicle = vehicleResult.data;
+
+      // Muda status
+      vehicle.status = 'pronto_para_entrega';
+      vehicle.updatedAt = new Date().toISOString();
+
+      // Persiste
+      const saveResult = await VehicleRepository.saveVehicle(lote, vehicle);
+      if (!saveResult.ok) {
+        return { ok: false, error: saveResult.error };
+      }
 
       await auditLogger.log('VEHICLE_QA_COMPLETE', {
         lote,
@@ -152,23 +192,49 @@ export class VehicleService {
   }
 
   /**
-   * Entrega veículos para ADSET
+   * Entrega veículos para ADSET (mock)
    */
   static async deliverToAdset(lote, placa) {
     try {
-      // TODO: Integração ADSET (mock por agora)
+      const vehicleResult = await VehicleRepository.loadVehicle(lote, placa);
+      if (!vehicleResult.ok) {
+        return { ok: false, error: vehicleResult.error };
+      }
+
+      const vehicle = vehicleResult.data;
+
+      // Valida pré-requisitos
+      if (vehicle.photos.length === 0) {
+        return { ok: false, error: 'No photos to deliver' };
+      }
+
+      if (!vehicle.plateOcr || !vehicle.plateOcr.isReliable()) {
+        return { ok: false, error: 'Plate OCR not reliable enough' };
+      }
+
+      // Simula entrega ADSET
+      vehicle.status = 'entregue';
+      vehicle.updatedAt = new Date().toISOString();
+
+      // Persiste
+      const saveResult = await VehicleRepository.saveVehicle(lote, vehicle);
+      if (!saveResult.ok) {
+        return { ok: false, error: saveResult.error };
+      }
 
       await auditLogger.log('VEHICLE_DELIVER', {
         lote,
         placa,
-        destination: 'adset_mock'
+        destination: 'adset_mock',
+        photosDelivered: vehicle.photos.length
       });
 
       return {
         ok: true,
         data: {
           status: 'entregue',
-          message: 'Vehicle delivered to ADSET (mock)'
+          message: 'Vehicle delivered to ADSET (mock)',
+          photosDelivered: vehicle.photos.length
         }
       };
     } catch (err) {
@@ -183,18 +249,46 @@ export class VehicleService {
     try {
       const { lote = null, status = null } = filters;
 
-      // TODO: Carregar dados reais de JSON
+      const listResult = await VehicleRepository.listBatches();
+      if (!listResult.ok) {
+        return { ok: false, error: listResult.error };
+      }
+
+      let items = [];
+      for (const batchLote of listResult.data) {
+        if (lote && batchLote !== lote) continue;
+
+        const batchResult = await VehicleRepository.loadBatch(batchLote);
+        if (!batchResult.ok) continue;
+
+        const batch = batchResult.data;
+        for (const vehicle of batch.getAllVehicles()) {
+          if (status && vehicle.status !== status) continue;
+
+          items.push({
+            lote: vehicle.lote,
+            placa: vehicle.placa,
+            fotos: vehicle.photos.length,
+            status: vehicle.status,
+            plataforma: vehicle.plateOcr ? 'Detectada' : 'Pendente',
+            confianca: vehicle.plateOcr?.confidence || 0,
+            criadoEm: vehicle.createdAt
+          });
+        }
+      }
+
+      const stats = {
+        total: items.length,
+        entregues: items.filter(i => i.status === 'entregue').length,
+        pendentes: items.filter(i => i.status === 'pendente_qa').length,
+        pronto: items.filter(i => i.status === 'pronto_para_entrega').length
+      };
 
       return {
         ok: true,
         data: {
-          items: [],
-          stats: {
-            total: 0,
-            entregues: 0,
-            pendentes: 0,
-            erros: 0
-          }
+          items,
+          stats
         }
       };
     } catch (err) {
