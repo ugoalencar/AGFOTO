@@ -1,0 +1,130 @@
+version: '3.9'
+
+services:
+  # ============================================
+  # AG Fotografia Main Application
+  # ============================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ag-fotografia-app
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      # Optional ADSET config
+      ADSET_MODE: mock
+      # ADSET_EMAIL: seu@email.com
+      # ADSET_PASSWORD: sua_senha
+    volumes:
+      # Persist operational data
+      - ag-fotografia-dados:/app/dados
+      - ag-fotografia-images:/app/images
+      - ag-fotografia-logs:/app/logs
+      # Optional: Mount from host for development
+      # - ./dados:/app/dados
+      # - ./images:/app/images
+    networks:
+      - ag-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ============================================
+  # PostgreSQL Database (Optional - Future v1.1)
+  # ============================================
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: ag-fotografia-db
+  #   environment:
+  #     POSTGRES_DB: ag_fotografia
+  #     POSTGRES_USER: agfoto
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD:-change_me}
+  #   volumes:
+  #     - ag-fotografia-db:/var/lib/postgresql/data
+  #   networks:
+  #     - ag-network
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U agfoto"]
+  #     interval: 10s
+  #     timeout: 5s
+  #     retries: 5
+
+  # ============================================
+  # Monitoring - Prometheus (Optional)
+  # ============================================
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: ag-fotografia-prometheus
+  #   volumes:
+  #     - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - ag-fotografia-prometheus:/prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   networks:
+  #     - ag-network
+  #   restart: unless-stopped
+
+  # ============================================
+  # Monitoring - Grafana (Optional)
+  # ============================================
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: ag-fotografia-grafana
+  #   environment:
+  #     GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+  #   volumes:
+  #     - ag-fotografia-grafana:/var/lib/grafana
+  #   ports:
+  #     - "3001:3000"
+  #   networks:
+  #     - ag-network
+  #   restart: unless-stopped
+  #   depends_on:
+  #     - prometheus
+
+networks:
+  ag-network:
+    driver: bridge
+
+volumes:
+  ag-fotografia-dados:
+    driver: local
+  ag-fotografia-images:
+    driver: local
+  ag-fotografia-logs:
+    driver: local
+  # ag-fotografia-db:
+  #   driver: local
+  # ag-fotografia-prometheus:
+  #   driver: local
+  # ag-fotografia-grafana:
+  #   driver: local
+
+# ============================================
+# Usage:
+#
+# Build and run:
+#   docker-compose up -d
+#
+# View logs:
+#   docker-compose logs -f app
+#
+# Stop all:
+#   docker-compose down
+#
+# Stop and remove volumes:
+#   docker-compose down -v
+#
+# Rebuild:
+#   docker-compose up -d --build
+#
+# ============================================
