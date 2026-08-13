@@ -2,7 +2,7 @@
 
 **Data:** 2026-08-13  
 **Versão:** 1.0.0-alpha  
-**Status:** ✅ Fase 7 (Veículos) Completa — 80% do Projeto
+**Status:** ✅ Fase 8 (ADSET) Completa — 90% do Projeto
 
 ---
 
@@ -81,6 +81,15 @@
 - [x] Frontend: Aba Veículos com UI de gerenciamento
 - [x] 24 testes unitários (Vehicle domain) ✅
 
+### Fase 8 — ADSET Integration (✅ Completa)
+- [x] AdsetProvider interface (abstrata)
+- [x] MockAdsetProvider (dev completo)
+- [x] RealAdsetProvider (Playwright + scraping — pronto para uso)
+- [x] AdsetService com 3 modos (mock, real, dry-run)
+- [x] API Routes (8 endpoints: login, status, publicados, rascunhos, validar, entregar, dry-run)
+- [x] Validação de pré-requisitos (fotos, OCR 80%+, placa única)
+- [x] 26 testes unitários (MockAdsetProvider + AdsetService) ✅
+
 **Features Implementadas:**
 - ✅ Listagem de produtos prontos para entrega
 - ✅ Carregamento dinâmico de fotos
@@ -141,7 +150,7 @@ QA HUB (Fase 5):
 
 ## 📋 Fases Pendentes
 
-### Fase 8 — ADSET Integration
+### Fase 9 — Finalização (ÚLTIMA)
 - [ ] Aba **Entregar:** multi-select, preflight, FTP fake
 - [ ] Aba **QA:** AP/AT, desfazer, reordenação
 - [ ] Aba **Relatórios:** filtros, exportação XLSX/CSV
@@ -158,16 +167,6 @@ QA HUB (Fase 5):
 
 **Estimado:** 2 dias
 
-### Fase 8 — ADSET
-- [ ] AdsetProvider com Playwright
-- [ ] Mock + dry-run
-- [ ] Busca: Publicados → Não publicados
-- [ ] Validação unicidade placa
-- [ ] Upload com confirmação
-- [ ] Teste real só após acesso
-
-**Estimado:** 4-5 dias (bloqueado: acesso)
-
 ### Fase 9 — Finalização
 - [ ] Atualização GitHub (git fetch/pull --ff-only)
 - [ ] Empacotamento Windows (.exe?)
@@ -183,12 +182,12 @@ QA HUB (Fase 5):
 
 | Métrica | Valor |
 |---------|-------|
-| **Linhas de código** | ~10500+ |
-| **Testes** | 81 unitários ✅ (88 total, 7 integration failures) |
-| **Cobertura** | Domain + Filesystem + Captura + Excel + Delivery + Veículos |
-| **Commits** | 9 (estrutura, captura 2x, planilhas 2x, QA 2x, veículos) |
+| **Linhas de código** | ~12500+ |
+| **Testes** | 107 unitários ✅ (114 total, 7 integration failures) |
+| **Cobertura** | Domain + Filesystem + Captura + Excel + Delivery + Veículos + ADSET |
+| **Commits** | 11 (estrutura, captura 2x, planilhas 2x, QA 2x, veículos, ADSET) |
 | **Documentação** | README, SETUP, STATUS |
-| **Fases Completas** | 7/9 (78%) |
+| **Fases Completas** | 8/9 (89%) |
 
 ---
 
@@ -199,8 +198,8 @@ QA HUB (Fase 5):
 3. ✅ **Fase 5** — QA Hub Backend (AP/AT, FTP Mock, Retrabalho)
 4. ✅ **Fase 6** — QA Hub Frontend (Tabs, Fotos, Relatórios)
 5. ✅ **Fase 7** — Veículos (OCR, Importação, ADSET Mock, API)
-6. 📋 **Fase 8** — ADSET Integration (Real + Dry-run Mode)
-7. 📋 **Fase 9** — Finalização (Empacotamento, Docs E2E)
+6. ✅ **Fase 8** — ADSET Integration (Mock + Real + Dry-run)
+7. 📋 **Fase 9** — Finalização (Empacotamento, Docs, E2E)
 
 ---
 
