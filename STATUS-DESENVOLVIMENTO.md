@@ -2,7 +2,7 @@
 
 **Data:** 2026-08-13  
 **Versão:** 1.0.0-alpha  
-**Status:** ✅ Fase 3 (Captura) Completa
+**Status:** ✅ Fase 4 (Planilhas) Completa
 
 ---
 
@@ -38,14 +38,34 @@
 
 **Commits:** `3f0dd17` (backend), `db01efe` (frontend)
 
+### Fase 4 — Planilhas e Excel (✅ Completo)
+- [x] Domain: ExcelItem, ExcelConflict, ExcelImportResult
+- [x] ExcelService — Import, merge, export, reconcile
+- [x] API Routes — 5 endpoints para planilhas
+- [x] Formula injection prevention
+- [x] Deduplicação (lote + EAN)
+- [x] Detecção de conflitos
+- [x] Frontend: Tab navegação + upload UI
+- [x] Testes — 19 testes Excel ✅
+
+**Commits:** `fea0fce` (backend), `b5a47dc` (frontend)
+
 **API Implementada:**
 ```
+CAPTURA (Fase 3):
 ✅ GET    /api/captura/temp          — Lista TEMP estável
 ✅ POST   /api/captura/salvar        — Salva com snapshot atomicidade
 ✅ DELETE /api/captura/temp          — Limpa com auditoria
 ✅ GET    /api/lotes                 — Lista lotes
 ✅ GET    /api/lotes/:numero         — Detalhes lote + GTINs
 ✅ GET    /api/imagens/anterior      — Imagens anteriores GTIN
+
+PLANILHAS (Fase 4):
+✅ POST   /api/planilhas/importar    — Parse Excel
+✅ POST   /api/planilhas/unificar    — Merge to lookup
+✅ GET    /api/planilhas/conflitos   — Listar conflitos
+✅ GET    /api/planilhas/controle    — Gerar controle-lotes.xlsx
+✅ GET    /api/planilhas/reconciliar — Validar divergências
 ```
 
 **Testes Passando:**
@@ -64,15 +84,8 @@
 
 ## 📋 Fases Pendentes
 
-### Fase 4 — Planilhas e Excel (PRÓXIMA)
-- [ ] Importação .xlsx (headers: EAN, Código, Descrição)
-- [ ] Unificação em `lookup-integrado.xlsx`
-- [ ] Geração `controle-lotes.xlsx` por lote
-- [ ] Deduplicação (lote + EAN)
-- [ ] Conflitos → tela de resolução
-- [ ] Validação fórmula injection
-
-**Estimado:** 2-3 dias
+### Fase 5 — QA Hub (PRÓXIMA)
+**Implementada:** Parse Excel, merge, conflitos, reconciliação
 
 ### Fase 5 — QA Hub
 - [ ] Aba **Entregar:** multi-select, preflight, FTP fake
@@ -125,20 +138,20 @@
 
 | Métrica | Valor |
 |---------|-------|
-| **Linhas de código** | ~3000+ |
-| **Testes** | 24 unitários ✅ |
-| **Cobertura** | Domain + Filesystem + API |
-| **Commits** | 3 (estrutura, captura, frontend) |
+| **Linhas de código** | ~5000+ |
+| **Testes** | 43 unitários ✅ |
+| **Cobertura** | Domain + Filesystem + Captura + Excel |
+| **Commits** | 5 (estrutura, captura 2x, planilhas 2x) |
 | **Documentação** | README, SETUP, STATUS |
-| **Fases Completas** | 3/9 (33%) |
+| **Fases Completas** | 4/9 (44%) |
 
 ---
 
-## 🎯 Próximos Passos (Hoje/Amanhã)
+## 🎯 Próximos Passos
 
-1. ✅ **Teste manual Captura** — Criar imagem de teste em TEMP, verificar UI
-2. ✅ **Integração testes** — Rodar suite de integração com fixtures
-3. **Iniciar Fase 4** — Excel com `npm run dev` para prototipagem
+1. ✅ **Fase 3** — Captura completa (TEMP, Lote, GTIN, Salvar)
+2. ✅ **Fase 4** — Planilhas (Import, Merge, Conflitos, Reconciliação)
+3. **Fase 5** — QA Hub (AP/AT, Entrega FTP mock, Retrabalho)
 
 ---
 
@@ -171,4 +184,4 @@
 
 ---
 
-**Próxima revisão:** 2026-08-14 (após Fase 4)
+**Próxima revisão:** 2026-08-14 (após Fase 5)
