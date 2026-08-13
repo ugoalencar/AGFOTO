@@ -1,0 +1,17 @@
+<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="100" height="100" fill="#000"/>
+
+  <!-- AG Foto Logo -->
+  <!-- A -->
+  <g fill="#FF0000">
+    <path d="M 15 50 L 35 20 L 55 50 Z" stroke="#FFFF00" stroke-width="2" fill="none"/>
+    <line x1="25" y1="40" x2="45" y2="40" stroke="#FFFF00" stroke-width="2"/>
+  </g>
+
+  <!-- G -->
+  <g fill="none" stroke="#FF8800" stroke-width="3">
+    <path d="M 75 25 Q 65 20 60 25 Q 55 30 55 40 Q 55 55 60 60 Q 65 65 75 65 Q 85 65 90 60"/>
+    <line x1="75" y1="50" x2="90" y2="50" stroke="#FFFF00" stroke-width="2"/>
+  </g>
+</svg>
