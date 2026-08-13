@@ -9,6 +9,7 @@ import { auditLogger } from './server/audit-logger.js';
 import { getWatcher } from './services/filesystem-watcher.js';
 import capturaRoutes from './routes/captura.js';
 import planilhasRoutes from './routes/planilhas.js';
+import qaHubRoutes from './routes/qa-hub.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -66,6 +67,12 @@ app.use('/api/imagens', capturaRoutes);
 
 // Planilhas routes
 app.use('/api/planilhas', planilhasRoutes);
+
+// QA Hub routes
+app.use('/api/qa', qaHubRoutes);
+app.use('/api/entregas', qaHubRoutes);
+app.use('/api/retrabalhos', qaHubRoutes);
+app.use('/api/relatorios', qaHubRoutes);
 
 // Rota 404
 app.use((req, res) => {
