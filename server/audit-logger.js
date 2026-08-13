@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
 import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -50,7 +51,7 @@ export class AuditLogger {
       requestId: this.requestId,
       action,
       details: sanitize(details),
-      hostname: require('os').hostname(),
+      hostname: os.hostname(),
       userAgent: process.env.USER || 'system'
     };
 
