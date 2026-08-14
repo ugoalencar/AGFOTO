@@ -109,3 +109,16 @@ Commits:
   `node --test tests/unit/operation-store.test.js tests/integration/api-routes.test.js`
   (7 aprovados) e `npm.cmd test` (117 aprovados), todos sem falhas.
 - Commit: `bbb8b19 fix: block phase 1 routes before operation validation`.
+
+## Ajuste Finalissimo da Tarefa 1
+
+- Correcao: `blockPhaseOneRoutes` agora bloqueia `POST`, `PUT`, `PATCH` e
+  `DELETE` para os seis caminhos proibidos da Fase 1 antes do parser JSON e
+  da validacao de `operationId`. Cada caminho retorna `404` com ou sem
+  `X-Operation-ID`; rotas mutaveis validas e JSON malformado sem header
+  continuam exigindo `operationId`.
+- Testes: `node --test tests/integration/api-routes.test.js` (5 aprovados),
+  `node --test tests/unit/operation-store.test.js tests/integration/api-routes.test.js`
+  (7 aprovados) e `npm.cmd test` (117 aprovados), todos sem falhas.
+- Commits: `5ef7016 fix: block all phase 1 mutating routes` e
+  `docs: record finalissimo task 1 adjustment` (este relatorio).
