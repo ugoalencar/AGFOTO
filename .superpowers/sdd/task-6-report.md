@@ -20,3 +20,17 @@
 
 - The provider is intentionally process-local and in-memory. It verifies uploaded bytes without network access, but remote FTP support remains out of scope for Phase 1.
 - Existing test output includes expected repository bootstrap and audit-failure diagnostic messages; the final suite has no test failures.
+
+## Review Fixes
+
+- `executeDelivery` now requires a prepared `attemptId` and executes the persisted staging/manifest instead of rebuilding a new one.
+- The route `/api/entregas/executar` now requires `attemptId`.
+- Delivery validates that the requested `codigo` matches the product's internal code before preparing or executing.
+- Invalid delivery type/code/missing attempt validation no longer marks a product as `erro_entrega`.
+- Manifest files now persist both `sourcePath` and `stagingPath`.
+
+### Tests
+
+- `node --test tests/integration/delivery-products.test.js`: 7 passed.
+- `node --test tests/integration/qa-products.test.js tests/integration/api-routes.test.js tests/unit/ftp-service.test.js`: 36 passed.
+- `npm.cmd test`: 174 passed, 0 failed, 1 skipped because Windows symlink creation requires Developer Mode or elevation.

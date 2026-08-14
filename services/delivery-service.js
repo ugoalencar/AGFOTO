@@ -309,13 +309,28 @@ export class DeliveryService {
   /**
    * Executa entrega via FTP
    */
-  static async executeDelivery(lote, gtin, codigo, deliveryType = DeliveryType.NORMAL) {
+  static async executeDelivery(lote, gtin, codigo, deliveryType = DeliveryType.NORMAL, attemptId = null) {
     let record = null;
     let loaded = null;
     let ftpService = null;
+    let deliveryStarted = false;
     try {
-      const delivery = await this.buildDeliveryManifest(lote, gtin, codigo, deliveryType);
-      loaded = delivery.loaded;
+      if (!attemptId) throw new Error('Prepared delivery attemptId is required');
+      if (![DeliveryType.NORMAL, DeliveryType.ATUALIZACAO].includes(deliveryType)) throw new Error('Invalid delivery type');
+      loaded = await this.loadQaProduct(lote, gtin);
+      this.validateDeliveryCode(loaded.produto, codigo);
+      if (loaded.produto.status !== ProductStatus.PRONTO_PARA_ENTREGA) throw new Error('Product is not ready for delivery');
+      record = await this.loadDeliveryRecord(attemptId);
+      if (record.status !== DeliveryStatus.STAGING) throw new Error('Prepared delivery attempt is not ready for execution');
+      if (
+        record.lote !== loaded.lote ||
+        record.gtin !== loaded.gtin ||
+        record.codigo !== codigo ||
+        record.deliveryType !== deliveryType
+      ) {
+        throw new Error('Prepared delivery attempt does not match requested product');
+      }
+      if (!record.manifest || record.manifest.fileCount === 0) throw new Error('Prepared delivery attempt has no manifest files');
       ftpService = getFtpService();
 
       // Conecta ao FTP
@@ -325,39 +340,38 @@ export class DeliveryService {
       }
 
       // Constrói caminho remoto
-      const remotePath = ftpService.buildRemotePath(delivery.normalizedLote, codigo);
-      record = new DeliveryRecord(delivery.normalizedLote, delivery.normalizedGtin, codigo, deliveryType);
+      const remotePath = ftpService.buildRemotePath(loaded.lote, codigo);
       record.remoteFolder = remotePath;
-      record.startAttempt(delivery.manifest);
+      record.startAttempt(record.manifest);
+      deliveryStarted = true;
       await this.persistDeliveryRecord(record);
 
-      for (const file of delivery.manifest.files) {
+      for (const file of record.manifest.files) {
         const upload = await ftpService.uploadFile(file.stagingPath, path.join(remotePath, file.name));
         if (!upload.ok) throw new Error(`Upload failed for ${file.name}: ${upload.error}`);
       }
       const listed = await ftpService.listRemoteFiles(remotePath);
-      if (!listed.ok || listed.data.count !== delivery.manifest.fileCount) throw new Error('Remote verification failed: unexpected file count');
-      for (const file of delivery.manifest.files) {
+      if (!listed.ok || listed.data.count !== record.manifest.fileCount) throw new Error('Remote verification failed: unexpected file count');
+      for (const file of record.manifest.files) {
         const verified = await ftpService.verifyRemoteFile(path.join(remotePath, file.name));
         if (!verified.ok || !verified.data.exists || verified.data.size !== file.size || verified.data.hash !== file.checksum) {
           throw new Error(`Remote verification failed for ${file.name}`);
         }
       }
-      record.verify(delivery.manifest.fileCount);
-      delivery.manifest.complete();
+      record.verify(record.manifest.fileCount);
+      record.manifest.complete();
       record.complete(remotePath);
-      record.manifest = delivery.manifest;
 
       // Marca como entregue
       loaded.produto.markDelivered();
       await LoteRepository.save(loaded.loteObj);
-      await ExcelService.updateControlFromLote(delivery.normalizedLote);
+      await ExcelService.updateControlFromLote(loaded.lote);
       await this.persistDeliveryRecord(record);
 
       // Auditoria
       await auditLogger.log('ENTREGA_COMPLETA', {
-        lote: delivery.normalizedLote,
-        gtin: delivery.normalizedGtin,
+        lote: loaded.lote,
+        gtin: loaded.gtin,
         codigo,
         deliveryType,
         remotePath
@@ -379,7 +393,7 @@ export class DeliveryService {
         record.fail(err.message);
         await this.persistDeliveryRecord(record);
       }
-      if (loaded) {
+      if (loaded && deliveryStarted) {
         loaded.produto.recordDeliveryError(err.message);
         await LoteRepository.save(loaded.loteObj);
         await ExcelService.updateControlFromLote(loaded.lote);
@@ -399,8 +413,8 @@ export class DeliveryService {
 
   static async buildDeliveryManifest(lote, gtin, codigo, deliveryType) {
     if (![DeliveryType.NORMAL, DeliveryType.ATUALIZACAO].includes(deliveryType)) throw new Error('Invalid delivery type');
-    if (typeof codigo !== 'string' || codigo.trim().length === 0 || /[\\/:*?"<>|]/.test(codigo) || codigo.includes('..')) throw new Error('Internal code required for delivery');
     const loaded = await this.loadQaProduct(lote, gtin);
+    this.validateDeliveryCode(loaded.produto, codigo);
     if (loaded.produto.status !== ProductStatus.PRONTO_PARA_ENTREGA) throw new Error('Product is not ready for delivery');
     const photos = await FileRepository.listFinalizadasImages(loaded.lote, loaded.gtin, deliveryType === DeliveryType.ATUALIZACAO ? 'AT' : null);
     if (photos.length === 0) throw new Error('No eligible photos for delivery');
@@ -410,9 +424,25 @@ export class DeliveryService {
     for (const photo of photos) {
       const stagingPath = await this.copyToStaging(photo.path, stagingDir, photo.name);
       const contents = await fs.promises.readFile(stagingPath);
-      manifest.addFile(path.basename(stagingPath), contents.length, crypto.createHash('sha256').update(contents).digest('hex'), stagingPath);
+      manifest.addFile(path.basename(stagingPath), contents.length, crypto.createHash('sha256').update(contents).digest('hex'), stagingPath, photo.path);
     }
     return { loaded, manifest, normalizedLote: loaded.lote, normalizedGtin: loaded.gtin };
+  }
+
+  static validateDeliveryCode(produto, codigo) {
+    if (
+      typeof codigo !== 'string' ||
+      codigo.trim().length === 0 ||
+      codigo === '.' ||
+      codigo === '..' ||
+      /[\\/:*?"<>|]/.test(codigo) ||
+      codigo.includes('..')
+    ) {
+      throw new Error('Internal code required for delivery');
+    }
+    if (produto.codigo && produto.codigo !== codigo) {
+      throw new Error(`Delivery codigo does not match product codigo: ${codigo}`);
+    }
   }
 
   static async copyToStaging(sourcePath, stagingDir, filename) {
@@ -432,6 +462,14 @@ export class DeliveryService {
   static async persistDeliveryRecord(record) {
     await fs.promises.mkdir(config.paths.envios, { recursive: true });
     await fs.promises.writeFile(path.join(config.paths.envios, `${record.id}.json`), JSON.stringify(record.toJSON(), null, 2), 'utf8');
+  }
+
+  static async loadDeliveryRecord(attemptId) {
+    if (typeof attemptId !== 'string' || !/^[a-f0-9-]{36}$/i.test(attemptId)) throw new Error('Invalid delivery attemptId');
+    const recordPath = path.join(config.paths.envios, `${attemptId}.json`);
+    const record = DeliveryRecord.fromJSON(JSON.parse(await fs.promises.readFile(recordPath, 'utf8')));
+    if (record.id !== attemptId) throw new Error('Delivery attemptId mismatch');
+    return record;
   }
 
   /**

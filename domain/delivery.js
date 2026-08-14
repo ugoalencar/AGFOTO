@@ -42,11 +42,12 @@ export class Manifest {
   /**
    * Adiciona arquivo ao manifest
    */
-  addFile(filename, size, checksum, stagingPath = null) {
+  addFile(filename, size, checksum, stagingPath = null, sourcePath = null) {
     this.files.push({
       name: filename,
       size,
       checksum,
+      sourcePath,
       stagingPath,
       addedAt: new Date().toISOString()
     });

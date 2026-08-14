@@ -52,6 +52,8 @@ test('prepare normal stages only root photos and persists an exact manifest', as
   assert.deepEqual(prepared.data.manifest.files.map(file => file.name), ['root.jpg']);
   assert.equal(prepared.data.manifest.files[0].size, JPG_BYTES.length);
   assert.match(prepared.data.manifest.files[0].checksum, /^[a-f0-9]{64}$/);
+  assert.equal(prepared.data.manifest.files[0].sourcePath, path.join(root, 'root.jpg'));
+  assert.equal(prepared.data.manifest.files[0].stagingPath, path.join(env.paths.entrega, 'LOTE 37', 'COD-1', 'root.jpg'));
   assert.equal(fs.existsSync(path.join(env.paths.entrega, 'LOTE 37', 'COD-1', 'root.jpg')), true);
   assert.equal(fs.existsSync(path.join(env.paths.entrega, 'LOTE 37', 'COD-1', 'AP', 'ap.jpg')), false);
   assert.equal((await fs.promises.readdir(env.paths.envios)).length, 1);
@@ -83,18 +85,61 @@ test('execute uploads and verifies every staged file before recording delivered'
   const prepared = await DeliveryService.prepareDelivery('39', '000123', 'COD-1', DeliveryType.NORMAL);
   assert.equal(prepared.ok, true);
 
-  const executed = await DeliveryService.executeDelivery('39', '000123', 'COD-1', DeliveryType.NORMAL);
+  const executed = await DeliveryService.executeDelivery('39', '000123', 'COD-1', DeliveryType.NORMAL, prepared.data.attemptId);
   const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_39.json'), 'utf8'));
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(path.join(env.paths.xlsx, 'controle-lotes.xlsx'));
   const attempts = await fs.promises.readdir(env.paths.envios);
+  const attempt = JSON.parse(await fs.promises.readFile(path.join(env.paths.envios, prepared.data.attemptId + '.json'), 'utf8'));
 
   assert.equal(executed.ok, true, executed.error);
   assert.equal(lote.itens['000123'].status, 'entregue');
   assert.ok(lote.itens['000123'].ultimaEntregaEm);
   assert.equal(lote.itens['000123'].ultimoErro, null);
   assert.equal(workbook.getWorksheet('Lote 39').getCell('F2').value, 'entregue');
-  assert.ok(attempts.length >= 2);
+  assert.equal(attempts.length, 1);
+  assert.equal(attempt.status, 'entregue');
+});
+
+test('execute requires a prepared attempt and preserves status for validation failures', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await saveReadyProduct(env, '42');
+  const prepared = await DeliveryService.prepareDelivery('42', '000123', 'COD-1', DeliveryType.NORMAL);
+  const invalidType = await DeliveryService.executeDelivery('42', '000123', 'COD-1', 'external');
+  const wrongCode = await DeliveryService.executeDelivery('42', '000123', 'OTHER-CODE', DeliveryType.NORMAL, prepared.data.attemptId);
+  const missingAttempt = await DeliveryService.executeDelivery('42', '000123', 'COD-1', DeliveryType.NORMAL);
+  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_42.json'), 'utf8'));
+
+  assert.equal(invalidType.ok, false);
+  assert.equal(wrongCode.ok, false);
+  assert.equal(missingAttempt.ok, false);
+  assert.match(wrongCode.error, /does not match/i);
+  assert.match(missingAttempt.error, /prepared delivery attempt/i);
+  assert.equal(lote.itens['000123'].status, 'pronto_para_entrega');
+  assert.equal(lote.itens['000123'].ultimoErro, null);
+  assert.equal((await fs.promises.readdir(env.paths.envios)).length, 1);
+});
+
+test('execute uses the prepared attempt instead of rebuilding staging from later files', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await saveReadyProduct(env, '43');
+  const prepared = await DeliveryService.prepareDelivery('43', '000123', 'COD-1', DeliveryType.NORMAL);
+  assert.equal(prepared.ok, true);
+  await fs.promises.writeFile(path.join(env.paths.finalizadas, 'LOTE 43', '000123', 'late.jpg'), JPG_BYTES);
+
+  const executed = await DeliveryService.executeDelivery('43', '000123', 'COD-1', DeliveryType.NORMAL, prepared.data.attemptId);
+  const records = await Promise.all(
+    (await fs.promises.readdir(env.paths.envios))
+      .map(file => fs.promises.readFile(path.join(env.paths.envios, file), 'utf8').then(JSON.parse))
+  );
+  const completed = records.find(record => record.id === prepared.data.attemptId);
+
+  assert.equal(executed.ok, true, executed.error);
+  assert.ok(completed);
+  assert.deepEqual(completed.manifest.files.map(file => file.name), ['root.jpg']);
+  assert.equal(completed.manifest.files.some(file => file.name === 'late.jpg'), false);
 });
 
 test('execute verification failure preserves source and records delivery error', async t => {
@@ -112,7 +157,8 @@ test('execute verification failure preserves source and records delivery error',
   resetFtpService(new BrokenVerificationProvider());
   t.after(() => resetFtpService());
 
-  const executed = await DeliveryService.executeDelivery('40', '000123', 'COD-1', DeliveryType.NORMAL);
+  const prepared = await DeliveryService.prepareDelivery('40', '000123', 'COD-1', DeliveryType.NORMAL);
+  const executed = await DeliveryService.executeDelivery('40', '000123', 'COD-1', DeliveryType.NORMAL, prepared.data.attemptId);
   const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_40.json'), 'utf8'));
   const auditFile = (await fs.promises.readdir(env.paths.auditoria))[0];
   const audit = await fs.promises.readFile(path.join(env.paths.auditoria, auditFile), 'utf8');
@@ -134,7 +180,7 @@ test('delivery routes require and replay operationId with the global envelope', 
   const missing = await request(app, '/api/entregas/preparar', { lote: '41', gtin: '000123', codigo: 'COD-1' }, undefined);
   const first = await request(app, '/api/entregas/preparar', { lote: '41', gtin: '000123', codigo: 'COD-1' }, 'delivery-prepare');
   const replay = await request(app, '/api/entregas/preparar', { lote: '41', gtin: '000123', codigo: 'COD-1' }, 'delivery-prepare');
-  const execute = await request(app, '/api/entregas/executar', { lote: '41', gtin: '000123', codigo: 'COD-1' }, 'delivery-execute');
+  const execute = await request(app, '/api/entregas/executar', { lote: '41', gtin: '000123', codigo: 'COD-1', attemptId: first.body.data.attemptId }, 'delivery-execute');
 
   assert.equal(missing.status, 400);
   assert.equal(first.status, 200);

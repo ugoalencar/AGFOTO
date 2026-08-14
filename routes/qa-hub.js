@@ -186,17 +186,17 @@ router.post('/preparar', express.json(), async (req, res) => {
  * Executa entrega via FTP
  */
 router.post('/executar', express.json(), async (req, res) => {
-  const { lote, gtin, codigo, deliveryType = 'normal' } = req.body;
+  const { lote, gtin, codigo, deliveryType = 'normal', attemptId } = req.body;
 
-  if (!lote || !gtin || !codigo) {
+  if (!lote || !gtin || !codigo || !attemptId) {
     return res.status(400).json({
       ok: false,
-      error: 'Lote, GTIN, and codigo required',
+      error: 'Lote, GTIN, codigo, and attemptId required',
       requestId: req.id
     });
   }
 
-  const result = await DeliveryService.executeDelivery(lote, gtin, codigo, deliveryType);
+  const result = await DeliveryService.executeDelivery(lote, gtin, codigo, deliveryType, attemptId);
 
   if (result.ok) {
     res.json({ ok: true, data: result.data, requestId: req.id });
