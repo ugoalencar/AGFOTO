@@ -54,4 +54,28 @@ No route change was necessary: the app factory operation middleware already owns
 
 ### Concerns
 
-- `loadOrCreate` still creates an otherwise empty lote JSON before a total move failure. No product capture, `pendente_qa` status, saved-capture history, or Excel workbook is recorded; changing lote creation timing was kept outside this review fix.
+- This prior concern was resolved in the second recheck: a total move failure now returns before `loadOrCreate`, so no empty lote JSON is created.
+
+## Fixes da Segunda Rechecagem
+
+### Correções
+
+- A falha de `unlink` após uma cópia exclusiva agora remove o destino recém-criado como compensação. Se essa remoção também falhar, o erro informa explicitamente as duas falhas de limpeza.
+- `saveCapture` é serializado localmente por lote, cobrindo JSON, histórico e a reconstrução da planilha para capturas concorrentes do mesmo lote/GTIN.
+- O lote só é carregado/criado após pelo menos uma foto ser movida, portanto uma falha total de move não cria JSON vazio, produto, status ou planilha de controle.
+
+### Testes
+
+- Adicionada cobertura para falha de `unlink` após `copyFile(..., COPYFILE_EXCL)`: o destino é removido e JSON/Excel não são criados.
+- Adicionada cobertura para duas capturas concorrentes do mesmo lote/GTIN, verificando contagem acumulada e dois eventos `captura_salva`.
+- `node --test tests/integration/captura-products.test.js tests/unit/domain-lote.test.js`: 28 aprovados, 1 ignorado (permissão de symlink no Windows), 0 falhas.
+- `npm.cmd test`: 135 aprovados, 1 ignorado (permissão de symlink no Windows), 0 falhas.
+
+### Commits
+
+- `9dcb1da fix: make product captures failure-safe`
+
+### Preocupações
+
+- A serialização é deliberadamente apenas em memória e protege uma única instância local; coordenação entre processos permanece fora do escopo da Fase 1.
+- O carregador JSON continua emitindo mensagens de ENOENT ao criar lotes novos; isto é ruído preexistente e não afeta o resultado dos testes.
