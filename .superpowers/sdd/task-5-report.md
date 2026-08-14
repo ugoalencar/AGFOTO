@@ -34,4 +34,15 @@ No delivery, rework, frontend, report, Redmine, Java, or external-system behavio
 
 ### Concerns
 
-- The JSON update still occurs after the physical move/delete, so an unrelated JSON write failure after a successful mutation can leave file and JSON state temporarily divergent. Missing lote/product errors are now detected before mutation as required.
+- The QA mutation paths validate lote/product before moving or deleting files. Save failures are now either compensated (moves) or stop physical deletion before it begins.
+
+## Fixes Finais da Tarefa 5
+
+- Classify e unclassify agora compensam o move fisico quando a persistencia do historico JSON falha. A resposta permanece `ok:false`; se a compensacao tambem falhar, ela informa explicitamente que o arquivo pode exigir recuperacao manual.
+- Delete persiste o historico e a auditoria antes da exclusao fisica. Assim, falha em `LoteRepository.save` interrompe a operacao com a foto intacta. Se o `unlink` falhar depois da trilha persistida, a resposta retorna `ok:false` com aviso de que a foto foi retida para nova tentativa ou limpeza manual.
+- Foram adicionadas regressões para falha de save em classify, unclassify e delete.
+
+### Testes
+
+- `node --test tests/integration/qa-products.test.js`: 13 aprovados, 0 falhos.
+- `npm.cmd test`: 159 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).

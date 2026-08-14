@@ -69,10 +69,16 @@ export class DeliveryService {
    * Remove classificação de foto
    */
   static async unclassifyPhoto(lote, gtin, filename, fromClassification = null, operationContext = null) {
+    let moved = null;
+    let normalizedLote = null;
+    let normalizedGtin = null;
     try {
-      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
+      const loaded = await this.loadQaProduct(lote, gtin);
+      const { loteObj, produto } = loaded;
+      normalizedLote = loaded.lote;
+      normalizedGtin = loaded.gtin;
       if (!['AP', 'AT'].includes(fromClassification)) return { ok: false, error: 'fromClassification must be AP or AT' };
-      const moved = await FileRepository.moveFinalizadaPhoto({
+      moved = await FileRepository.moveFinalizadaPhoto({
         loteNumero: normalizedLote, gtin: normalizedGtin, filename, fromSubfolder: fromClassification
       });
       await this.recordQaHistory(loteObj, produto, 'foto_desclassificada', {
@@ -84,15 +90,27 @@ export class DeliveryService {
       });
       return { ok: true, data: { unclassified: true, filename: moved.destName } };
     } catch (err) {
-      return { ok: false, error: err.message };
+      return this.compensateQaMoveFailure(err, moved, {
+        loteNumero: normalizedLote,
+        gtin: normalizedGtin,
+        fromSubfolder: null,
+        toSubfolder: fromClassification,
+        originalFilename: filename
+      });
     }
   }
 
   static async classifyPhoto(lote, gtin, filename, classification, operationContext = null) {
+    let moved = null;
+    let normalizedLote = null;
+    let normalizedGtin = null;
     try {
       if (!['AP', 'AT'].includes(classification)) return { ok: false, error: 'Invalid classification' };
-      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
-      const moved = await FileRepository.moveFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, toSubfolder: classification });
+      const loaded = await this.loadQaProduct(lote, gtin);
+      const { loteObj, produto } = loaded;
+      normalizedLote = loaded.lote;
+      normalizedGtin = loaded.gtin;
+      moved = await FileRepository.moveFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, toSubfolder: classification });
       await this.recordQaHistory(loteObj, produto, 'foto_classificada', { classificacao: classification, filename: moved.destName });
       await auditLogger.log(`CLASSIFY_${classification}`, {
         lote: normalizedLote, gtin: normalizedGtin, filename, destName: moved.destName,
@@ -100,24 +118,70 @@ export class DeliveryService {
       });
       return { ok: true, data: { classified: classification, filename: moved.destName } };
     } catch (err) {
-      return { ok: false, error: err.message };
+      return this.compensateQaMoveFailure(err, moved, {
+        loteNumero: normalizedLote,
+        gtin: normalizedGtin,
+        fromSubfolder: classification,
+        toSubfolder: null,
+        originalFilename: filename
+      });
     }
   }
 
   static async deletePhoto(lote, gtin, filename, location = 'root', operationContext = null) {
+    let historyPersisted = false;
+    let auditPersisted = false;
     try {
       const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
-      const deleted = await FileRepository.deleteFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, location });
       await this.recordQaHistory(loteObj, produto, 'foto_excluida', {
-        filename: deleted.filename, location: deleted.location
+        filename, location
       }, -1);
+      historyPersisted = true;
       await auditLogger.log('DELETE_PHOTO', {
-        lote: normalizedLote, gtin: normalizedGtin, filename: deleted.filename, location: deleted.location,
-        operationId: operationContext?.operationId || null
+        lote: normalizedLote, gtin: normalizedGtin, filename, location,
+        operationId: operationContext?.operationId || null, phase: 'pre_delete'
       });
+      auditPersisted = true;
+      const deleted = await FileRepository.deleteFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, location });
       return { ok: true, data: { deleted: true, filename: deleted.filename, location: deleted.location } };
     } catch (err) {
+      if (historyPersisted && auditPersisted) {
+        return {
+          ok: false,
+          error: `Physical delete failed after persisted history/audit: ${err.message}`,
+          warning: 'The file was retained and requires retry or manual cleanup.'
+        };
+      }
+      if (historyPersisted) return { ok: false, error: `Delete stopped after persisted history because audit logging failed: ${err.message}` };
       return { ok: false, error: err.message };
+    }
+  }
+
+  static async compensateQaMoveFailure(error, moved, { loteNumero, gtin, fromSubfolder, toSubfolder, originalFilename }) {
+    if (!moved) return { ok: false, error: error.message };
+
+    try {
+      const compensation = await FileRepository.moveFinalizadaPhoto({
+        loteNumero,
+        gtin,
+        filename: moved.destName,
+        fromSubfolder,
+        toSubfolder
+      });
+      const warning = compensation.destName === originalFilename
+        ? null
+        : `Compensation restored the file as ${compensation.destName} instead of ${originalFilename}.`;
+      return {
+        ok: false,
+        error: error.message,
+        ...(warning ? { warning } : {})
+      };
+    } catch (compensationError) {
+      return {
+        ok: false,
+        error: `${error.message}; compensation failed: ${compensationError.message}`,
+        warning: 'The physical file may be out of sync with JSON history and requires manual recovery.'
+      };
     }
   }
 

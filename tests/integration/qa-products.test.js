@@ -8,6 +8,7 @@ import { applyConfigOverrides } from '../../server/config.js';
 import { createApp } from '../../server/app.js';
 import CapturaService from '../../services/captura-service.js';
 import DeliveryService from '../../services/delivery-service.js';
+import LoteRepository from '../../repositories/lote-repository.js';
 import { DeliveryType } from '../../domain/delivery.js';
 
 const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
@@ -141,6 +142,60 @@ test('rejects an invalid unclassify source without moving the photo', async t =>
   assert.equal(result.ok, false);
   assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
   assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
+});
+
+test('compensates a classify move when saving its JSON history fails', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '48');
+  const root = path.join(env.paths.finalizadas, 'LOTE 48', '000123');
+  const originalSave = LoteRepository.save;
+  LoteRepository.save = async () => { throw new Error('forced save failure'); };
+  t.after(() => { LoteRepository.save = originalSave; });
+
+  const result = await DeliveryService.classifyPhotoAP('48', '000123', 'a.jpg');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /forced save failure/);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
+});
+
+test('compensates an unclassify move when saving its JSON history fails', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '49');
+  const root = path.join(env.paths.finalizadas, 'LOTE 49', '000123');
+  const classified = await DeliveryService.classifyPhotoAP('49', '000123', 'a.jpg');
+  assert.equal(classified.ok, true);
+  const originalSave = LoteRepository.save;
+  LoteRepository.save = async () => { throw new Error('forced save failure'); };
+  t.after(() => { LoteRepository.save = originalSave; });
+
+  const result = await DeliveryService.unclassifyPhoto('49', '000123', 'a.jpg', 'AP');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /forced save failure/);
+  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), true);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), false);
+});
+
+test('does not delete a photo when saving its deletion history fails', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '50');
+  const root = path.join(env.paths.finalizadas, 'LOTE 50', '000123');
+  const originalSave = LoteRepository.save;
+  LoteRepository.save = async () => { throw new Error('forced save failure'); };
+  t.after(() => { LoteRepository.save = originalSave; });
+
+  const result = await DeliveryService.deletePhoto('50', '000123', 'a.jpg');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /forced save failure/);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_50.json'), 'utf8'));
+  assert.notEqual(lote.itens['000123'].historico.at(-1)?.evento, 'foto_excluida');
 });
 
 test('deletes a classified photo with an audit trail and updates product history', async t => {
