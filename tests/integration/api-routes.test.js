@@ -10,7 +10,11 @@ async function request(app, path, options = {}) {
 
   try {
     const res = await fetch(`http://127.0.0.1:${port}${path}`, options);
-    return { status: res.status, body: await res.json() };
+    return {
+      status: res.status,
+      requestId: res.headers.get('x-request-id'),
+      body: await res.json()
+    };
   } finally {
     await new Promise(resolve => server.close(resolve));
   }
@@ -39,6 +43,29 @@ test('mutating routes reject missing operationId', async t => {
   assert.match(res.body.error, /operationId/i);
 });
 
+test('phase 1 app does not expose carros or adset routes', async t => {
+  const env = await createTestEnv(t);
+  const app = createApp({ configOverrides: env.config });
+
+  for (const path of ['/api/carros/lote-teste', '/api/adset/status']) {
+    const res = await request(app, path);
+    assert.equal(res.status, 404);
+  }
+});
+
+test('mutating routes require operationId before reporting malformed JSON', async t => {
+  const env = await createTestEnv(t);
+  const app = createApp({ configOverrides: env.config });
+  const res = await request(app, '/api/captura/salvar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: '{'
+  });
+
+  assert.equal(res.status, 400);
+  assert.match(res.body.error, /operationId/i);
+});
+
 test('mutating routes replay a completed operationId response', async t => {
   const env = await createTestEnv(t);
   const app = createApp({ configOverrides: env.config });
@@ -52,5 +79,9 @@ test('mutating routes replay a completed operationId response', async t => {
   const second = await request(app, '/api/planilhas/importar', options);
 
   assert.equal(first.status, 400);
-  assert.deepEqual(second, first);
+  assert.equal(second.status, first.status);
+  assert.equal(second.body.error, first.body.error);
+  assert.notEqual(first.requestId, second.requestId);
+  assert.equal(first.body.requestId, first.requestId);
+  assert.equal(second.body.requestId, second.requestId);
 });

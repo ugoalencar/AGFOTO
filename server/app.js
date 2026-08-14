@@ -5,8 +5,6 @@ import { v4 as uuidv4 } from 'uuid';
 import capturaRoutes from '../routes/captura.js';
 import planilhasRoutes from '../routes/planilhas.js';
 import qaHubRoutes from '../routes/qa-hub.js';
-import vehiclesRoutes from '../routes/vehicles.js';
-import adsetRoutes from '../routes/adset.js';
 import { auditLogger } from './audit-logger.js';
 import { applyConfigOverrides } from './config.js';
 import { createOperationStore } from './operation-store.js';
@@ -25,7 +23,10 @@ function operationMiddleware(req, res, next) {
     operationId = store.requireOperationId(req);
     const operation = store.begin(operationId, `${req.method} ${req.path}`);
     if (operation.status === 'completed') {
-      return res.status(operation.result.status).json(operation.result.body);
+      return res.status(operation.result.status).json({
+        ...operation.result.body,
+        requestId: req.id
+      });
     }
   } catch (error) {
     return sendError(res, error.message.includes('already in progress') ? 409 : 400, error);
@@ -46,13 +47,13 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
   app.locals.services = services;
   app.locals.operationStore = services.operationStore || createOperationStore();
 
-  app.use(express.json({ limit: '10mb' }));
   app.use((req, res, next) => {
     req.id = uuidv4();
     auditLogger.setRequestId(req.id);
     res.setHeader('X-Request-ID', req.id);
     next();
   });
+  app.use(express.json({ limit: '10mb' }));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('Referrer-Policy', 'no-referrer');
@@ -81,12 +82,17 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
   app.use('/api/entregas', qaHubRoutes);
   app.use('/api/retrabalhos', qaHubRoutes);
   app.use('/api/relatorios', qaHubRoutes);
-  app.use('/api/carros', vehiclesRoutes);
-  app.use('/api/adset', adsetRoutes);
 
   app.use(express.static(path.join(rootDir, 'frontend', 'public')));
   app.use((req, res) => sendError(res, 404, `Not found: ${req.path}`));
   app.use((err, req, res, _next) => {
+    if (
+      err.type === 'entity.parse.failed' &&
+      MUTATING_METHODS.has(req.method) &&
+      !req.headers['x-operation-id']
+    ) {
+      return sendError(res, 400, 'operationId is required');
+    }
     console.error('Error:', err);
     sendError(res, err.status || 500, err.expose ? err.message : 'Internal server error');
   });
