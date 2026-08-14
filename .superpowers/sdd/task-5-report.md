@@ -15,3 +15,23 @@
 ## Scope
 
 No delivery, rework, frontend, report, Redmine, Java, or external-system behavior was added.
+
+## Fix Review Findings
+
+- Validated and normalized lote/GTIN before creating finalized-photo paths; unsafe path components, filenames, source folders, and delete locations now fail without touching files. QA mutation routes also validate lote and GTIN before dispatching.
+- QA classify, unclassify, and delete now load the lote/product JSON before any physical mutation. History updates use that loaded object and no longer suppress missing-file errors.
+- `completeQa` accepts only `normal` and `atualizacao`, and uses one eligible-photo lookup rather than repeating the validation.
+- Added integration coverage in temporary directories for GTIN/lote traversal, filename/location rejection, missing JSON/product preservation, AP/AT destination collisions, invalid unclassify origin, invalid delivery type, and route validation.
+
+### Tests
+
+- `node --test tests/integration/qa-products.test.js`: 10 passed, 0 failed.
+- `npm.cmd test`: 156 passed, 0 failed, 1 skipped (Windows symlink capability unavailable).
+
+### Commits
+
+- `ef74d45 fix: harden product QA mutations`
+
+### Concerns
+
+- The JSON update still occurs after the physical move/delete, so an unrelated JSON write failure after a successful mutation can leave file and JSON state temporarily divergent. Missing lote/product errors are now detected before mutation as required.
