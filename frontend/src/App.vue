@@ -1,38 +1,37 @@
 <template>
-  <div class="app-container">
-    <header>
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <div class="logo">
-          <img src="/favicon.svg" alt="AG Foto" class="logo-svg">
-          <div>
-            <div class="title">AG Foto</div>
-            <div class="subtitle">Sistema de Fotografia</div>
-          </div>
+  <div class="app-shell">
+    <nav class="ag-rail" aria-label="Produtos">
+      <img src="/favicon.svg" alt="AG Foto" class="ag-rail-mark">
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'captura' }" @click="activePage = 'captura'">
+        <span>CAP</span>
+        <small>Captura</small>
+      </button>
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="activePage = 'entregar'; qaHubTab = 'entregar'">
+        <span>ENT</span>
+        <small>Entregar</small>
+      </button>
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="activePage = 'qa'; qaHubTab = 'qa'">
+        <span>QA</span>
+        <small>QA</small>
+      </button>
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'; qaHubTab = 'relatorios'">
+        <span>REL</span>
+        <small>Relat.</small>
+      </button>
+      <div class="ag-rail-foot">Fase 1<br>Produtos</div>
+    </nav>
+
+    <div class="ag-main">
+      <header class="ag-topbar">
+        <div class="ag-wordmark"><b>AG</b> Foto</div>
+        <div class="ag-chip">Produtos</div>
+        <div class="ag-context">
+          <span v-if="selectedLote" class="ag-chip">Lote {{ selectedLote }}</span>
+          <span class="ag-chip">Entrega local/mock</span>
         </div>
-        <div style="display: flex; gap: 1rem;">
-          <button
-            @click="activePage = 'captura'"
-            :style="{ background: activePage === 'captura' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
-            📸 Captura
-          </button>
-          <button
-            @click="activePage = 'planilhas'"
-            :style="{ background: activePage === 'planilhas' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
-            📊 Planilhas
-          </button>
-          <button
-            @click="activePage = 'qa-hub'"
-            :style="{ background: activePage === 'qa-hub' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
-            ✓ QA Hub
-          </button>
-          <button
-            @click="activePage = 'veiculos'"
-            :style="{ background: activePage === 'veiculos' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
-            🚗 Veículos
-          </button>
-        </div>
-      </div>
-    </header>
+      </header>
+
+      <div class="ag-content">
 
     <main v-if="activePage === 'captura'">
       <div class="panel-inputs">
@@ -143,10 +142,6 @@
       </div>
     </main>
 
-    <footer>
-      <span v-if="status" :class="`${statusType}`">{{ status }}</span>
-    </footer>
-
     <!-- Planilhas Page -->
     <main v-if="activePage === 'planilhas'" style="padding: 2rem; overflow-y: auto;">
       <div style="max-width: 900px;">
@@ -221,7 +216,7 @@
     </main>
 
     <!-- QA Hub Page -->
-    <main v-if="activePage === 'qa-hub'" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
+    <main v-if="['entregar', 'qa', 'relatorios'].includes(activePage)" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
       <!-- Sub-tabs -->
       <div style="display: flex; gap: 0; background: #333; border-bottom: 2px solid #FF0000;">
         <button
@@ -527,6 +522,12 @@
         </div>
       </div>
     </div>
+      </div>
+
+      <footer class="ag-footer">
+        <span v-if="status" class="ag-status" :class="statusType">{{ status }}</span>
+      </footer>
+    </div>
   </div>
 </template>
 
@@ -536,7 +537,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 export default {
   name: 'App',
   setup() {
-    const activePage = ref('captura'); // 'captura', 'planilhas', 'qa-hub', 'veiculos'
+    const activePage = ref('captura'); // 'captura', 'entregar', 'qa', 'relatorios'
     const qaHubTab = ref('entregar'); // 'entregar', 'qa', 'relatorios'
     const selectedLote = ref('');
     const selectedGtin = ref('');
