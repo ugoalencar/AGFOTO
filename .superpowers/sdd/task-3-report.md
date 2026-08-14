@@ -75,6 +75,28 @@ No route change was necessary: the app factory operation middleware already owns
 
 - `9dcb1da fix: make product captures failure-safe`
 
+## Fixes Finais da Tarefa 3
+
+### Correções
+
+- Quando `copyFile(..., COPYFILE_EXCL)` cria a foto final mas o `unlink` da TEMP falha, a foto final é considerada capturada. A captura persiste JSON e planilha e retorna `ok: true` com um warning por arquivo sobre o resíduo na TEMP.
+- `moveSnapshotToFinalizadas` agora carrega warnings por arquivo para `CapturaService`, sem contabilizar a cópia final como falha.
+- Os eventos e transições de QA, entrega e retrabalho introduzidos na Tarefa 3 foram removidos. O domínio da captura mantém apenas `captura_salva` e a transição imediata de `em_captura` para `pendente_qa`; constantes legadas de status permanecem por compatibilidade com serviços preexistentes.
+
+### Testes
+
+- `node --test tests/integration/captura-products.test.js tests/unit/domain-lote.test.js`: 28 aprovados, 1 ignorado (permissão de symlink no Windows), 0 falhas.
+- `npm.cmd test`: 135 aprovados, 1 ignorado (permissão de symlink no Windows), 0 falhas.
+
+### Commits
+
+- `538f873 fix: preserve captured copies on temp cleanup failure`
+
+### Preocupações
+
+- Se a limpeza da TEMP falhar após a cópia exclusiva, a origem permanece como resíduo e é explicitamente reportada em `warnings`; a cópia final e o JSON permanecem a fonte operacional válida.
+- O carregador JSON continua emitindo mensagens de ENOENT ao criar lotes novos; isto é ruído preexistente e não afeta o resultado dos testes.
+
 ### Preocupações
 
 - A serialização é deliberadamente apenas em memória e protege uma única instância local; coordenação entre processos permanece fora do escopo da Fase 1.
