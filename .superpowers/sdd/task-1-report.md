@@ -78,3 +78,21 @@ Testes executados:
 Commits:
 
 - `d9fc058 fix: close phase 1 delivery and operation replay gaps`
+
+## Fixes da Terceira Rodada
+
+- Corrigida a exposicao indireta de `DeliveryService.executeDelivery`: o app
+  factory agora bloqueia `POST /executar` antes de montar o hub legado em
+  `/api/qa`, `/api/retrabalhos` e `/api/relatorios`. O caminho
+  `/api/entregas/executar` continua sem mount na Fase 1.
+- O contrato de integracao cobre os quatro prefixes e exige `404` para cada
+  caminho de execucao proibido.
+
+Testes executados:
+
+- `node --test tests/integration/api-routes.test.js`: 6 aprovados, 0 falhas.
+- `npm.cmd test`: 118 aprovados, 0 falhas.
+
+Commits:
+
+- `81092bb fix: block delivery execution under phase 1 prefixes`
