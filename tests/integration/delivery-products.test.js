@@ -245,3 +245,52 @@ test('delivery routes require and replay operationId with the global envelope', 
   assert.equal(execute.status, 200);
   assert.equal(execute.body.ok, true);
 });
+
+test('restart rework by GTIN records history and refreshes the control workbook', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await saveReadyProduct(env, '47');
+
+  const rework = await DeliveryService.restartRework('47', '000123');
+  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_47.json'), 'utf8'));
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(path.join(env.paths.xlsx, 'controle-lotes.xlsx'));
+
+  assert.equal(rework.ok, true, rework.error);
+  assert.equal(rework.data.status, 'retrabalho');
+  assert.equal(lote.itens['000123'].status, 'retrabalho');
+  assert.equal(lote.itens['000123'].historico.at(-1).evento, 'retrabalho_iniciado');
+  assert.equal(workbook.getWorksheet('Lote 47').getCell('F2').value, 'retrabalho');
+  assert.equal(fs.existsSync(path.join(env.paths.finalizadas, 'LOTE 47', '000123', 'root.jpg')), true);
+});
+
+test('restart rework by codigo requires a unique product without mutating ambiguous matches', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await saveReadyProduct(env, '48', '000123', 'COD-SHARED');
+  await saveReadyProduct(env, '48', '000124', 'COD-SHARED');
+  const jsonPath = path.join(env.paths.jsons, 'Lote_48.json');
+  const before = await fs.promises.readFile(jsonPath, 'utf8');
+
+  const ambiguous = await DeliveryService.restartRework('48', null, 'COD-SHARED');
+
+  assert.equal(ambiguous.ok, false);
+  assert.match(ambiguous.error, /ambiguous/i);
+  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
+});
+
+test('rework route replays operationId responses with the global envelope', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await saveReadyProduct(env, '49');
+  const app = createApp({ configOverrides: env.config });
+
+  const first = await request(app, '/api/retrabalhos', { lote: '49', codigo: 'COD-1' }, 'rework-49');
+  const replay = await request(app, '/api/retrabalhos', { lote: '49', codigo: 'COD-1' }, 'rework-49');
+
+  assert.equal(first.status, 200);
+  assert.equal(first.body.ok, true);
+  assert.ok(first.body.requestId);
+  assert.equal(replay.status, 200);
+  assert.deepEqual(replay.body.data, first.body.data);
+});

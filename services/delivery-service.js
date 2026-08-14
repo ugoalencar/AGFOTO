@@ -483,13 +483,22 @@ export class DeliveryService {
    */
   static async restartRework(lote, gtin, codigo = null) {
     try {
-      const loteObj = await LoteRepository.load(lote);
+      const normalizedLote = Lote.normalize(lote);
+      if (!Lote.isValid(normalizedLote)) throw new Error('Invalid lote');
+      const normalizedGtin = gtin ? Produto.normalize(gtin) : null;
+      if (normalizedGtin && !Produto.isValid(normalizedGtin)) throw new Error('Invalid GTIN');
+      const normalizedCodigo = typeof codigo === 'string' ? codigo.trim() : codigo;
+      if (!normalizedGtin && (!normalizedCodigo || typeof normalizedCodigo !== 'string')) {
+        throw new Error('GTIN or codigo required');
+      }
+
+      const loteObj = await LoteRepository.load(normalizedLote);
 
       // Se não passou GTIN, tentar encontrar por código
-      let targetGtin = gtin;
-      if (!targetGtin && codigo) {
+      let targetGtin = normalizedGtin;
+      if (!targetGtin && normalizedCodigo) {
         for (const [ean, produto] of Object.entries(loteObj.itens)) {
-          if (produto.codigo === codigo) {
+          if (produto.codigo === normalizedCodigo) {
             if (targetGtin) {
               throw new Error('Ambiguous code: multiple products match');
             }
@@ -503,16 +512,27 @@ export class DeliveryService {
       }
 
       const produto = loteObj.itens[targetGtin];
+      if (!produto) throw new Error('Product not found');
+      if (normalizedCodigo && produto.codigo !== normalizedCodigo) {
+        throw new Error(`Rework codigo does not match product codigo: ${normalizedCodigo}`);
+      }
 
       // Muda status para retrabalho
       produto.status = ProductStatus.RETRABALHO;
-      await LoteRepository.save(loteObj);
-
-      await auditLogger.log('RETRABALHO_INICIADO', {
-        lote,
+      produto.ultimoErro = null;
+      produto.addHistoricoEvent('retrabalho_iniciado', {
         gtin: targetGtin,
         codigo: produto.codigo
       });
+
+      await auditLogger.log('RETRABALHO_INICIADO', {
+        lote: normalizedLote,
+        gtin: targetGtin,
+        codigo: produto.codigo
+      });
+
+      await LoteRepository.save(loteObj);
+      await ExcelService.updateControlFromLote(normalizedLote);
 
       return {
         ok: true,

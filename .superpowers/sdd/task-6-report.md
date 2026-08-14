@@ -46,3 +46,26 @@
 - `node --test tests/integration/delivery-products.test.js`: 10 passed.
 - `node --test tests/integration/qa-products.test.js tests/integration/api-routes.test.js tests/unit/ftp-service.test.js`: 36 passed.
 - `npm.cmd test`: 177 passed, 0 failed, 1 skipped because Windows symlink creation requires Developer Mode or elevation.
+
+## Rework Fixes
+
+- `restartRework` now validates lote, GTIN, and codigo before mutating local JSON.
+- Rework by `codigo` requires a unique matching product; ambiguous codes fail without changing the lote file.
+- Successful rework now records `retrabalho_iniciado` in product history, writes `RETRABALHO_INICIADO`, clears stale delivery errors, saves JSON, and rebuilds the local control workbook.
+- `/api/retrabalhos` is covered through the global `operationId` replay envelope.
+
+### Tests
+
+- `node --test tests/integration/delivery-products.test.js`: 13 passed.
+
+## Frontend Delivery Fix
+
+- The QA Hub delivery action now runs the full local flow from the UI: prepare staging, execute the persisted `attemptId`, then refresh the ready-for-delivery list.
+- The delivery button is disabled per product while the local delivery is in progress.
+- The UI sends distinct `operationId` values for prepare and execute, matching the global idempotency middleware.
+
+### Tests
+
+- `npm.cmd test`: 180 passed, 0 failed, 1 skipped because Windows symlink creation requires Developer Mode or elevation.
+- `node --input-type=module` script syntax check for `frontend/src/App.vue`: passed.
+- `npm.cmd run lint`: not runnable; ESLint reports no configuration file in this project.

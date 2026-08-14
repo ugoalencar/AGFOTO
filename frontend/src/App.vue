@@ -284,8 +284,9 @@
                     <td style="padding: 0.75rem;">
                       <button
                         @click="onPrepareDelivery(product)"
+                        :disabled="deliveryProductKey === `${product.gtin}:${product.codigo}`"
                         style="background: #FF8800; color: #000; border: none; padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; font-size: 0.75rem;">
-                        Preparar
+                        {{ deliveryProductKey === `${product.gtin}:${product.codigo}` ? 'Entregando...' : 'Entregar' }}
                       </button>
                     </td>
                   </tr>
@@ -554,6 +555,7 @@ export default {
     // QA Hub state
     const qaSelectedLote = ref('');
     const qaProducts = ref([]);
+    const deliveryProductKey = ref('');
     const qaPhotoLote = ref('');
     const qaPhotoGtin = ref('');
     const qaPhotos = ref([]);
@@ -589,6 +591,13 @@ export default {
         status.value = '';
         statusType.value = '';
       }, 3000);
+    };
+
+    const makeOperationId = prefix => {
+      const randomId = typeof crypto !== 'undefined' && crypto.randomUUID
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      return `${prefix}-${randomId}`;
     };
 
     const loadTempImages = async () => {
@@ -857,8 +866,11 @@ export default {
     };
 
     const onPrepareDelivery = async (product) => {
+      const productKey = `${product.gtin}:${product.codigo}`;
+      if (deliveryProductKey.value) return;
+      deliveryProductKey.value = productKey;
       try {
-        const response = await this.$api.request(
+        const prepareResponse = await this.$api.request(
           '/api/entregas/preparar',
           {
             method: 'POST',
@@ -866,17 +878,41 @@ export default {
               lote: qaSelectedLote.value,
               gtin: product.gtin,
               codigo: product.codigo,
-              deliveryType: 'normal'
+              deliveryType: 'normal',
+              operationId: makeOperationId('delivery-prepare')
             }
           }
         );
-        if (response.ok) {
-          showStatus(`✓ Entrega preparada - ${response.data.manifest.fileCount} arquivos`, 'success');
+        if (!prepareResponse.ok) {
+          showStatus(`✗ ${prepareResponse.error}`, 'error');
+          return;
+        }
+
+        const executeResponse = await this.$api.request(
+          '/api/entregas/executar',
+          {
+            method: 'POST',
+            data: {
+              lote: qaSelectedLote.value,
+              gtin: product.gtin,
+              codigo: product.codigo,
+              deliveryType: 'normal',
+              attemptId: prepareResponse.data.attemptId,
+              operationId: makeOperationId('delivery-execute')
+            }
+          }
+        );
+
+        if (executeResponse.ok) {
+          showStatus(`✓ Entrega concluida - ${prepareResponse.data.manifest.fileCount} arquivos`, 'success');
+          await onLoadQaProducts();
         } else {
-          showStatus(`✗ ${response.error}`, 'error');
+          showStatus(`✗ ${executeResponse.error}`, 'error');
         }
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        deliveryProductKey.value = '';
       }
     };
 
@@ -976,6 +1012,7 @@ export default {
       qaHubTab,
       qaSelectedLote,
       qaProducts,
+      deliveryProductKey,
       qaPhotoLote,
       qaPhotoGtin,
       qaPhotos,
