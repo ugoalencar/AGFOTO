@@ -43,3 +43,19 @@ persistem lotes.
 - A persistencia e a auditoria agora respeitam os caminhos sobrescritos pelo ambiente de teste; nenhuma execucao verde escreveu em diretorios operacionais.
 - A primeira execucao vermelha, antes da correcao de isolamento, deixou artefatos `TEST-*` e `BATCH-*` nos diretorios operacionais. Eles foram identificados, mas a remocao explicita foi bloqueada pela politica do ambiente.
 - Os avisos de `ENOENT` durante a criacao inicial de lotes sao provenientes do fallback de leitura existente; os testes passam e usam apenas o diretorio temporario.
+
+## Fix Review Findings
+
+- Critical: removidos os imports e mounts de `/api/carros` e `/api/adset` do app factory da Fase 1; os modulos legados foram preservados.
+- Critical: removidos 8 JSONs `Lote_TEST-*`/`Lote_BATCH-*` e 14 backups equivalentes de `dados/` neste worktree. A verificacao posterior nao encontrou arquivos nesses padroes.
+- Important: erros `entity.parse.failed` em `POST`, `PUT`, `PATCH` e `DELETE` sem `x-operation-id` agora retornam `operationId is required`. Requisicoes JSON validas continuam aceitando `operationId` no corpo.
+- Important: replays idempotentes agora retornam o mesmo resultado com `requestId` atualizado para corresponder ao header `X-Request-ID` da nova requisicao.
+
+Testes executados:
+
+- `node --test tests/integration/api-routes.test.js`: 5 aprovados, 0 falhas.
+- `npm.cmd test`: 116 aprovados, 0 falhas.
+
+Commits:
+
+- `7eda87d fix: address phase 1 app review findings`
