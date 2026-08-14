@@ -143,6 +143,25 @@ test('serializes parallel confirmations with divergent lookup values', async t =
   assert.equal(worksheet.rowCount, 2);
 });
 
+test('allows only one parallel confirmation for the same import session', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const entrada = path.join(env.paths.xlsx, 'same-import-confirmation.xlsx');
+  await makeWorkbook(entrada, [['EAN', 'Codigo', 'Descricao'], ['000131', 'COD-1', 'Produto 1']]);
+
+  const imported = await ExcelService.importWorkbook({ lote: '37', filePath: entrada });
+  assert.equal(imported.ok, true);
+
+  const results = await Promise.all([
+    ExcelService.confirmImport(imported.data.importId),
+    ExcelService.confirmImport(imported.data.importId)
+  ]);
+
+  assert.equal(results.filter(result => result.ok).length, 1);
+  const rejected = results.find(result => !result.ok);
+  assert.match(rejected.error, /import session not found/i);
+});
+
 test('serializes a pending confirmation with a direct lookup merge', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
@@ -179,7 +198,7 @@ test('serializes a pending confirmation with a direct lookup merge', async t => 
   assert.match(blocked.error, /resolve conflicts/i);
 });
 
-test('blocks a pending confirmation that diverges from a concurrent direct merge', async t => {
+test('blocks a direct merge that diverges after a pending confirmation', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
   const pendingPath = path.join(env.paths.xlsx, 'pending-direct-conflict.xlsx');
@@ -188,21 +207,21 @@ test('blocks a pending confirmation that diverges from a concurrent direct merge
   const pending = await ExcelService.importWorkbook({ lote: '37', filePath: pendingPath });
   assert.equal(pending.ok, true);
 
+  const confirmation = ExcelService.confirmImport(pending.data.importId);
   const directMerge = ExcelService.mergeToLookup('37', [{
     ean: '000130',
     codigo: 'COD-1',
     descricao: 'Produto 1'
   }]);
-  const confirmation = ExcelService.confirmImport(pending.data.importId);
-  const [merged, blocked] = await Promise.all([directMerge, confirmation]);
+  const [confirmed, blocked] = await Promise.all([confirmation, directMerge]);
 
-  assert.equal(merged.ok, true);
+  assert.equal(confirmed.ok, true);
   assert.equal(blocked.ok, false);
   assert.match(blocked.error, /resolve conflicts/i);
   assert.equal(blocked.data.conflicts.length, 2);
   assert.deepEqual((await ExcelService.lookupCodigo('37', '000130')).data, {
-    codigo: 'COD-1',
-    descricao: 'Produto 1'
+    codigo: 'COD-2',
+    descricao: 'Produto 2'
   });
 });
 

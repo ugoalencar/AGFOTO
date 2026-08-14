@@ -81,3 +81,22 @@ No production spreadsheet data was read or written. No Redmine, Java, start.jar,
 ### Preocupacoes
 
 - O lock continua process-local; multiplos processos Node escrevendo o mesmo arquivo exigiriam coordenacao externa para garantir a mesma serializacao.
+
+## Ajuste Final-Final da Tarefa 4
+
+### Correcoes
+
+- `mergeToLookup` agora rejeita conflitos por padrao, incluindo chamadas pela rota `/api/planilhas/unificar`.
+- `confirmImport` consulta e reserva a sessao dentro do lock compartilhado do lookup; a sessao e removida antes do merge e restaurada quando o merge falha.
+- Confirmacoes paralelas para o mesmo `importId` agora permitem somente um sucesso; a segunda encontra a sessao ausente.
+
+### Testes
+
+- Adicionada cobertura para confirmacao pendente seguida de merge direto divergente, que retorna conflitos sem sobrescrever o lookup.
+- Adicionada cobertura para duas confirmacoes paralelas do mesmo `importId`, com exatamente um sucesso.
+- `node --test tests/integration/planilhas-products.test.js`: 11 passed, 0 failed.
+- `npm.cmd test`: 146 passed, 0 failed, 1 skipped (permissao de symlink no Windows).
+
+### Preocupacoes
+
+- O lock continua process-local; multiplos processos Node escrevendo o mesmo arquivo exigiriam coordenacao externa para garantir a mesma serializacao.
