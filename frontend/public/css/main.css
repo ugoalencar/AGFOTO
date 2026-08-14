@@ -923,7 +923,7 @@ select {
 
 .ag-table td {
   padding: 9px 10px;
-  border-bottom: 1px solid #1F1F26;
+  border-bottom: 1px solid var(--ag-line);
   font-family: var(--ag-mono);
   font-size: 12.5px;
 }
