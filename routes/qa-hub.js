@@ -71,10 +71,11 @@ router.post('/classificar', express.json(), async (req, res) => {
   }
 
   let result;
+  const operationContext = { operationId: req.body.operationId || req.headers['x-operation-id'] };
   if (classification === 'AP') {
-    result = await DeliveryService.classifyPhotoAP(lote, gtin, filename);
+    result = await DeliveryService.classifyPhotoAP(lote, gtin, filename, operationContext);
   } else {
-    result = await DeliveryService.classifyPhotoAT(lote, gtin, filename);
+    result = await DeliveryService.classifyPhotoAT(lote, gtin, filename, operationContext);
   }
 
   if (result.ok) {
@@ -89,7 +90,7 @@ router.post('/classificar', express.json(), async (req, res) => {
  * Remove classificação de foto
  */
 router.post('/desclassificar', express.json(), async (req, res) => {
-  const { lote, gtin, filename } = req.body;
+  const { lote, gtin, filename, fromClassification = null } = req.body;
 
   if (!lote || !gtin || !filename) {
     return res.status(400).json({
@@ -99,13 +100,33 @@ router.post('/desclassificar', express.json(), async (req, res) => {
     });
   }
 
-  const result = await DeliveryService.unclassifyPhoto(lote, gtin, filename);
+  const operationContext = { operationId: req.body.operationId || req.headers['x-operation-id'] };
+  const result = await DeliveryService.unclassifyPhoto(lote, gtin, filename, fromClassification, operationContext);
 
   if (result.ok) {
     res.json({ ok: true, data: result.data, requestId: req.id });
   } else {
     res.status(400).json({ ok: false, error: result.error, requestId: req.id });
   }
+});
+
+/**
+ * POST /api/qa/excluir
+ * Exclui uma foto classificada ou da raiz e registra auditoria.
+ */
+router.post('/excluir', express.json(), async (req, res) => {
+  const { lote, gtin, filename, location = 'root' } = req.body;
+
+  if (!lote || !gtin || !filename) {
+    return res.status(400).json({ ok: false, error: 'Invalid parameters', requestId: req.id });
+  }
+
+  const operationContext = { operationId: req.body.operationId || req.headers['x-operation-id'] };
+  const result = await DeliveryService.deletePhoto(lote, gtin, filename, location, operationContext);
+  if (result.ok) {
+    return res.json({ ok: true, data: result.data, requestId: req.id });
+  }
+  return res.status(400).json({ ok: false, error: result.error, requestId: req.id });
 });
 
 /**

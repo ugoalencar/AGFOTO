@@ -135,6 +135,47 @@ export class FileRepository {
     }
   }
 
+  static async moveFinalizadaPhoto({ loteNumero, gtin, filename, fromSubfolder = null, toSubfolder = null }) {
+    const cleanFilename = validateFilename(filename);
+    if (cleanFilename !== filename) throw new Error('Filename must not include a path');
+    if (fromSubfolder && !['AP', 'AT'].includes(fromSubfolder)) throw new Error(`Invalid source subfolder: ${fromSubfolder}`);
+    if (toSubfolder && !['AP', 'AT'].includes(toSubfolder)) throw new Error(`Invalid destination subfolder: ${toSubfolder}`);
+
+    const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${loteNumero}`, String(gtin)), config.paths.finalizadas);
+    const srcDir = fromSubfolder ? path.join(baseDir, fromSubfolder) : baseDir;
+    const destDir = toSubfolder ? path.join(baseDir, toSubfolder) : baseDir;
+    const srcPath = securePath(path.join(srcDir, cleanFilename), config.paths.finalizadas);
+    await createSecureDirectory(destDir, config.paths.finalizadas);
+
+    for (let counter = 0; ; counter++) {
+      const destPath = securePath(await this.uniqueDestPath(destDir, cleanFilename, counter), config.paths.finalizadas);
+      try {
+        await fs.promises.copyFile(srcPath, destPath, fs.constants.COPYFILE_EXCL);
+      } catch (err) {
+        if (err.code === 'EEXIST') continue;
+        throw err;
+      }
+      try {
+        await fs.promises.unlink(srcPath);
+      } catch (err) {
+        await fs.promises.unlink(destPath).catch(() => {});
+        throw err;
+      }
+      return { srcPath, destPath, destName: path.basename(destPath) };
+    }
+  }
+
+  static async deleteFinalizadaPhoto({ loteNumero, gtin, filename, location = null }) {
+    const cleanFilename = validateFilename(filename);
+    if (cleanFilename !== filename) throw new Error('Filename must not include a path');
+    const subfolder = location === 'root' ? null : location;
+    if (subfolder && !['AP', 'AT'].includes(subfolder)) throw new Error('location must be root, AP, or AT');
+    const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${loteNumero}`, String(gtin)), config.paths.finalizadas);
+    const filePath = securePath(path.join(subfolder ? path.join(baseDir, subfolder) : baseDir, cleanFilename), config.paths.finalizadas);
+    await fs.promises.unlink(filePath);
+    return { filePath, filename: cleanFilename, location: subfolder || 'root' };
+  }
+
   /**
    * Lista imagens em um diretório Finalizadas
    */
@@ -153,7 +194,7 @@ export class FileRepository {
         dirPath = path.join(dirPath, subfolder);
       }
 
-      return await listAllowedFiles(dirPath);
+      return await listAllowedFiles(dirPath, config.paths.finalizadas);
     } catch (err) {
       throw new Error(`Cannot list finalizadas images: ${err.message}`);
     }

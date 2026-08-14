@@ -7,6 +7,7 @@ import { ProductStatus } from '../domain/status.js';
 import { getFtpService } from './ftp-service.js';
 import { auditLogger } from '../server/audit-logger.js';
 import { config } from '../server/config.js';
+import ExcelService from './excel-service.js';
 
 /**
  * Serviço de Entrega
@@ -44,18 +45,9 @@ export class DeliveryService {
   /**
    * Classifica foto como AP (Apoio)
    */
-  static async classifyPhotoAP(lote, gtin, filename) {
+  static async classifyPhotoAP(lote, gtin, filename, operationContext = null) {
     try {
-      // TODO: Move arquivo para AP/
-      // Mover Finalizadas/LOTE/GTIN/filename → Finalizadas/LOTE/GTIN/AP/filename
-
-      await auditLogger.log('CLASSIFY_AP', {
-        lote,
-        gtin,
-        filename
-      });
-
-      return { ok: true, data: { classified: 'AP' } };
+      return await this.classifyPhoto(lote, gtin, filename, 'AP', operationContext);
     } catch (err) {
       return { ok: false, error: err.message };
     }
@@ -64,17 +56,9 @@ export class DeliveryService {
   /**
    * Classifica foto como AT (Atualização)
    */
-  static async classifyPhotoAT(lote, gtin, filename) {
+  static async classifyPhotoAT(lote, gtin, filename, operationContext = null) {
     try {
-      // TODO: Move arquivo para AT/
-
-      await auditLogger.log('CLASSIFY_AT', {
-        lote,
-        gtin,
-        filename
-      });
-
-      return { ok: true, data: { classified: 'AT' } };
+      return await this.classifyPhoto(lote, gtin, filename, 'AT', operationContext);
     } catch (err) {
       return { ok: false, error: err.message };
     }
@@ -83,19 +67,69 @@ export class DeliveryService {
   /**
    * Remove classificação de foto
    */
-  static async unclassifyPhoto(lote, gtin, filename) {
+  static async unclassifyPhoto(lote, gtin, filename, fromClassification = null, operationContext = null) {
     try {
-      // TODO: Move arquivo de volta para raiz se estiver em AP/ ou AT/
-
-      await auditLogger.log('UNCLASSIFY', {
-        lote,
-        gtin,
-        filename
+      const inferredClassification = fromClassification || (filename.includes('/') ? filename.split('/')[0] : null);
+      const cleanFilename = filename.includes('/') ? filename.split('/').pop() : filename;
+      if (!['AP', 'AT'].includes(inferredClassification)) return { ok: false, error: 'fromClassification must be AP or AT' };
+      const moved = await FileRepository.moveFinalizadaPhoto({
+        loteNumero: lote, gtin, filename: cleanFilename, fromSubfolder: inferredClassification
       });
-
-      return { ok: true, data: { unclassified: true } };
+      await this.recordQaHistory(lote, gtin, 'foto_desclassificada', {
+        classificacaoAnterior: inferredClassification, filename: moved.destName
+      });
+      await auditLogger.log('UNCLASSIFY', {
+        lote, gtin, filename: cleanFilename, fromClassification: inferredClassification,
+        destName: moved.destName, operationId: operationContext?.operationId || null
+      });
+      return { ok: true, data: { unclassified: true, filename: moved.destName } };
     } catch (err) {
       return { ok: false, error: err.message };
+    }
+  }
+
+  static async classifyPhoto(lote, gtin, filename, classification, operationContext = null) {
+    try {
+      if (!['AP', 'AT'].includes(classification)) return { ok: false, error: 'Invalid classification' };
+      const moved = await FileRepository.moveFinalizadaPhoto({ loteNumero: lote, gtin, filename, toSubfolder: classification });
+      await this.recordQaHistory(lote, gtin, 'foto_classificada', { classificacao: classification, filename: moved.destName });
+      await auditLogger.log(`CLASSIFY_${classification}`, {
+        lote, gtin, filename, destName: moved.destName,
+        operationId: operationContext?.operationId || null
+      });
+      return { ok: true, data: { classified: classification, filename: moved.destName } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  static async deletePhoto(lote, gtin, filename, location = 'root', operationContext = null) {
+    try {
+      const deleted = await FileRepository.deleteFinalizadaPhoto({ loteNumero: lote, gtin, filename, location });
+      await this.recordQaHistory(lote, gtin, 'foto_excluida', {
+        filename: deleted.filename, location: deleted.location
+      }, -1);
+      await auditLogger.log('DELETE_PHOTO', {
+        lote, gtin, filename: deleted.filename, location: deleted.location,
+        operationId: operationContext?.operationId || null
+      });
+      return { ok: true, data: { deleted: true, filename: deleted.filename, location: deleted.location } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  static async recordQaHistory(lote, gtin, event, details, photoCountDelta = 0) {
+    try {
+      const loteObj = await LoteRepository.load(lote);
+      const produto = loteObj.itens[gtin];
+      if (!produto) return;
+      if (photoCountDelta !== 0) produto.quantidadeFotos = Math.max(0, produto.quantidadeFotos + photoCountDelta);
+      produto.addHistoricoEvent(event, details);
+      await LoteRepository.save(loteObj);
+    } catch (err) {
+      if (err.message.includes('ENOENT')) return;
+      throw err;
     }
   }
 
@@ -107,8 +141,16 @@ export class DeliveryService {
       const loteObj = await LoteRepository.load(lote);
       const produto = loteObj.itens[gtin];
 
-      if (!produto) {
-        throw new Error(`Product not found: ${gtin}`);
+      if (!produto) return { ok: false, error: `Product not found: ${gtin}` };
+      const subfolder = deliveryType === DeliveryType.ATUALIZACAO ? 'AT' : null;
+      const photos = await FileRepository.listFinalizadasImages(lote, gtin, subfolder);
+      if (photos.length === 0) {
+        return {
+          ok: false,
+          error: deliveryType === DeliveryType.ATUALIZACAO
+            ? 'No AT photos available for update delivery'
+            : 'No root photos available for normal delivery'
+        };
       }
 
       // Valida que tem fotos elegíveis
@@ -128,19 +170,23 @@ export class DeliveryService {
 
       // Muda status
       produto.status = ProductStatus.PRONTO_PARA_ENTREGA;
+      produto.addHistoricoEvent('qa_concluido', { deliveryType, quantidadeFotosElegiveis: photos.length });
       await LoteRepository.save(loteObj);
+      await ExcelService.updateControlFromLote(lote);
 
       await auditLogger.log('QA_COMPLETO', {
         lote,
         gtin,
-        deliveryType
+        deliveryType,
+        quantidadeFotosElegiveis: photos.length
       });
 
       return {
         ok: true,
         data: {
-          status: 'pronto_para_entrega',
-          deliveryType
+          status: produto.status,
+          deliveryType,
+          quantidadeFotosElegiveis: photos.length
         }
       };
     } catch (err) {
