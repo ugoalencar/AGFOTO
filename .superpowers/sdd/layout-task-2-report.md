@@ -47,3 +47,15 @@
 - Adicionado teste de regressao que confirma a linha de palco com tamanho automatico no breakpoint de telefone.
 - `node --test tests/integration/captura-products.test.js tests/integration/qa-products.test.js`: 34 aprovados, 0 falhas, 1 ignorado (symlink do Windows sem permissao) apos a correcao.
 - `git diff --check`: sem erros de whitespace.
+
+## Correcao final da revisao
+
+- Em telefones de ate 560px, `.capture-stage` agora reserva `446px`, cobrindo os dois grids de altura minima de `180px` e seus cabecalhos. Assim, o card nao termina antes de `Palco anterior`; o scroll da `.capture-view` mantem todo o palco acessivel.
+- Desktop e breakpoint medio permanecem inalterados, pois a regra esta limitada ao breakpoint de telefone.
+- O teste de regressao foi substituido por uma verificacao de geometria renderizada em Chromium, usando o Playwright ja instalado no ambiente. Em viewport `390x844`, ele valida que a borda inferior de `#previous-grid` nao ultrapassa a borda inferior de `#capture-stage`.
+
+### Verificacao da correcao final
+
+- RED antes do CSS: `Palco anterior` terminou em `782px` enquanto o card terminou em `660px`.
+- GREEN apos o CSS: `node --test tests/integration/captura-products.test.js tests/integration/qa-products.test.js`.
+- `git diff --check`.

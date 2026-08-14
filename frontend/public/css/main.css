@@ -859,6 +859,7 @@ select {
   }
 
   .capture-stage {
+    min-height: 446px;
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(180px, 1fr) auto minmax(180px, 1fr);
     grid-template-areas:

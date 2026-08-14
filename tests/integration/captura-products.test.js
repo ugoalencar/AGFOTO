@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
+import { spawnSync } from 'node:child_process';
 import ExcelJS from 'exceljs';
 import { FileRepository } from '../../repositories/file-repository.js';
 import CapturaService from '../../services/captura-service.js';
@@ -29,13 +31,53 @@ async function request(app, requestPath, options = {}) {
   }
 }
 
-test('phone capture layout allows the stacked stage to size to its contents', async () => {
+test('phone capture layout keeps the previous stage inside its card', async t => {
   const css = await fs.promises.readFile(path.resolve('frontend/public/css/main.css'), 'utf8');
-  const phoneBreakpoint = css.match(/@media \(max-width: 560px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+  const fixtureDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agfoto-phone-layout-'));
+  const fixturePath = path.join(fixtureDirectory, 'capture.html');
+  const playwrightScript = `
+import json
+import sys
+from pathlib import Path
+from playwright.sync_api import sync_playwright
 
-  assert.match(
-    phoneBreakpoint,
-    /\.capture-view\s*\{\s*grid-template-rows:\s*auto\s+auto\s+minmax\(160px,\s*\.5fr\);\s*\}/
+with sync_playwright() as playwright:
+    browser = playwright.chromium.launch(headless=True)
+    page = browser.new_page(viewport={"width": 390, "height": 844})
+    page.goto(Path(sys.argv[1]).as_uri())
+    previous_grid = page.locator('#previous-grid').bounding_box()
+    stage = page.locator('#capture-stage').bounding_box()
+    browser.close()
+
+if not previous_grid or not stage:
+    raise SystemExit('Capture stage geometry was unavailable')
+
+print(json.dumps({"previousBottom": previous_grid["y"] + previous_grid["height"], "stageBottom": stage["y"] + stage["height"]}))
+`;
+
+  const fixture = `<!doctype html>
+<html><head><meta charset="utf-8"><style>${css}</style></head>
+<body><div id="app"><div class="app-shell" style="grid-template-columns:minmax(0, 1fr)"><div class="ag-main"><div class="ag-content"><main class="ag-view capture-view">
+  <section class="ag-card capture-entry" style="height:320px"><div class="ag-card-body">Entrada</div></section>
+  <section id="capture-stage" class="ag-card capture-stage">
+    <div class="stage-head"><h3 class="stage-title">Palco atual</h3></div>
+    <div class="stage-grid stage-empty">Aguardando imagens</div>
+    <div class="stage-head"><h3 class="stage-title">Palco anterior</h3></div>
+    <div id="previous-grid" class="stage-grid stage-empty">Nenhuma imagem anterior</div>
+  </section>
+  <section class="ag-card" style="height:160px"><div class="ag-card-body">GTINs do lote</div></section>
+</main></div></div></div></div></body></html>`;
+
+  await fs.promises.writeFile(fixturePath, fixture, 'utf8');
+  t.after(() => fs.promises.rm(fixtureDirectory, { recursive: true, force: true }));
+
+  const result = spawnSync('py', ['-3.12', '-c', playwrightScript, fixturePath], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const geometry = JSON.parse(result.stdout);
+
+  assert.ok(
+    geometry.previousBottom <= geometry.stageBottom + 0.5,
+    `Palco anterior is clipped: bottom ${geometry.previousBottom}px exceeds card bottom ${geometry.stageBottom}px`
   );
 });
 
