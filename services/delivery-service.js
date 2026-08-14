@@ -162,11 +162,19 @@ export class DeliveryService {
         };
       }
       if (auditPersisted) {
-        await auditLogger.log('DELETE_PHOTO_ABORTED', {
-          lote: normalizedLote, gtin: normalizedGtin, filename, location,
-          operationId: operationContext?.operationId || null,
-          reason: err.message
-        }).catch(() => {});
+        try {
+          await auditLogger.log('DELETE_PHOTO_ABORTED', {
+            lote: normalizedLote, gtin: normalizedGtin, filename, location,
+            operationId: operationContext?.operationId || null,
+            reason: err.message
+          });
+        } catch (abortAuditError) {
+          return {
+            ok: false,
+            error: `${err.message}; abort audit failed: ${abortAuditError.message}`,
+            warning: 'The file was retained and JSON was not persisted, but the abort audit event could not be recorded.'
+          };
+        }
       }
       if (historyPersisted) return { ok: false, error: `Delete stopped after persisted history because audit logging failed: ${err.message}` };
       return { ok: false, error: err.message };
@@ -184,15 +192,23 @@ export class DeliveryService {
         fromSubfolder,
         toSubfolder
       });
-      await auditLogger.log('QA_MOVE_COMPENSATED', {
-        lote: loteNumero,
-        gtin,
-        filename: moved.destName,
-        restoredAs: compensation.destName,
-        fromSubfolder,
-        toSubfolder,
-        reason: error.message
-      }).catch(() => {});
+      try {
+        await auditLogger.log('QA_MOVE_COMPENSATED', {
+          lote: loteNumero,
+          gtin,
+          filename: moved.destName,
+          restoredAs: compensation.destName,
+          fromSubfolder,
+          toSubfolder,
+          reason: error.message
+        });
+      } catch (compensationAuditError) {
+        return {
+          ok: false,
+          error: `${error.message}; compensation audit failed: ${compensationAuditError.message}`,
+          warning: 'The physical file was compensated and JSON was not persisted, but the compensation audit event could not be recorded.'
+        };
+      }
       const warning = compensation.destName === originalFilename
         ? null
         : `Compensation restored the file as ${compensation.destName} instead of ${originalFilename}.`;

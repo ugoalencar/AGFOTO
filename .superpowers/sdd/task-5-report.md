@@ -71,3 +71,16 @@ No delivery, rework, frontend, report, Redmine, Java, or external-system behavio
 - `node --test tests/unit/secure-filesystem.test.js`: 12 aprovados, 0 falhos.
 - `node --test tests/integration/qa-products.test.js`: 18 aprovados, 0 falhos.
 - `npm.cmd test`: 165 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).
+
+## Ajuste de Auditoria de Contrapartida
+
+- `QA_MOVE_COMPENSATED` e `DELETE_PHOTO_ABORTED` nao ignoram mais falha de auditoria da propria contrapartida.
+- Quando a compensacao fisica acontece, mas a auditoria da compensacao falha, a resposta retorna `ok:false` com erro e aviso explicito.
+- Quando delete aborta antes de persistir JSON, mas a auditoria do abort falha, a resposta retorna `ok:false` com erro e aviso explicito.
+- Foram adicionadas regressoes para falha no segundo log de auditoria em classify e delete.
+
+### Testes
+
+- `node --test tests/integration/qa-products.test.js`: 20 aprovados, 0 falhos.
+- `node --test tests/unit/secure-filesystem.test.js`: 12 aprovados, 0 falhos.
+- `npm.cmd test`: 167 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).

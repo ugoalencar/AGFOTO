@@ -226,6 +226,63 @@ test('does not delete a photo when saving its deletion history fails', async t =
   assert.match(auditLog, /DELETE_PHOTO_ABORTED/);
 });
 
+test('reports when compensated classify cannot log the compensation event', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '56');
+  const root = path.join(env.paths.finalizadas, 'LOTE 56', '000123');
+  const originalSave = LoteRepository.save;
+  const originalLog = auditLogger.log;
+  let logCalls = 0;
+  LoteRepository.save = async () => { throw new Error('forced save failure'); };
+  auditLogger.log = async (...args) => {
+    logCalls += 1;
+    if (logCalls === 2) throw new Error('forced compensation audit failure');
+    return originalLog.apply(auditLogger, args);
+  };
+  t.after(() => {
+    LoteRepository.save = originalSave;
+    auditLogger.log = originalLog;
+  });
+
+  const result = await DeliveryService.classifyPhotoAP('56', '000123', 'a.jpg');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /forced save failure/);
+  assert.match(result.error, /forced compensation audit failure/);
+  assert.match(result.warning, /compensated.*audit/i);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
+});
+
+test('reports when delete abort cannot log the abort event', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '57');
+  const root = path.join(env.paths.finalizadas, 'LOTE 57', '000123');
+  const originalSave = LoteRepository.save;
+  const originalLog = auditLogger.log;
+  let logCalls = 0;
+  LoteRepository.save = async () => { throw new Error('forced save failure'); };
+  auditLogger.log = async (...args) => {
+    logCalls += 1;
+    if (logCalls === 2) throw new Error('forced abort audit failure');
+    return originalLog.apply(auditLogger, args);
+  };
+  t.after(() => {
+    LoteRepository.save = originalSave;
+    auditLogger.log = originalLog;
+  });
+
+  const result = await DeliveryService.deletePhoto('57', '000123', 'a.jpg');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /forced save failure/);
+  assert.match(result.error, /forced abort audit failure/);
+  assert.match(result.warning, /abort.*audit/i);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+});
+
 test('rejects dot directory filenames before creating QA classification folders', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
