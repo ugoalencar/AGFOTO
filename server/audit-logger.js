@@ -28,6 +28,7 @@ export class AuditLogger {
       this.initialized = true;
     } catch (err) {
       console.error(`Failed to initialize audit: ${err.message}`);
+      throw err;
     }
   }
 
@@ -66,6 +67,7 @@ export class AuditLogger {
       );
     } catch (err) {
       console.error(`Audit log failed: ${err.message}`);
+      throw new Error(`Audit log failed: ${err.message}`);
     }
 
     return entry.id;

@@ -133,8 +133,13 @@ export class DeliveryService {
   static async deletePhoto(lote, gtin, filename, location = 'root', operationContext = null) {
     let historyPersisted = false;
     let auditPersisted = false;
+    let normalizedLote = null;
+    let normalizedGtin = null;
     try {
-      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
+      const loaded = await this.loadQaProduct(lote, gtin);
+      const { loteObj, produto } = loaded;
+      normalizedLote = loaded.lote;
+      normalizedGtin = loaded.gtin;
       const photo = await FileRepository.resolveFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, location });
       this.recordQaHistory(produto, 'foto_excluida', {
         filename: photo.filename, location: photo.location
@@ -156,6 +161,13 @@ export class DeliveryService {
           warning: 'The file was retained and requires retry or manual cleanup.'
         };
       }
+      if (auditPersisted) {
+        await auditLogger.log('DELETE_PHOTO_ABORTED', {
+          lote: normalizedLote, gtin: normalizedGtin, filename, location,
+          operationId: operationContext?.operationId || null,
+          reason: err.message
+        }).catch(() => {});
+      }
       if (historyPersisted) return { ok: false, error: `Delete stopped after persisted history because audit logging failed: ${err.message}` };
       return { ok: false, error: err.message };
     }
@@ -172,6 +184,15 @@ export class DeliveryService {
         fromSubfolder,
         toSubfolder
       });
+      await auditLogger.log('QA_MOVE_COMPENSATED', {
+        lote: loteNumero,
+        gtin,
+        filename: moved.destName,
+        restoredAs: compensation.destName,
+        fromSubfolder,
+        toSubfolder,
+        reason: error.message
+      }).catch(() => {});
       const warning = compensation.destName === originalFilename
         ? null
         : `Compensation restored the file as ${compensation.destName} instead of ${originalFilename}.`;

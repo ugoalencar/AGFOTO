@@ -58,3 +58,16 @@ No delivery, rework, frontend, report, Redmine, Java, or external-system behavio
 
 - `node --test tests/integration/qa-products.test.js`: 13 aprovados, 0 falhos.
 - `npm.cmd test`: 159 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).
+
+## Revisao Finalissima da Tarefa 5
+
+- `validateFilename` agora rejeita explicitamente `.` e `..`, impedindo criacao de subpastas AP/AT em requisicoes invalidas.
+- `AuditLogger.log` agora falha de verdade quando nao consegue criar/gravar o arquivo JSONL; operacoes QA nao seguem como sucesso sem auditoria persistida.
+- Falhas de save depois de uma auditoria pre-mutation agora registram `QA_MOVE_COMPENSATED` ou `DELETE_PHOTO_ABORTED`, preservando a trilha append-only sem deixar evento de sucesso sem contrapartida de rollback.
+- Foram adicionadas regressoes para nomes `.`/`..`, falha real do diretório de auditoria, compensacao auditada em classify/unclassify e abort auditado em delete.
+
+### Testes
+
+- `node --test tests/unit/secure-filesystem.test.js`: 12 aprovados, 0 falhos.
+- `node --test tests/integration/qa-products.test.js`: 18 aprovados, 0 falhos.
+- `npm.cmd test`: 165 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).

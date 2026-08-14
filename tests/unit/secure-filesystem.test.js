@@ -69,6 +69,11 @@ test('validateFilename - empty string', () => {
   assert.throws(() => validateFilename(undefined), /Filename must be/);
 });
 
+test('validateFilename - dot directory names blocked', () => {
+  assert.throws(() => validateFilename('.'), /Invalid filename/);
+  assert.throws(() => validateFilename('..'), /Invalid filename/);
+});
+
 test('securePath - normalizes backslashes on Windows', () => {
   const result = securePath('dados\\jsons\\file.json', ROOT);
   // Should contain forward slashes in the resolved path

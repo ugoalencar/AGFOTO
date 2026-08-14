@@ -175,6 +175,10 @@ test('compensates a classify move when saving its JSON history fails', async t =
   assert.match(result.error, /forced save failure/);
   assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
   assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
+  const auditFiles = await fs.promises.readdir(env.paths.auditoria);
+  const auditLog = await fs.promises.readFile(path.join(env.paths.auditoria, auditFiles[0]), 'utf8');
+  assert.match(auditLog, /CLASSIFY_AP/);
+  assert.match(auditLog, /QA_MOVE_COMPENSATED/);
 });
 
 test('compensates an unclassify move when saving its JSON history fails', async t => {
@@ -194,6 +198,10 @@ test('compensates an unclassify move when saving its JSON history fails', async 
   assert.match(result.error, /forced save failure/);
   assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), true);
   assert.equal(fs.existsSync(path.join(root, 'a.jpg')), false);
+  const auditFiles = await fs.promises.readdir(env.paths.auditoria);
+  const auditLog = await fs.promises.readFile(path.join(env.paths.auditoria, auditFiles[0]), 'utf8');
+  assert.match(auditLog, /UNCLASSIFY/);
+  assert.match(auditLog, /QA_MOVE_COMPENSATED/);
 });
 
 test('does not delete a photo when saving its deletion history fails', async t => {
@@ -212,6 +220,49 @@ test('does not delete a photo when saving its deletion history fails', async t =
   assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
   const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_50.json'), 'utf8'));
   assert.notEqual(lote.itens['000123'].historico.at(-1)?.evento, 'foto_excluida');
+  const auditFiles = await fs.promises.readdir(env.paths.auditoria);
+  const auditLog = await fs.promises.readFile(path.join(env.paths.auditoria, auditFiles[0]), 'utf8');
+  assert.match(auditLog, /DELETE_PHOTO/);
+  assert.match(auditLog, /DELETE_PHOTO_ABORTED/);
+});
+
+test('rejects dot directory filenames before creating QA classification folders', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '54');
+  const root = path.join(env.paths.finalizadas, 'LOTE 54', '000123');
+  const jsonPath = path.join(env.paths.jsons, 'Lote_54.json');
+  const before = await fs.promises.readFile(jsonPath, 'utf8');
+
+  for (const filename of ['.', '..']) {
+    const result = await DeliveryService.classifyPhotoAP('54', '000123', filename);
+    assert.equal(result.ok, false);
+    assert.match(result.error, /Invalid filename/);
+  }
+
+  assert.equal(fs.existsSync(path.join(root, 'AP')), false);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
+});
+
+test('real audit write failure stops classify without persisting JSON history', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '55');
+  const root = path.join(env.paths.finalizadas, 'LOTE 55', '000123');
+  const jsonPath = path.join(env.paths.jsons, 'Lote_55.json');
+  const before = await fs.promises.readFile(jsonPath, 'utf8');
+  await fs.promises.rm(env.paths.auditoria, { recursive: true, force: true });
+  await fs.promises.writeFile(env.paths.auditoria, 'not a directory');
+  auditLogger.initialized = false;
+
+  const result = await DeliveryService.classifyPhotoAP('55', '000123', 'a.jpg');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Audit log failed|ENOTDIR|not a directory|EEXIST/);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
+  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
 });
 
 test('compensates a classify move when audit logging fails without persisting JSON history', async t => {

@@ -70,6 +70,9 @@ export function validateFilename(filename) {
   }
 
   const baseName = path.basename(filename);
+  if (baseName === '.' || baseName === '..') {
+    throw new Error(`Invalid filename: ${baseName}`);
+  }
   const upperName = baseName.toUpperCase().split('.')[0];
 
   // Rejeita nomes reservados do Windows
