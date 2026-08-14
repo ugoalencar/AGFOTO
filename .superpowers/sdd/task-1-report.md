@@ -59,3 +59,22 @@ Testes executados:
 Commits:
 
 - `7eda87d fix: address phase 1 app review findings`
+
+## Fixes da Segunda Rodada
+
+- Critical: removido o mount `/api/entregas` do app factory da Fase 1. Assim,
+  `POST /api/entregas/executar` nao alcanca mais o handler FTP; o contrato de
+  integracao exige resposta `404`.
+- Important: `createOperationStore().begin()` agora compara a `action` de uma
+  operacao concluida antes de permitir replay. Reuso do mesmo `operationId` em
+  outra acao e rejeitado, enquanto replay na mesma acao permanece idempotente.
+
+Testes executados:
+
+- `node --test tests/unit/operation-store.test.js tests/integration/api-routes.test.js`:
+  8 aprovados, 0 falhas.
+- `npm.cmd test`: 118 aprovados, 0 falhas.
+
+Commits:
+
+- `d9fc058 fix: close phase 1 delivery and operation replay gaps`
