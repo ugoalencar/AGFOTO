@@ -19,6 +19,47 @@ import LoteRepository from '../repositories/lote-repository.js';
  */
 export class ExcelService {
   /**
+   * Rebuilds one lote sheet in the local control workbook from the JSON source.
+   */
+  static async updateControlFromLote(loteNumero) {
+    const lote = await LoteRepository.load(loteNumero);
+    await fs.promises.mkdir(config.paths.xlsx, { recursive: true });
+
+    const filePath = path.join(config.paths.xlsx, 'controle-lotes.xlsx');
+    const workbook = new ExcelJS.Workbook();
+    try {
+      await workbook.xlsx.readFile(filePath);
+    } catch {
+      // A missing or unreadable derivative is rebuilt from the operational JSON.
+    }
+
+    const sheetName = `Lote ${loteNumero}`;
+    const existingSheet = workbook.getWorksheet(sheetName);
+    if (existingSheet) workbook.removeWorksheet(existingSheet.id);
+
+    const sheet = workbook.addWorksheet(sheetName);
+    sheet.addRow([
+      'EAN', 'Codigo', 'Descricao', 'Data da foto',
+      'Quantidade de fotos', 'Status', 'Ultima entrega', 'Ultimo erro'
+    ]);
+    for (const item of Object.values(lote.itens)) {
+      sheet.addRow([
+        item.gtin,
+        item.codigo || '',
+        item.descricao || '',
+        item.dataFotografia || '',
+        item.quantidadeFotos,
+        item.status,
+        item.ultimaEntregaEm || '',
+        item.ultimoErro || ''
+      ]);
+    }
+
+    await workbook.xlsx.writeFile(filePath);
+    return { ok: true, data: { filePath } };
+  }
+
+  /**
    * Lê arquivo Excel e extrai items
    */
   static async parseExcelFile(filePath) {

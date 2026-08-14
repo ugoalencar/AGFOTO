@@ -6,7 +6,7 @@ import {
   validateFilename,
   createSecureDirectory,
   listAllowedFiles,
-  copySecureFile,
+  fileExists,
   removeSecureFile,
   waitForFileStability
 } from '../server/secure-filesystem.js';
@@ -80,7 +80,24 @@ export class FileRepository {
    * Copia arquivo de TEMP para Finalizadas com snapshot atomicidade
    * Não sobrescreve, usa nome determinístico em colisão
    */
-  static async copyToFinalizadas(srcPath, loteNumero, gtin) {
+  static async uniqueDestPath(destDir, filename) {
+    const ext = path.extname(filename);
+    const base = path.basename(filename, ext);
+    let candidate = path.join(destDir, filename);
+    let counter = 1;
+
+    while (await fileExists(candidate)) {
+      candidate = path.join(destDir, `${base}_${String(counter).padStart(3, '0')}${ext}`);
+      counter++;
+    }
+
+    return candidate;
+  }
+
+  /**
+   * Moves a validated TEMP image to Finalizadas without overwriting existing files.
+   */
+  static async moveToFinalizadas(srcPath, loteNumero, gtin) {
     try {
       const safeSrc = securePath(srcPath, config.paths.imagesTemp);
 
@@ -95,13 +112,20 @@ export class FileRepository {
         `LOTE ${loteNumero}`,
         gtin
       );
-      await createSecureDirectory(destDir);
+      await createSecureDirectory(destDir, config.paths.finalizadas);
+      const filename = validateFilename(path.basename(safeSrc));
+      const destPath = await this.uniqueDestPath(destDir, filename);
 
-      // Copia arquivo
-      const destPath = await copySecureFile(srcPath, destDir);
+      try {
+        await fs.promises.rename(safeSrc, destPath);
+      } catch (err) {
+        if (err.code !== 'EXDEV') throw err;
+        await fs.promises.copyFile(safeSrc, destPath, fs.constants.COPYFILE_EXCL);
+        await fs.promises.unlink(safeSrc);
+      }
       return destPath;
     } catch (err) {
-      throw new Error(`Cannot copy to finalizadas: ${err.message}`);
+      throw new Error(`Cannot move to finalizadas: ${err.message}`);
     }
   }
 
@@ -214,15 +238,15 @@ export class FileRepository {
   /**
    * Copia snapshot de arquivos para Finalizadas
    */
-  static async copySnapshotToFinalizadas(snapshot, loteNumero, gtin) {
+  static async moveSnapshotToFinalizadas(snapshot, loteNumero, gtin) {
     try {
-      const copied = [];
+      const moved = [];
       const failed = [];
 
       for (const file of snapshot) {
         try {
-          const destPath = await this.copyToFinalizadas(file.path, loteNumero, gtin);
-          copied.push({
+          const destPath = await this.moveToFinalizadas(file.path, loteNumero, gtin);
+          moved.push({
             src: file.name,
             dest: path.basename(destPath)
           });
@@ -234,9 +258,9 @@ export class FileRepository {
         }
       }
 
-      return { copied, failed };
+      return { moved, failed };
     } catch (err) {
-      throw new Error(`Cannot copy snapshot: ${err.message}`);
+      throw new Error(`Cannot move snapshot: ${err.message}`);
     }
   }
 }

@@ -1,4 +1,4 @@
-import { ProductStatus } from './status.js';
+import { ProductEvents, ProductStatus, transitionProduct } from './status.js';
 
 /**
  * Entidade Lote (batch)
@@ -127,8 +127,7 @@ export class Produto {
    */
   static isValid(gtin) {
     const normalized = String(gtin).trim();
-    const allowedLengths = [8, 12, 13, 14];
-    return /^\d+$/.test(normalized) && allowedLengths.includes(normalized.length);
+    return /^\d{1,64}$/.test(normalized);
   }
 
   /**
@@ -159,8 +158,7 @@ export class Produto {
    */
   markCaptureSaved(photoCount) {
     this.updatePhotoCount(photoCount);
-    this.status = ProductStatus.PENDENTE_QA;
-    this.addHistoricoEvent('captura_salva', { quantidadeFotos: photoCount });
+    transitionProduct(this, ProductEvents.CAPTURA_SALVA, { quantidadeFotos: photoCount });
   }
 
   /**

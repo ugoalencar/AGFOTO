@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import { Lote, Produto } from '../../domain/lote.js';
-import { ProductStatus } from '../../domain/status.js';
+import { ProductEvents, ProductStatus, transitionProduct } from '../../domain/status.js';
 
 test('Lote - normalize number', () => {
   assert.strictEqual(Lote.normalize('37'), '37');
@@ -69,17 +69,35 @@ test('Produto - normalize GTIN', () => {
 });
 
 test('Produto - validate GTIN', () => {
-  // Valid lengths: 8, 12, 13, 14
+  // Local product identifiers are numeric and preserve their original width.
   assert.ok(Produto.isValid('12345678')); // 8
   assert.ok(Produto.isValid('123456789012')); // 12
   assert.ok(Produto.isValid('1234567890123')); // 13
   assert.ok(Produto.isValid('12345678901234')); // 14
+  assert.ok(Produto.isValid('000123'));
+  assert.ok(Produto.isValid('1'));
+  assert.ok(Produto.isValid('9'.repeat(64)));
 
   // Invalid
-  assert.ok(!Produto.isValid('123')); // Too short
-  assert.ok(!Produto.isValid('123456789012345')); // Too long
+  assert.ok(!Produto.isValid('9'.repeat(65))); // Too long
   assert.ok(!Produto.isValid('ABCD1234')); // Non-numeric
   assert.ok(!Produto.isValid('')); // Empty
+});
+
+test('Produto - normalizes numeric local identifiers without losing zeros', () => {
+  assert.strictEqual(Produto.normalize(' 000123 '), '000123');
+});
+
+test('Produto - capture transition is enforced and recorded', () => {
+  const produto = new Produto('000123');
+  transitionProduct(produto, ProductEvents.CAPTURA_SALVA, { quantidadeFotos: 2 });
+
+  assert.strictEqual(produto.status, ProductStatus.PENDENTE_QA);
+  assert.strictEqual(produto.historico.at(-1).evento, ProductEvents.CAPTURA_SALVA);
+  assert.throws(
+    () => transitionProduct(produto, ProductEvents.CAPTURA_SALVA),
+    /Invalid product transition/
+  );
 });
 
 test('Produto - preserve leading zeros in GTIN', () => {

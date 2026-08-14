@@ -2,6 +2,7 @@ import LoteRepository from '../repositories/lote-repository.js';
 import { FileRepository } from '../repositories/file-repository.js';
 import { Produto } from '../domain/lote.js';
 import { auditLogger } from '../server/audit-logger.js';
+import ExcelService from './excel-service.js';
 
 /**
  * Serviço de Captura
@@ -100,6 +101,7 @@ export class CapturaService {
    */
   static async saveCapture(loteNumero, gtin, codigo = null, descricao = null) {
     let snapshot;
+    let normalizedGtin = gtin;
 
     try {
       // 1. Snapshots arquivos estáveis em TEMP
@@ -119,52 +121,55 @@ export class CapturaService {
           error: `Invalid GTIN: ${gtin}`
         };
       }
+      normalizedGtin = Produto.normalize(gtin);
 
       // 3. Carrega ou cria lote
       const lote = await LoteRepository.loadOrCreate(loteNumero);
 
-      // 4. Atualiza produto
-      const produto = lote.getOrCreateItem(gtin, codigo, descricao);
-      produto.markCaptureSaved(snapshot.length);
+      // 4. ObtÃ©m produto alvo
+      const produto = lote.getOrCreateItem(normalizedGtin, codigo, descricao);
 
-      // 5. Copia snapshot para Finalizadas
-      const copyResult = await FileRepository.copySnapshotToFinalizadas(
+      // 5. Move snapshot para Finalizadas
+      const moveResult = await FileRepository.moveSnapshotToFinalizadas(
         snapshot,
         loteNumero,
-        gtin
+        normalizedGtin
       );
 
-      if (copyResult.failed.length > 0) {
-        console.warn(`Some files failed to copy: `, copyResult.failed);
+      if (moveResult.failed.length > 0) {
+        console.warn(`Some files failed to move: `, moveResult.failed);
       }
 
-      // 6. Salva lote
+      // 6. Atualiza o JSON apenas com as fotos efetivamente movidas.
+      produto.markCaptureSaved(moveResult.moved.length);
       await LoteRepository.save(lote);
+      await ExcelService.updateControlFromLote(loteNumero);
 
       // 7. Registra auditoria
       await auditLogger.log('CAPTURA_SALVA', {
         lote: loteNumero,
-        gtin,
+        gtin: normalizedGtin,
         codigo,
-        fotosCopied: copyResult.copied.length,
-        fotosFailed: copyResult.failed.length
+        fotosMovidas: moveResult.moved.length,
+        fotosFalhadas: moveResult.failed.length
       });
 
       return {
-        ok: true,
+        ok: moveResult.failed.length === 0,
         data: {
           lote: lote.numero,
-          gtin,
-          fotosCopidas: copyResult.copied.length,
-          fotosFalhadas: copyResult.failed.length,
+          gtin: normalizedGtin,
+          fotosMovidas: moveResult.moved.length,
+          fotosFalhadas: moveResult.failed.length,
           status: produto.status,
-          detalhes: copyResult
-        }
+          detalhes: moveResult
+        },
+        error: moveResult.failed.length ? 'Some files failed to move' : undefined
       };
     } catch (err) {
       await auditLogger.log('CAPTURA_ERRO', {
         lote: loteNumero,
-        gtin,
+        gtin: normalizedGtin,
         erro: err.message
       });
 

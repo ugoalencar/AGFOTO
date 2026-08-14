@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
+import ExcelJS from 'exceljs';
 import { FileRepository } from '../../repositories/file-repository.js';
+import CapturaService from '../../services/captura-service.js';
 import { createApp } from '../../server/app.js';
 import { createTestEnv } from '../helpers/test-env.js';
 import { applyConfigOverrides } from '../../server/config.js';
@@ -108,4 +110,52 @@ test('camera API reports status and opens through the operation middleware', asy
   assert.deepEqual(JSON.parse(opened.body.toString()).data, await cameraService.open());
   assert.equal(missingOperationId.status, 400);
   assert.match(JSON.parse(missingOperationId.body.toString()).error, /operationId/i);
+});
+
+test('save capture moves snapshot, updates JSON and control workbook without overwriting', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
+  const finalPhoto = path.join(env.paths.finalizadas, 'LOTE 37', '000123', 'foto.jpg');
+  const suffixedPhoto = path.join(env.paths.finalizadas, 'LOTE 37', '000123', 'foto_001.jpg');
+  await fs.promises.writeFile(tempPhoto, JPG_BYTES);
+  await fs.promises.mkdir(path.dirname(finalPhoto), { recursive: true });
+  await fs.promises.writeFile(finalPhoto, Buffer.from('existing photo'));
+
+  const result = await CapturaService.saveCapture('37', '000123', '', 'Produto local');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.fotosMovidas, 1);
+  assert.equal(await fs.promises.stat(tempPhoto).then(() => true, () => false), false);
+  assert.deepEqual(await fs.promises.readFile(finalPhoto), Buffer.from('existing photo'));
+  assert.deepEqual(await fs.promises.readFile(suffixedPhoto), JPG_BYTES);
+
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_37.json'), 'utf8'));
+  assert.equal(loteJson.itens['000123'].status, 'pendente_qa');
+  assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
+
+  const controlPath = path.join(env.paths.xlsx, 'controle-lotes.xlsx');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(controlPath);
+  const sheet = workbook.getWorksheet('Lote 37');
+  assert.ok(sheet);
+  assert.equal(sheet.getCell('A2').value, '000123');
+  assert.equal(sheet.getCell('F2').value, 'pendente_qa');
+});
+
+test('save capture uses the normalized GTIN as the JSON key and final folder', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto.jpg'), JPG_BYTES);
+
+  const result = await CapturaService.saveCapture('38', ' 000123 ');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.gtin, '000123');
+  assert.equal(
+    await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 38', '000123', 'foto.jpg')).then(() => true, () => false),
+    true
+  );
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_38.json'), 'utf8'));
+  assert.ok(loteJson.itens['000123']);
 });

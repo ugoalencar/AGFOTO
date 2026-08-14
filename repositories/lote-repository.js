@@ -53,7 +53,7 @@ export class LoteRepository {
         await createSecureDirectory(config.paths.jsons, config.paths.root);
 
         // Salva JSON inicial
-        await writeJsonAtomic(jsonPath, lote.toJSON());
+        await writeJsonAtomic(jsonPath, lote.toJSON(), { backupDir: config.paths.backups });
 
         return lote;
       }
@@ -87,7 +87,7 @@ export class LoteRepository {
 
       const jsonPath = this.getLoteJsonPath(lote.numero);
       await createSecureDirectory(path.dirname(jsonPath), config.paths.root);
-      await writeJsonAtomic(jsonPath, lote.toJSON());
+      await writeJsonAtomic(jsonPath, lote.toJSON(), { backupDir: config.paths.backups });
 
       return jsonPath;
     } catch (err) {

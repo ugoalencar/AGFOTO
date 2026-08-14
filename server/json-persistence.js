@@ -2,8 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { config } from './config.js';
-function getBackupsDir() {
-  return config.paths.backups || path.join(config.paths.dados, 'backups');
+function getBackupsDir(backupDir = null) {
+  return backupDir || config.paths.backups || path.join(config.paths.dados, 'backups');
 }
 
 /**
@@ -13,7 +13,7 @@ function getBackupsDir() {
  * 3. Renomeia para destino
  * 4. Mantém backup da última versão válida
  */
-export async function writeJsonAtomic(filePath, data) {
+export async function writeJsonAtomic(filePath, data, { backupDir = null } = {}) {
   try {
     // Validação básica
     if (!filePath) throw new Error('filePath is required');
@@ -31,7 +31,7 @@ export async function writeJsonAtomic(filePath, data) {
     // Se arquivo original existe, faz backup
     try {
       await fs.promises.access(filePath);
-      const backupPath = await createBackup(filePath);
+      const backupPath = await createBackup(filePath, backupDir);
       console.log(`Backup created: ${backupPath}`);
     } catch {
       // Arquivo original não existe, ignorar
@@ -82,9 +82,9 @@ export async function readJsonSafe(filePath) {
 /**
  * Cria backup de arquivo JSON
  */
-async function createBackup(filePath) {
+async function createBackup(filePath, backupDir = null) {
   try {
-    const backupsDir = getBackupsDir();
+    const backupsDir = getBackupsDir(backupDir);
     await fs.promises.mkdir(backupsDir, { recursive: true });
 
     const filename = path.basename(filePath);
