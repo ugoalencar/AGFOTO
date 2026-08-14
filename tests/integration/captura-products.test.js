@@ -46,7 +46,14 @@ function findPlaywrightPython() {
   for (const candidate of candidates) {
     const result = spawnSync(
       candidate.command,
-      [...candidate.args, '-c', 'import playwright.sync_api'],
+      [
+        ...candidate.args,
+        '-c',
+        `from playwright.sync_api import sync_playwright
+with sync_playwright() as playwright:
+    browser = playwright.chromium.launch(headless=True)
+    browser.close()`
+      ],
       { encoding: 'utf8', windowsHide: true }
     );
     if (result.status === 0) return candidate;

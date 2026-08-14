@@ -65,3 +65,8 @@
 - O teste de geometria renderizada agora procura um interpretador Python disponivel (`py -3`, `python3` ou `python`) e confirma que ele importa `playwright.sync_api` antes de iniciar o Chromium.
 - Quando nenhum runner de navegador compativel estiver instalado, o teste e marcado como ignorado com uma mensagem explicita; a suite padrao nao falha apenas pela ausencia de Python 3.12 ou Playwright para Python.
 - Quando o runner existe, a mesma verificacao renderizada em `390x844` continua validando que `#previous-grid` permanece dentro de `#capture-stage`.
+
+## Correcao final de portabilidade do runner
+
+- A sonda de disponibilidade agora abre e fecha Chromium em modo headless antes de disponibilizar o runner para a regressao renderizada.
+- Ausencia dos binarios de Chromium ou de tooling do Playwright passa a resultar no mesmo skip explicito; uma falha na execucao de geometria depois de uma sonda bem-sucedida continua sendo uma falha de teste.
