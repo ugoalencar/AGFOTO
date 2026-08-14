@@ -31,7 +31,7 @@ router.get('/temp', async (req, res) => {
  * GET /api/lotes
  * Lista todos os lotes
  */
-router.get('/lotes', async (req, res) => {
+const listLotesHandler = async (req, res) => {
   const result = await CapturaService.listAllLotes();
 
   if (result.ok) {
@@ -47,13 +47,16 @@ router.get('/lotes', async (req, res) => {
       requestId: req.id
     });
   }
-});
+};
+
+router.get('/', listLotesHandler);
+router.get('/lotes', listLotesHandler);
 
 /**
  * GET /api/lotes/:numero
  * Obtém detalhes de um lote
  */
-router.get('/lotes/:numero', async (req, res) => {
+const getLoteHandler = async (req, res) => {
   const { numero } = req.params;
 
   if (!numero || !Lote.isValid(numero)) {
@@ -79,7 +82,9 @@ router.get('/lotes/:numero', async (req, res) => {
       requestId: req.id
     });
   }
-});
+};
+
+router.get('/lotes/:numero', getLoteHandler);
 
 /**
  * POST /api/captura/salvar
@@ -235,5 +240,8 @@ router.get('/anterior', async (req, res) => {
     });
   }
 });
+
+router.get('/:numero/itens', getLoteHandler);
+router.get('/:numero', getLoteHandler);
 
 export default router;

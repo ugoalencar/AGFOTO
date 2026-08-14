@@ -184,7 +184,7 @@ router.post('/executar', express.json(), async (req, res) => {
  * POST /api/retrabalhos
  * Reinicia produto para retrabalho
  */
-router.post('/retrabalhos', express.json(), async (req, res) => {
+router.post('/', express.json(), async (req, res) => {
   const { lote, gtin = null, codigo = null } = req.body;
 
   if (!lote || (!gtin && !codigo)) {
@@ -208,7 +208,7 @@ router.post('/retrabalhos', express.json(), async (req, res) => {
  * GET /api/relatorios/produtos
  * Relatório de produtos com filtros
  */
-router.get('/relatorios/produtos', async (req, res) => {
+router.get('/produtos', async (req, res) => {
   const filters = {
     startDate: req.query.startDate || null,
     endDate: req.query.endDate || null,
@@ -232,7 +232,7 @@ router.get('/relatorios/produtos', async (req, res) => {
  * GET /api/relatorios/lotes
  * Relatório de lotes
  */
-router.get('/relatorios/lotes', async (req, res) => {
+router.get('/lotes', async (req, res) => {
   const result = await ReportService.generateBatchReport();
 
   if (result.ok) {
@@ -246,7 +246,7 @@ router.get('/relatorios/lotes', async (req, res) => {
  * GET /api/relatorios/status
  * Resumo por status
  */
-router.get('/relatorios/status', async (req, res) => {
+router.get('/status', async (req, res) => {
   const result = await ReportService.generateStatusSummary();
 
   if (result.ok) {
@@ -262,7 +262,7 @@ router.get('/relatorios/status', async (req, res) => {
  *
  * Query: filtros (lote, status, etc)
  */
-router.get('/relatorios/exportar', async (req, res) => {
+router.get('/exportar', async (req, res) => {
   const filters = {
     lote: req.query.lote || null,
     status: req.query.status || null
@@ -286,7 +286,7 @@ router.get('/relatorios/exportar', async (req, res) => {
  * GET /api/relatorios/csv
  * Exporta em formato CSV
  */
-router.get('/relatorios/csv', async (req, res) => {
+router.get('/csv', async (req, res) => {
   const filters = {
     lote: req.query.lote || null,
     status: req.query.status || null
@@ -307,7 +307,7 @@ router.get('/relatorios/csv', async (req, res) => {
  * GET /api/relatorios/validar
  * Valida consistência de lote
  */
-router.get('/relatorios/validar/:lote', async (req, res) => {
+router.get('/validar/:lote', async (req, res) => {
   const { lote } = req.params;
 
   if (!Lote.isValid(lote)) {

@@ -1,23 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert';
 import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import LoteRepository from '../../repositories/lote-repository.js';
 import { Lote, Produto } from '../../domain/lote.js';
 import { ProductStatus } from '../../domain/status.js';
+import { applyConfigOverrides } from '../../server/config.js';
+import { createTestEnv } from '../helpers/test-env.js';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const TEST_ROOT = path.join(__dirname, '../..', '.test-data');
+let env;
 
-// Cleanup before and after
+test.before(async t => {
+  env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+});
+
 async function cleanup() {
-  try {
-    await fs.promises.rm(path.join(TEST_ROOT, 'dados'), { recursive: true, force: true });
-    await fs.promises.rm(path.join(TEST_ROOT, 'Finalizadas'), { recursive: true, force: true });
-  } catch {
-    // Ignore
-  }
+  await fs.promises.rm(env.paths.dados, { recursive: true, force: true });
+  await fs.promises.mkdir(env.paths.dados, { recursive: true });
+  await fs.promises.rm(env.paths.finalizadas, { recursive: true, force: true });
+  await fs.promises.mkdir(env.paths.finalizadas, { recursive: true });
 }
 
 test('Integration - Load or create lote', async () => {
@@ -53,7 +54,7 @@ test('Integration - Add produto to lote', async () => {
 
   assert.strictEqual(loadedProduto.status, ProductStatus.PENDENTE_QA);
   assert.strictEqual(loadedProduto.quantidadeFotos, 5);
-  assert.strictEqual(loadedProduto.historico.length, 1);
+  assert.strictEqual(loadedProduto.historico.length, 2);
 });
 
 test('Integration - Multiple produtos in same lote', async () => {
@@ -109,10 +110,10 @@ test('Integration - Lote history events', async () => {
   const loaded = await LoteRepository.load('TEST-005');
   const loadedProduto = loaded.itens['GTI1'];
 
-  assert.strictEqual(loadedProduto.historico.length, 2);
-  assert.strictEqual(loadedProduto.historico[0].evento, 'captura_salva');
-  assert.strictEqual(loadedProduto.historico[1].evento, 'custom_event');
-  assert.strictEqual(loadedProduto.historico[1].detalhes.detail, 'value');
+  assert.strictEqual(loadedProduto.historico.length, 3);
+  assert.strictEqual(loadedProduto.historico[1].evento, 'captura_salva');
+  assert.strictEqual(loadedProduto.historico[2].evento, 'custom_event');
+  assert.strictEqual(loadedProduto.historico[2].detalhes.detail, 'value');
 });
 
 test('Integration - List all lotes', async () => {

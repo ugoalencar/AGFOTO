@@ -1,10 +1,5 @@
-import express, { Router } from 'express';
-import path from 'path';
-import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
+import { Router } from 'express';
 import ExcelService from '../services/excel-service.js';
-import { config } from '../server/config.js';
-import { securePath } from '../server/secure-filesystem.js';
 import { Lote } from '../domain/lote.js';
 
 const router = Router();
@@ -62,7 +57,7 @@ router.post('/importar', async (req, res) => {
  *   ]
  * }
  */
-router.post('/unificar', express.json(), async (req, res) => {
+router.post('/unificar', async (req, res) => {
   try {
     const { lote, items } = req.body;
 

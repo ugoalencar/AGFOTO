@@ -72,6 +72,16 @@ export const config = {
   timezone: 'America/Sao_Paulo'
 };
 
+export function applyConfigOverrides(overrides = {}) {
+  if (overrides.server) Object.assign(config.server, overrides.server);
+  if (overrides.paths) Object.assign(config.paths, overrides.paths);
+  if (overrides.camera) Object.assign(config.camera, overrides.camera);
+  if (overrides.ftp) Object.assign(config.ftp, overrides.ftp);
+  if (overrides.validation) Object.assign(config.validation, overrides.validation);
+  if (overrides.timezone) config.timezone = overrides.timezone;
+  return config;
+}
+
 /**
  * Carrega configuração local de arquivo (se existir)
  */

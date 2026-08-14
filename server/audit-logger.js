@@ -1,12 +1,11 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
-const AUDIT_DIR = path.join(ROOT, 'dados', 'auditoria');
+import { config } from './config.js';
+function getAuditDir() {
+  return config.paths.auditoria || path.join(config.paths.dados, 'auditoria');
+}
 
 /**
  * Logger de auditoria append-only
@@ -25,7 +24,7 @@ export class AuditLogger {
     if (this.initialized) return;
 
     try {
-      await fs.promises.mkdir(AUDIT_DIR, { recursive: true });
+      await fs.promises.mkdir(getAuditDir(), { recursive: true });
       this.initialized = true;
     } catch (err) {
       console.error(`Failed to initialize audit: ${err.message}`);
@@ -56,7 +55,7 @@ export class AuditLogger {
     };
 
     const today = new Date().toISOString().split('T')[0];
-    const logFile = path.join(AUDIT_DIR, `audit_${today}.jsonl`);
+    const logFile = path.join(getAuditDir(), `audit_${today}.jsonl`);
 
     try {
       // Append uma linha (JSONL format)
@@ -82,11 +81,12 @@ export class AuditLogger {
     const entries = [];
 
     try {
-      const files = await fs.promises.readdir(AUDIT_DIR);
+      const auditDir = getAuditDir();
+      const files = await fs.promises.readdir(auditDir);
       const logFiles = files.filter(f => f.startsWith('audit_') && f.endsWith('.jsonl'));
 
       for (const file of logFiles.sort().reverse()) {
-        const filePath = path.join(AUDIT_DIR, file);
+        const filePath = path.join(auditDir, file);
         const content = await fs.promises.readFile(filePath, 'utf8');
         const lines = content.split('\n').filter(l => l.trim());
 

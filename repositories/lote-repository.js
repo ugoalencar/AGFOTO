@@ -49,8 +49,8 @@ export class LoteRepository {
         const lote = new Lote(numero);
 
         // Cria diretórios
-        await createSecureDirectory(this.getLoteFinalizadasPath(numero));
-        await createSecureDirectory(config.paths.jsons);
+        await createSecureDirectory(this.getLoteFinalizadasPath(numero), config.paths.root);
+        await createSecureDirectory(config.paths.jsons, config.paths.root);
 
         // Salva JSON inicial
         await writeJsonAtomic(jsonPath, lote.toJSON());
@@ -86,7 +86,7 @@ export class LoteRepository {
       }
 
       const jsonPath = this.getLoteJsonPath(lote.numero);
-      await createSecureDirectory(path.dirname(jsonPath));
+      await createSecureDirectory(path.dirname(jsonPath), config.paths.root);
       await writeJsonAtomic(jsonPath, lote.toJSON());
 
       return jsonPath;
@@ -117,7 +117,7 @@ export class LoteRepository {
    */
   static async listAll() {
     try {
-      await createSecureDirectory(config.paths.jsons);
+      await createSecureDirectory(config.paths.jsons, config.paths.root);
 
       const fs = await import('fs');
       const entries = await fs.promises.readdir(config.paths.jsons);

@@ -1,11 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 import { v4 as uuidv4 } from 'uuid';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
-const BACKUPS_DIR = path.join(ROOT, 'dados', 'backups');
+import { config } from './config.js';
+function getBackupsDir() {
+  return config.paths.backups || path.join(config.paths.dados, 'backups');
+}
 
 /**
  * Realiza escrita atômica de JSON com backup automático
@@ -85,12 +84,13 @@ export async function readJsonSafe(filePath) {
  */
 async function createBackup(filePath) {
   try {
-    await fs.promises.mkdir(BACKUPS_DIR, { recursive: true });
+    const backupsDir = getBackupsDir();
+    await fs.promises.mkdir(backupsDir, { recursive: true });
 
     const filename = path.basename(filePath);
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const id = uuidv4().substring(0, 8);
-    const backupPath = path.join(BACKUPS_DIR, `${filename}.${timestamp}.${id}.bak`);
+    const backupPath = path.join(backupsDir, `${filename}.${timestamp}.${id}.bak`);
 
     await fs.promises.copyFile(filePath, backupPath);
     return backupPath;
@@ -106,7 +106,8 @@ async function createBackup(filePath) {
 async function findLatestBackup(filePath) {
   try {
     const filename = path.basename(filePath);
-    const entries = await fs.promises.readdir(BACKUPS_DIR);
+    const backupsDir = getBackupsDir();
+    const entries = await fs.promises.readdir(backupsDir);
 
     const backups = entries
       .filter(name => name.startsWith(filename))
@@ -114,7 +115,7 @@ async function findLatestBackup(filePath) {
       .reverse();
 
     if (backups.length > 0) {
-      return path.join(BACKUPS_DIR, backups[0]);
+      return path.join(backupsDir, backups[0]);
     }
   } catch {
     // Ignore
