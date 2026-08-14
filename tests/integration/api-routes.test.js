@@ -43,31 +43,28 @@ test('mutating routes reject missing operationId', async t => {
   assert.match(res.body.error, /operationId/i);
 });
 
-test('phase 1 app does not expose carros or adset routes', async t => {
+test('phase 1 blocked POST routes return 404 before operationId validation', async t => {
   const env = await createTestEnv(t);
   const app = createApp({ configOverrides: env.config });
+  const paths = [
+    '/api/entregas/executar',
+    '/api/qa/executar',
+    '/api/retrabalhos/executar',
+    '/api/relatorios/executar',
+    '/api/carros',
+    '/api/adset'
+  ];
 
-  for (const path of ['/api/carros/lote-teste', '/api/adset/status']) {
-    const res = await request(app, path);
-    assert.equal(res.status, 404);
-  }
-});
+  for (const path of paths) {
+    for (const headers of [{}, { 'X-Operation-ID': 'blocked-route' }]) {
+      const res = await request(app, path, {
+        method: 'POST',
+        headers,
+        body: '{}'
+      });
 
-test('phase 1 app does not expose delivery execution under any domain prefix', async t => {
-  const env = await createTestEnv(t);
-  const app = createApp({ configOverrides: env.config });
-
-  for (const prefix of ['entregas', 'qa', 'retrabalhos', 'relatorios']) {
-    const res = await request(app, `/api/${prefix}/executar`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Operation-ID': `delivery-execution-is-disabled-${prefix}`
-      },
-      body: JSON.stringify({ lote: '37', gtin: '000123', codigo: 'A-1' })
-    });
-
-    assert.equal(res.status, 404, `/api/${prefix}/executar must be unavailable`);
+      assert.equal(res.status, 404, `${path} must be unavailable before operationId validation`);
+    }
   }
 });
 

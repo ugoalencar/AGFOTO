@@ -13,9 +13,17 @@ import { sendError, sendOk } from './response.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+const PHASE_ONE_BLOCKED_POST_PATHS = new Set([
+  '/api/entregas/executar',
+  '/api/qa/executar',
+  '/api/retrabalhos/executar',
+  '/api/relatorios/executar',
+  '/api/carros',
+  '/api/adset'
+]);
 
-function blockPhaseOneDeliveryExecution(req, res, next) {
-  if (req.method === 'POST' && req.path === '/executar') {
+function blockPhaseOneRoutes(req, res, next) {
+  if (req.method === 'POST' && PHASE_ONE_BLOCKED_POST_PATHS.has(req.path)) {
     return sendError(res, 404, `Not found: ${req.originalUrl}`);
   }
   return next();
@@ -60,6 +68,7 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
     res.setHeader('X-Request-ID', req.id);
     next();
   });
+  app.use(blockPhaseOneRoutes);
   app.use(express.json({ limit: '10mb' }));
   app.use((_req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -85,9 +94,9 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
   app.use('/api/lotes', capturaRoutes);
   app.use('/api/imagens', capturaRoutes);
   app.use('/api/planilhas', planilhasRoutes);
-  app.use('/api/qa', blockPhaseOneDeliveryExecution, qaHubRoutes);
-  app.use('/api/retrabalhos', blockPhaseOneDeliveryExecution, qaHubRoutes);
-  app.use('/api/relatorios', blockPhaseOneDeliveryExecution, qaHubRoutes);
+  app.use('/api/qa', qaHubRoutes);
+  app.use('/api/retrabalhos', qaHubRoutes);
+  app.use('/api/relatorios', qaHubRoutes);
 
   app.use(express.static(path.join(rootDir, 'frontend', 'public')));
   app.use((req, res) => sendError(res, 404, `Not found: ${req.path}`));
