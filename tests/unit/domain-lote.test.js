@@ -17,6 +17,8 @@ test('Lote - validate number', () => {
   assert.ok(!Lote.isValid(null));
   assert.ok(!Lote.isValid('a'.repeat(51))); // Too long
   assert.ok(!Lote.isValid('lote<>invalid'));
+  assert.ok(!Lote.isValid('.'));
+  assert.ok(!Lote.isValid('..'));
 });
 
 test('Lote - create and add items', () => {

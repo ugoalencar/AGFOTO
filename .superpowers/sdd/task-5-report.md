@@ -84,3 +84,15 @@ No delivery, rework, frontend, report, Redmine, Java, or external-system behavio
 - `node --test tests/integration/qa-products.test.js`: 20 aprovados, 0 falhos.
 - `node --test tests/unit/secure-filesystem.test.js`: 12 aprovados, 0 falhos.
 - `npm.cmd test`: 167 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).
+
+## Ajuste de Validacao de Lote
+
+- `Lote.isValid` agora rejeita explicitamente `.` e `..`.
+- Foi adicionada regressao no dominio para impedir lote `.` antes que rotas e servicos possam criar caminhos/JSONs ambiguos.
+
+### Testes
+
+- `node --test tests/unit/domain-lote.test.js`: 15 aprovados, 0 falhos.
+- `node --test tests/integration/qa-products.test.js`: 20 aprovados, 0 falhos.
+- `node --test tests/unit/secure-filesystem.test.js`: 12 aprovados, 0 falhos.
+- `npm.cmd test`: 167 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).

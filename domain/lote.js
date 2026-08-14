@@ -28,6 +28,7 @@ export class Lote {
   static isValid(numero) {
     if (!numero || typeof numero !== 'string') return false;
     if (numero.length > 50) return false;
+    if (numero === '.' || numero === '..') return false;
     if (numero.includes('..')) return false;
     if (/[<>:"|?*\\/]/.test(numero)) return false;
     return true;
