@@ -121,7 +121,7 @@ router.post('/desclassificar', express.json(), async (req, res) => {
 router.post('/excluir', express.json(), async (req, res) => {
   const { lote, gtin, filename, location = 'root' } = req.body;
 
-  if (!hasValidQaIdentifiers(lote, gtin) || !filename) {
+  if (!hasValidQaIdentifiers(lote, gtin) || !filename || !['root', 'AP', 'AT'].includes(location)) {
     return res.status(400).json({ ok: false, error: 'Invalid parameters', requestId: req.id });
   }
 

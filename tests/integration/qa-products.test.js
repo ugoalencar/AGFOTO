@@ -10,6 +10,7 @@ import CapturaService from '../../services/captura-service.js';
 import DeliveryService from '../../services/delivery-service.js';
 import LoteRepository from '../../repositories/lote-repository.js';
 import { DeliveryType } from '../../domain/delivery.js';
+import { auditLogger } from '../../server/audit-logger.js';
 
 const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
 
@@ -112,6 +113,21 @@ test('rejects unsafe QA path inputs without changing files', async t => {
   assert.deepEqual(await fs.promises.readFile(path.join(escapedLote, 'a.jpg')), Buffer.from('other lote'));
 });
 
+test('rejects an invalid delete location without changing the file or JSON history', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '51');
+  const root = path.join(env.paths.finalizadas, 'LOTE 51', '000123');
+  const jsonPath = path.join(env.paths.jsons, 'Lote_51.json');
+  const before = await fs.promises.readFile(jsonPath, 'utf8');
+
+  const result = await DeliveryService.deletePhoto('51', '000123', 'a.jpg', '../AP');
+
+  assert.equal(result.ok, false);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
+});
+
 test('does not mutate photos when the lote or product is absent from JSON', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
@@ -196,6 +212,45 @@ test('does not delete a photo when saving its deletion history fails', async t =
   assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
   const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_50.json'), 'utf8'));
   assert.notEqual(lote.itens['000123'].historico.at(-1)?.evento, 'foto_excluida');
+});
+
+test('compensates a classify move when audit logging fails without persisting JSON history', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '52');
+  const root = path.join(env.paths.finalizadas, 'LOTE 52', '000123');
+  const jsonPath = path.join(env.paths.jsons, 'Lote_52.json');
+  const before = await fs.promises.readFile(jsonPath, 'utf8');
+  const originalLog = auditLogger.log;
+  auditLogger.log = async () => { throw new Error('forced audit failure'); };
+  t.after(() => { auditLogger.log = originalLog; });
+
+  const result = await DeliveryService.classifyPhotoAP('52', '000123', 'a.jpg');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /forced audit failure/);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
+  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
+});
+
+test('does not persist deletion history or remove the file when audit logging fails', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '53');
+  const root = path.join(env.paths.finalizadas, 'LOTE 53', '000123');
+  const jsonPath = path.join(env.paths.jsons, 'Lote_53.json');
+  const before = await fs.promises.readFile(jsonPath, 'utf8');
+  const originalLog = auditLogger.log;
+  auditLogger.log = async () => { throw new Error('forced audit failure'); };
+  t.after(() => { auditLogger.log = originalLog; });
+
+  const result = await DeliveryService.deletePhoto('53', '000123', 'a.jpg');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /forced audit failure/);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
 });
 
 test('deletes a classified photo with an audit trail and updates product history', async t => {

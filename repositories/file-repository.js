@@ -174,7 +174,7 @@ export class FileRepository {
     }
   }
 
-  static async deleteFinalizadaPhoto({ loteNumero, gtin, filename, location = null }) {
+  static async resolveFinalizadaPhoto({ loteNumero, gtin, filename, location = null }) {
     const components = normalizeFinalizadaPathComponents(loteNumero, gtin);
     const cleanFilename = validateFilename(filename);
     if (cleanFilename !== filename) throw new Error('Filename must not include a path');
@@ -182,8 +182,15 @@ export class FileRepository {
     if (subfolder && !['AP', 'AT'].includes(subfolder)) throw new Error('location must be root, AP, or AT');
     const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${components.loteNumero}`, components.gtin), config.paths.finalizadas);
     const filePath = securePath(path.join(subfolder ? path.join(baseDir, subfolder) : baseDir, cleanFilename), config.paths.finalizadas);
-    await fs.promises.unlink(filePath);
+    const stats = await fs.promises.stat(filePath);
+    if (!stats.isFile()) throw new Error('Finalized photo path is not a file');
     return { filePath, filename: cleanFilename, location: subfolder || 'root' };
+  }
+
+  static async deleteFinalizadaPhoto({ loteNumero, gtin, filename, location = null }) {
+    const photo = await this.resolveFinalizadaPhoto({ loteNumero, gtin, filename, location });
+    await fs.promises.unlink(photo.filePath);
+    return photo;
   }
 
   /**

@@ -36,6 +36,18 @@ No delivery, rework, frontend, report, Redmine, Java, or external-system behavio
 
 - The QA mutation paths validate lote/product before moving or deleting files. Save failures are now either compensated (moves) or stop physical deletion before it begins.
 
+## Ajuste Final da Tarefa 5
+
+- Delete agora resolve e confirma o arquivo finalizado antes de preparar historico, auditar ou persistir JSON. A rota tambem rejeita `location` fora de `root`, `AP` e `AT` antes de chamar o servico.
+- Classify e unclassify movem o arquivo, registram auditoria e somente depois persistem o historico JSON. Falhas de auditoria e de save compensam o move fisico e deixam o JSON inalterado.
+- Delete prepara historico somente em memoria, registra auditoria, persiste JSON e por fim tenta o unlink. Falha no unlink retorna aviso para retry, mantendo a trilha de intencao persistida.
+- Foram incluidos testes para location invalida preservar arquivo, quantidade e historico, e para falhas de auditoria em classify e delete nao produzirem JSON falso nem exclusao fisica.
+
+### Testes
+
+- `node --test tests/integration/qa-products.test.js`: 16 aprovados, 0 falhos.
+- `npm.cmd test`: 162 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).
+
 ## Fixes Finais da Tarefa 5
 
 - Classify e unclassify agora compensam o move fisico quando a persistencia do historico JSON falha. A resposta permanece `ok:false`; se a compensacao tambem falhar, ela informa explicitamente que o arquivo pode exigir recuperacao manual.

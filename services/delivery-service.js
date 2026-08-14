@@ -81,13 +81,14 @@ export class DeliveryService {
       moved = await FileRepository.moveFinalizadaPhoto({
         loteNumero: normalizedLote, gtin: normalizedGtin, filename, fromSubfolder: fromClassification
       });
-      await this.recordQaHistory(loteObj, produto, 'foto_desclassificada', {
+      this.recordQaHistory(produto, 'foto_desclassificada', {
         classificacaoAnterior: fromClassification, filename: moved.destName
       });
       await auditLogger.log('UNCLASSIFY', {
         lote: normalizedLote, gtin: normalizedGtin, filename, fromClassification,
         destName: moved.destName, operationId: operationContext?.operationId || null
       });
+      await LoteRepository.save(loteObj);
       return { ok: true, data: { unclassified: true, filename: moved.destName } };
     } catch (err) {
       return this.compensateQaMoveFailure(err, moved, {
@@ -111,11 +112,12 @@ export class DeliveryService {
       normalizedLote = loaded.lote;
       normalizedGtin = loaded.gtin;
       moved = await FileRepository.moveFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, toSubfolder: classification });
-      await this.recordQaHistory(loteObj, produto, 'foto_classificada', { classificacao: classification, filename: moved.destName });
+      this.recordQaHistory(produto, 'foto_classificada', { classificacao: classification, filename: moved.destName });
       await auditLogger.log(`CLASSIFY_${classification}`, {
         lote: normalizedLote, gtin: normalizedGtin, filename, destName: moved.destName,
         operationId: operationContext?.operationId || null
       });
+      await LoteRepository.save(loteObj);
       return { ok: true, data: { classified: classification, filename: moved.destName } };
     } catch (err) {
       return this.compensateQaMoveFailure(err, moved, {
@@ -133,15 +135,17 @@ export class DeliveryService {
     let auditPersisted = false;
     try {
       const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
-      await this.recordQaHistory(loteObj, produto, 'foto_excluida', {
-        filename, location
+      const photo = await FileRepository.resolveFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, location });
+      this.recordQaHistory(produto, 'foto_excluida', {
+        filename: photo.filename, location: photo.location
       }, -1);
-      historyPersisted = true;
       await auditLogger.log('DELETE_PHOTO', {
-        lote: normalizedLote, gtin: normalizedGtin, filename, location,
+        lote: normalizedLote, gtin: normalizedGtin, filename: photo.filename, location: photo.location,
         operationId: operationContext?.operationId || null, phase: 'pre_delete'
       });
       auditPersisted = true;
+      await LoteRepository.save(loteObj);
+      historyPersisted = true;
       const deleted = await FileRepository.deleteFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, location });
       return { ok: true, data: { deleted: true, filename: deleted.filename, location: deleted.location } };
     } catch (err) {
@@ -196,10 +200,9 @@ export class DeliveryService {
     return { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin };
   }
 
-  static async recordQaHistory(loteObj, produto, event, details, photoCountDelta = 0) {
+  static recordQaHistory(produto, event, details, photoCountDelta = 0) {
     if (photoCountDelta !== 0) produto.quantidadeFotos = Math.max(0, produto.quantidadeFotos + photoCountDelta);
     produto.addHistoricoEvent(event, details);
-    await LoteRepository.save(loteObj);
   }
 
   /**
