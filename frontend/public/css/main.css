@@ -728,6 +728,9 @@ select {
   display: grid;
   grid-template-columns: 1fr 1fr;
   grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "current-head previous-head"
+    "current-grid previous-grid";
   padding: 0;
 }
 
@@ -740,9 +743,21 @@ select {
   background: var(--ag-panel);
 }
 
-.stage-head + .stage-grid + .stage-head,
-.capture-stage > .stage-head:nth-of-type(2),
-.capture-stage > .stage-grid:nth-of-type(2) {
+.capture-stage > .stage-head:first-child {
+  grid-area: current-head;
+}
+
+.capture-stage > .stage-grid:nth-child(2) {
+  grid-area: current-grid;
+}
+
+.capture-stage > .stage-head:nth-child(3) {
+  grid-area: previous-head;
+  border-left: 1px solid var(--ag-line);
+}
+
+.capture-stage > .stage-grid:nth-child(4) {
+  grid-area: previous-grid;
   border-left: 1px solid var(--ag-line);
 }
 
@@ -788,4 +803,73 @@ select {
   cursor: pointer;
   font-family: var(--ag-mono);
   font-size: 12.5px;
+}
+
+@media (max-width: 1100px) {
+  .capture-view {
+    grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(160px, .5fr);
+    overflow: auto;
+  }
+
+  .capture-entry {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .capture-stage {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .capture-view > .ag-card:nth-child(3) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 760px) {
+  .capture-view {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(320px, 1fr) minmax(160px, .5fr);
+  }
+
+  .capture-entry,
+  .capture-stage,
+  .capture-view > .ag-card:nth-child(3) {
+    grid-column: 1;
+  }
+
+  .capture-entry {
+    grid-row: 1;
+  }
+
+  .capture-stage {
+    grid-row: 2;
+  }
+
+  .capture-view > .ag-card:nth-child(3) {
+    grid-row: 3;
+  }
+}
+
+@media (max-width: 560px) {
+  .capture-stage {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(180px, 1fr) auto minmax(180px, 1fr);
+    grid-template-areas:
+      "current-head"
+      "current-grid"
+      "previous-head"
+      "previous-grid";
+  }
+
+  .capture-stage > .stage-head:nth-child(3) {
+    border-top: 1px solid var(--ag-line);
+    border-left: 0;
+  }
+
+  .capture-stage > .stage-grid:nth-child(4) {
+    border-left: 0;
+  }
 }
