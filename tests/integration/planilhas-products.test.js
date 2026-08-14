@@ -112,6 +112,37 @@ test('revalidates lookup conflicts when concurrent pending imports are confirmed
   });
 });
 
+test('serializes parallel confirmations with divergent lookup values', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const firstPath = path.join(env.paths.xlsx, 'parallel-first.xlsx');
+  const secondPath = path.join(env.paths.xlsx, 'parallel-second.xlsx');
+  await makeWorkbook(firstPath, [['EAN', 'Codigo', 'Descricao'], ['000127', 'COD-1', 'Produto 1']]);
+  await makeWorkbook(secondPath, [['EAN', 'Codigo', 'Descricao'], ['000127', 'COD-2', 'Produto 2']]);
+
+  const first = await ExcelService.importWorkbook({ lote: '37', filePath: firstPath });
+  const second = await ExcelService.importWorkbook({ lote: '37', filePath: secondPath });
+
+  const confirmations = await Promise.allSettled([
+    ExcelService.confirmImport(first.data.importId),
+    ExcelService.confirmImport(second.data.importId)
+  ]);
+  const results = confirmations.map(({ status, value }) => {
+    assert.equal(status, 'fulfilled');
+    return value;
+  });
+
+  assert.equal(results.filter(result => result.ok).length, 1);
+  const conflict = results.find(result => !result.ok);
+  assert.match(conflict.error, /resolve conflicts/i);
+  assert.equal(conflict.data.conflicts.length, 2);
+
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(path.join(env.paths.xlsx, 'lookup-integrado.xlsx'));
+  const worksheet = workbook.getWorksheet('Lookup');
+  assert.equal(worksheet.rowCount, 2);
+});
+
 test('mergeToLookup sanitizes formula-prefixed legacy items', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);

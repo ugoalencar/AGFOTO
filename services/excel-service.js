@@ -17,9 +17,19 @@ import { assertInsideRoot } from '../server/secure-filesystem.js';
 import { Lote } from '../domain/lote.js';
 
 const pendingImports = new Map();
+let lookupConfirmationQueue = Promise.resolve();
 
 function makeImportId(lote, filePath) {
   return `${lote}:${path.basename(filePath)}:${Date.now()}`;
+}
+
+function withLookupConfirmationLock(operation) {
+  const previous = lookupConfirmationQueue;
+  let release;
+  lookupConfirmationQueue = new Promise(resolve => {
+    release = resolve;
+  });
+  return previous.then(operation).finally(release);
 }
 
 async function resolveLocalWorkbook(filePath) {
@@ -217,14 +227,16 @@ export class ExcelService {
   }
 
   static async confirmImport(importId) {
-    const session = pendingImports.get(importId);
-    if (!session) return { ok: false, error: 'Import session not found' };
-    if (session.conflicts.length) {
-      return { ok: false, error: 'Resolve conflicts before confirming', data: { conflicts: session.conflicts } };
-    }
-    const result = await this.mergeToLookup(session.lote, session.items, { rejectConflicts: true });
-    if (result.ok) pendingImports.delete(importId);
-    return result;
+    return withLookupConfirmationLock(async () => {
+      const session = pendingImports.get(importId);
+      if (!session) return { ok: false, error: 'Import session not found' };
+      if (session.conflicts.length) {
+        return { ok: false, error: 'Resolve conflicts before confirming', data: { conflicts: session.conflicts } };
+      }
+      const result = await this.mergeToLookup(session.lote, session.items, { rejectConflicts: true });
+      if (result.ok) pendingImports.delete(importId);
+      return result;
+    });
   }
 
   static async lookupCodigo(lote, ean) {
