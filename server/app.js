@@ -14,6 +14,13 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+function blockPhaseOneDeliveryExecution(req, res, next) {
+  if (req.method === 'POST' && req.path === '/executar') {
+    return sendError(res, 404, `Not found: ${req.originalUrl}`);
+  }
+  return next();
+}
+
 function operationMiddleware(req, res, next) {
   if (!MUTATING_METHODS.has(req.method)) return next();
 
@@ -78,9 +85,9 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
   app.use('/api/lotes', capturaRoutes);
   app.use('/api/imagens', capturaRoutes);
   app.use('/api/planilhas', planilhasRoutes);
-  app.use('/api/qa', qaHubRoutes);
-  app.use('/api/retrabalhos', qaHubRoutes);
-  app.use('/api/relatorios', qaHubRoutes);
+  app.use('/api/qa', blockPhaseOneDeliveryExecution, qaHubRoutes);
+  app.use('/api/retrabalhos', blockPhaseOneDeliveryExecution, qaHubRoutes);
+  app.use('/api/relatorios', blockPhaseOneDeliveryExecution, qaHubRoutes);
 
   app.use(express.static(path.join(rootDir, 'frontend', 'public')));
   app.use((req, res) => sendError(res, 404, `Not found: ${req.path}`));
