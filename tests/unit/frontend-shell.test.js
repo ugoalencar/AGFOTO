@@ -39,3 +39,11 @@ test('product QA rail routes render direct views without hub tabs', async () => 
   assert.doesNotMatch(app, /v-if="false"/);
   assert.equal(publicApp, app);
 });
+
+test('product QA layouts stack and retain table scrolling on narrow screens', async () => {
+  const css = await readFile(path.join(publicDir, 'css', 'main.css'), 'utf8');
+
+  assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*?\.two-column-view,[\s\S]*?\.qa-view,[\s\S]*?\.report-view[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/);
+  assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*?\.two-column-view,[\s\S]*?\.qa-view,[\s\S]*?\.report-view[\s\S]*?overflow:\s*auto;/);
+  assert.match(css, /\.ag-table-wrap\s*\{[\s\S]*?overflow:\s*auto;/);
+});

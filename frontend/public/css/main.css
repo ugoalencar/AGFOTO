@@ -953,6 +953,21 @@ select {
   padding: 12px 14px;
 }
 
+@media (max-width: 760px) {
+  .two-column-view,
+  .qa-view,
+  .report-view {
+    grid-template-columns: minmax(0, 1fr);
+    overflow: auto;
+    align-content: start;
+  }
+
+  .two-column-view .ag-table,
+  .report-view .ag-table {
+    min-width: 620px;
+  }
+}
+
 .kpi-card strong {
   display: block;
   font-family: var(--ag-display);
