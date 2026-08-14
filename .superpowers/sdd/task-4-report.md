@@ -62,3 +62,22 @@ No production spreadsheet data was read or written. No Redmine, Java, start.jar,
 ### Preocupacoes
 
 - The lock is intentionally in-memory and protects confirmations within this local Node.js process only. A future multi-process or distributed deployment needs a shared filesystem or database-backed lock.
+
+## Ajuste Final da Tarefa 4
+
+### Correcoes
+
+- Centralizado o mutex FIFO no caminho comum `mergeToLookup`, cobrindo tanto confirmacoes pendentes quanto a rota legada `/api/planilhas/unificar`.
+- Removido o lock externo de `confirmImport`, evitando reentrada e deadlock; a revalidacao de conflitos continua ocorrendo dentro da secao serializada de merge.
+- Corrigida a insercao apos reabrir o workbook para escrever por indice de coluna, pois o ExcelJS nao preserva as chaves de coluna ao ler o XLSX.
+
+### Testes
+
+- Adicionada concorrencia entre confirmacao pendente e merge direto, verificando que ambos os itens persistem sem lost update.
+- Adicionada concorrencia com valores divergentes, verificando que a confirmacao pendente e bloqueada e o valor ja unificado e preservado.
+- `node --test tests/integration/planilhas-products.test.js`: 10 passed, 0 failed.
+- `npm.cmd test`: 145 passed, 0 failed, 1 skipped (Windows symlink permission).
+
+### Preocupacoes
+
+- O lock continua process-local; multiplos processos Node escrevendo o mesmo arquivo exigiriam coordenacao externa para garantir a mesma serializacao.

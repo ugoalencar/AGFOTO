@@ -143,6 +143,69 @@ test('serializes parallel confirmations with divergent lookup values', async t =
   assert.equal(worksheet.rowCount, 2);
 });
 
+test('serializes a pending confirmation with a direct lookup merge', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const pendingPath = path.join(env.paths.xlsx, 'pending-confirmation.xlsx');
+  await makeWorkbook(pendingPath, [['EAN', 'Codigo', 'Descricao'], ['000128', 'COD-1', 'Produto 1']]);
+
+  const pending = await ExcelService.importWorkbook({ lote: '37', filePath: pendingPath });
+  assert.equal(pending.ok, true);
+
+  const [confirmed, merged] = await Promise.all([
+    ExcelService.confirmImport(pending.data.importId),
+    ExcelService.mergeToLookup('37', [{ ean: '000129', codigo: 'COD-2', descricao: 'Produto 2' }])
+  ]);
+
+  assert.equal(confirmed.ok, true);
+  assert.equal(merged.ok, true);
+  assert.equal(merged.data.total, 2);
+  assert.deepEqual((await ExcelService.lookupCodigo('37', '000128')).data, {
+    codigo: 'COD-1',
+    descricao: 'Produto 1'
+  });
+  assert.deepEqual((await ExcelService.lookupCodigo('37', '000129')).data, {
+    codigo: 'COD-2',
+    descricao: 'Produto 2'
+  });
+
+  const conflictingPath = path.join(env.paths.xlsx, 'pending-conflict-after-merge.xlsx');
+  await makeWorkbook(conflictingPath, [['EAN', 'Codigo', 'Descricao'], ['000129', 'COD-3', 'Produto 3']]);
+  const conflicting = await ExcelService.importWorkbook({ lote: '37', filePath: conflictingPath });
+  assert.equal(conflicting.data.conflicts.length, 2);
+
+  const blocked = await ExcelService.confirmImport(conflicting.data.importId);
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.error, /resolve conflicts/i);
+});
+
+test('blocks a pending confirmation that diverges from a concurrent direct merge', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const pendingPath = path.join(env.paths.xlsx, 'pending-direct-conflict.xlsx');
+  await makeWorkbook(pendingPath, [['EAN', 'Codigo', 'Descricao'], ['000130', 'COD-2', 'Produto 2']]);
+
+  const pending = await ExcelService.importWorkbook({ lote: '37', filePath: pendingPath });
+  assert.equal(pending.ok, true);
+
+  const directMerge = ExcelService.mergeToLookup('37', [{
+    ean: '000130',
+    codigo: 'COD-1',
+    descricao: 'Produto 1'
+  }]);
+  const confirmation = ExcelService.confirmImport(pending.data.importId);
+  const [merged, blocked] = await Promise.all([directMerge, confirmation]);
+
+  assert.equal(merged.ok, true);
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.error, /resolve conflicts/i);
+  assert.equal(blocked.data.conflicts.length, 2);
+  assert.deepEqual((await ExcelService.lookupCodigo('37', '000130')).data, {
+    codigo: 'COD-1',
+    descricao: 'Produto 1'
+  });
+});
+
 test('mergeToLookup sanitizes formula-prefixed legacy items', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);

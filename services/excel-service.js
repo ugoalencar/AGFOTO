@@ -17,16 +17,16 @@ import { assertInsideRoot } from '../server/secure-filesystem.js';
 import { Lote } from '../domain/lote.js';
 
 const pendingImports = new Map();
-let lookupConfirmationQueue = Promise.resolve();
+let lookupWriteQueue = Promise.resolve();
 
 function makeImportId(lote, filePath) {
   return `${lote}:${path.basename(filePath)}:${Date.now()}`;
 }
 
-function withLookupConfirmationLock(operation) {
-  const previous = lookupConfirmationQueue;
+function withLookupWriteLock(operation) {
+  const previous = lookupWriteQueue;
   let release;
-  lookupConfirmationQueue = new Promise(resolve => {
+  lookupWriteQueue = new Promise(resolve => {
     release = resolve;
   });
   return previous.then(operation).finally(release);
@@ -227,16 +227,14 @@ export class ExcelService {
   }
 
   static async confirmImport(importId) {
-    return withLookupConfirmationLock(async () => {
-      const session = pendingImports.get(importId);
-      if (!session) return { ok: false, error: 'Import session not found' };
-      if (session.conflicts.length) {
-        return { ok: false, error: 'Resolve conflicts before confirming', data: { conflicts: session.conflicts } };
-      }
-      const result = await this.mergeToLookup(session.lote, session.items, { rejectConflicts: true });
-      if (result.ok) pendingImports.delete(importId);
-      return result;
-    });
+    const session = pendingImports.get(importId);
+    if (!session) return { ok: false, error: 'Import session not found' };
+    if (session.conflicts.length) {
+      return { ok: false, error: 'Resolve conflicts before confirming', data: { conflicts: session.conflicts } };
+    }
+    const result = await this.mergeToLookup(session.lote, session.items, { rejectConflicts: true });
+    if (result.ok) pendingImports.delete(importId);
+    return result;
   }
 
   static async lookupCodigo(lote, ean) {
@@ -331,6 +329,10 @@ export class ExcelService {
    * Merges items no lookup-integrado.xlsx
    */
   static async mergeToLookup(lote, items, { rejectConflicts = false } = {}) {
+    return withLookupWriteLock(() => this.mergeToLookupUnlocked(lote, items, { rejectConflicts }));
+  }
+
+  static async mergeToLookupUnlocked(lote, items, { rejectConflicts = false } = {}) {
     try {
       const lookupPath = path.join(config.paths.xlsx, 'lookup-integrado.xlsx');
       const normalizedItems = items.map(item => ({
@@ -401,7 +403,7 @@ export class ExcelService {
           unchanged++;
         } else {
           // Novo
-          worksheet.addRow({ lote, ean: item.ean, codigo: item.codigo, descricao: item.descricao, importedAt: new Date().toISOString() });
+          worksheet.addRow([lote, item.ean, item.codigo, item.descricao, new Date().toISOString()]);
           inserted++;
         }
       }
