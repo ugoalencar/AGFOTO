@@ -116,7 +116,7 @@
 </main>
 
     <!-- Planilhas Page -->
-    <main v-if="activePage === 'planilhas'" style="padding: 2rem; overflow-y: auto;">
+    <main v-if="activePage === 'legacy-planilhas'" style="padding: 2rem; overflow-y: auto;">
       <div style="max-width: 900px;">
         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">📊 Importação de Planilhas</h2>
         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Upload Excel com EAN, Código e Descrição para unificar no master catalog.</p>
@@ -189,7 +189,25 @@
     </main>
 
     <main v-if="activePage === 'entregar'" class="ag-view two-column-view">
-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Lote</h2></header><div class="ag-card-body"><label class="ag-label">Selecionar lote</label><input class="ag-field" v-model="qaSelectedLote" type="text" placeholder="Numero do lote"><button class="ag-btn is-primary" style="width:100%;margin-top:10px" @click="onLoadQaProducts" :disabled="!qaSelectedLote">Carregar produtos</button><p style="color:var(--ag-muted);font-size:12px;margin-top:14px">Entrega local/mock com staging, manifesto e verificacao antes de marcar entregue.</p></div></section>
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Lote</h2></header>
+        <div class="ag-card-body">
+          <label class="ag-label">Selecionar lote</label>
+          <input class="ag-field" v-model="qaSelectedLote" type="text" placeholder="Numero do lote">
+          <button class="ag-btn is-primary" style="width:100%;margin-top:10px" @click="onLoadQaProducts" :disabled="!qaSelectedLote">Carregar produtos</button>
+          <p style="color:var(--ag-muted);font-size:12px;margin-top:14px">Entrega local/mock com staging, manifesto e verificacao antes de marcar entregue.</p>
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
+            <label class="ag-label">Planilha do cliente</label>
+            <input class="ag-field" type="file" accept=".xlsx" @change="onExcelFileSelected">
+            <button class="ag-btn is-warning" style="width:100%;margin-top:10px" @click="onImportExcel" :disabled="!qaSelectedLote || !excelFile">
+              Unificar planilha
+            </button>
+            <div v-if="excelFile" style="font-family:var(--ag-mono);font-size:11px;color:var(--ag-muted);margin-top:8px">
+              {{ excelFile.name }} · {{ excelItems.length }} itens · {{ excelConflicts.length }} conflitos
+            </div>
+          </div>
+        </div>
+      </section>
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Produtos prontos para entrega</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaProducts.length }} itens</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>GTIN</th><th>Codigo</th><th>Fotos</th><th>Acao</th></tr></thead><tbody><tr v-for="product in qaProducts" :key="`${product.gtin}:${product.codigo}`"><td>{{ product.gtin }}</td><td>{{ product.codigo }}</td><td>{{ product.quantidadeFotos }}</td><td><button class="ag-btn is-warning" @click="onPrepareDelivery(product)" :disabled="deliveryProductKey === `${product.gtin}:${product.codigo}`">{{ deliveryProductKey === `${product.gtin}:${product.codigo}` ? 'Entregando' : 'Entregar' }}</button></td></tr></tbody></table></div></section>
     </main>
     <main v-if="activePage === 'qa'" class="ag-view qa-view">
@@ -202,7 +220,7 @@
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Detalhamento</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ reportItems.length }} linhas</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Lote</th><th>GTIN</th><th>Codigo</th><th>Descricao</th><th>Fotos</th><th>Status</th></tr></thead><tbody><tr v-for="item in reportItems" :key="`${item.lote}:${item.gtin}`"><td>{{ item.lote }}</td><td>{{ item.gtin }}</td><td>{{ item.codigo }}</td><td>{{ item.descricao }}</td><td>{{ item.quantidadeFotos }}</td><td><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td></tr></tbody></table></div></section>
     </main>
     <!-- Veículos Page -->
-    <main v-if="activePage === 'veiculos'" style="padding: 2rem; overflow-y: auto;">
+    <main v-if="activePage === 'legacy-veiculos'" style="padding: 2rem; overflow-y: auto;">
       <div style="max-width: 1000px;">
         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">🚗 Gerenciamento de Veículos</h2>
         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Importar fotos de cartão de memória, processar OCR de placas, QA e entregar para ADSET.</p>
@@ -532,7 +550,8 @@ export default {
     };
 
     const onImportExcel = async () => {
-      if (!selectedLote.value || !excelFile.value) return;
+      const loteParaImportar = selectedLote.value || qaSelectedLote.value;
+      if (!loteParaImportar || !excelFile.value) return;
 
       try {
         showStatus('Importando...', 'success');

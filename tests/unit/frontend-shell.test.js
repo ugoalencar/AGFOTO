@@ -47,3 +47,18 @@ test('product QA layouts stack and retain table scrolling on narrow screens', as
   assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*?\.two-column-view,[\s\S]*?\.qa-view,[\s\S]*?\.report-view[\s\S]*?overflow:\s*auto;/);
   assert.match(css, /\.ag-table-wrap\s*\{[\s\S]*?overflow:\s*auto;/);
 });
+
+test('Planilhas is available from Entregar without legacy Phase 1 routes', async () => {
+  const app = await readFile(path.join(root, 'frontend', 'src', 'App.vue'), 'utf8');
+  const publicApp = await readFile(path.join(publicDir, 'App.vue'), 'utf8');
+  const css = await readFile(path.join(publicDir, 'css', 'main.css'), 'utf8');
+
+  assert.match(app, /activePage === 'entregar'[\s\S]*?Planilha do cliente/);
+  assert.match(app, /:disabled="!qaSelectedLote \|\| !excelFile"/);
+  assert.match(app, /const loteParaImportar = selectedLote\.value \|\| qaSelectedLote\.value;/);
+  assert.doesNotMatch(app, /activePage === 'planilhas'/);
+  assert.doesNotMatch(app, /activePage === 'veiculos'/);
+  assert.equal(publicApp, app);
+  assert.match(css, /@media \(max-width: 1180px\)/);
+  assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*?\.app-shell[\s\S]*?grid-template-columns:\s*1fr;/);
+});
