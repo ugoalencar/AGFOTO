@@ -120,17 +120,15 @@ export class FileRepository {
         try {
           await fs.promises.unlink(safeSrc);
         } catch (unlinkError) {
-          try {
-            await fs.promises.unlink(destPath);
-          } catch (cleanupError) {
-            throw new Error(
-              `Source cleanup failed after exclusive copy (${unlinkError.message}); ` +
-              `destination cleanup also failed (${cleanupError.message})`
-            );
-          }
-          throw new Error(`Source cleanup failed after exclusive copy; destination copy was removed (${unlinkError.message})`);
+          return {
+            destPath,
+            warning: {
+              code: 'TEMP_CLEANUP_FAILED',
+              error: `TEMP cleanup failed after exclusive copy; final file was retained (${unlinkError.message})`
+            }
+          };
         }
-        return destPath;
+        return { destPath };
       }
     } catch (err) {
       throw new Error(`Cannot move to finalizadas: ${err.message}`);
@@ -250,14 +248,16 @@ export class FileRepository {
     try {
       const moved = [];
       const failed = [];
+      const warnings = [];
 
       for (const file of snapshot) {
         try {
-          const destPath = await this.moveToFinalizadas(file.path, loteNumero, gtin);
+          const result = await this.moveToFinalizadas(file.path, loteNumero, gtin);
           moved.push({
             src: file.name,
-            dest: path.basename(destPath)
+            dest: path.basename(result.destPath)
           });
+          if (result.warning) warnings.push({ file: file.name, ...result.warning });
         } catch (err) {
           failed.push({
             file: file.name,
@@ -266,7 +266,7 @@ export class FileRepository {
         }
       }
 
-      return { moved, failed };
+      return { moved, failed, warnings };
     } catch (err) {
       throw new Error(`Cannot move snapshot: ${err.message}`);
     }

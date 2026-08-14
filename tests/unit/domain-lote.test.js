@@ -53,11 +53,11 @@ test('Lote - countByStatus', () => {
   const p2 = lote.getOrCreateItem('GTI2', 'C2', 'D2');
   const p3 = lote.getOrCreateItem('GTI3', 'C3', 'D3');
 
-  p1.status = ProductStatus.ENTREGUE;
-  p2.status = ProductStatus.ENTREGUE;
+  p1.status = ProductStatus.EM_CAPTURA;
+  p2.status = ProductStatus.EM_CAPTURA;
   p3.status = ProductStatus.PENDENTE_QA;
 
-  assert.strictEqual(lote.countByStatus(ProductStatus.ENTREGUE), 2);
+  assert.strictEqual(lote.countByStatus(ProductStatus.EM_CAPTURA), 2);
   assert.strictEqual(lote.countByStatus(ProductStatus.PENDENTE_QA), 1);
 });
 

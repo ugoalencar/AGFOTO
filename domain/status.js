@@ -12,24 +12,14 @@ export const ProductStatus = Object.freeze({
 });
 
 export const ProductEvents = Object.freeze({
-  CAPTURA_SALVA: 'captura_salva',
-  QA_CONCLUIDO: 'qa_concluido',
-  ENTREGA_INICIADA: 'entrega_iniciada',
-  ENTREGA_CONFIRMADA: 'entrega_confirmada',
-  ENTREGA_FALHOU: 'entrega_falhou',
-  RETRABALHO_INICIADO: 'retrabalho_iniciado'
+  CAPTURA_SALVA: 'captura_salva'
 });
 
 /**
  * Transições permitidas entre estados
  */
 export const StatusTransitions = {
-  [ProductStatus.EM_CAPTURA]: [ProductStatus.PENDENTE_QA],
-  [ProductStatus.PENDENTE_QA]: [ProductStatus.PRONTO_PARA_ENTREGA, ProductStatus.RETRABALHO],
-  [ProductStatus.PRONTO_PARA_ENTREGA]: [ProductStatus.ENTREGANDO, ProductStatus.RETRABALHO],
-  [ProductStatus.ENTREGANDO]: [ProductStatus.ENTREGUE, ProductStatus.ERRO_ENTREGA],
-  [ProductStatus.ERRO_ENTREGA]: [ProductStatus.ENTREGANDO, ProductStatus.RETRABALHO],
-  [ProductStatus.RETRABALHO]: [ProductStatus.PENDENTE_QA]
+  [ProductStatus.EM_CAPTURA]: [ProductStatus.PENDENTE_QA]
 };
 
 /**
@@ -42,12 +32,7 @@ export function canTransition(currentStatus, targetStatus) {
 
 export function nextProductStatus(currentStatus, event) {
   const targets = {
-    [ProductEvents.CAPTURA_SALVA]: ProductStatus.PENDENTE_QA,
-    [ProductEvents.QA_CONCLUIDO]: ProductStatus.PRONTO_PARA_ENTREGA,
-    [ProductEvents.ENTREGA_INICIADA]: ProductStatus.ENTREGANDO,
-    [ProductEvents.ENTREGA_CONFIRMADA]: ProductStatus.ENTREGUE,
-    [ProductEvents.ENTREGA_FALHOU]: ProductStatus.ERRO_ENTREGA,
-    [ProductEvents.RETRABALHO_INICIADO]: ProductStatus.RETRABALHO
+    [ProductEvents.CAPTURA_SALVA]: ProductStatus.PENDENTE_QA
   };
   const targetStatus = targets[event];
   if (!targetStatus) throw new Error(`Unknown product event: ${event}`);

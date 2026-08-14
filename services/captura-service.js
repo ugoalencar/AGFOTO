@@ -183,7 +183,7 @@ export class CapturaService {
       produto.markCaptureSaved(moveResult.moved.length);
       await LoteRepository.save(lote);
 
-      const warnings = [];
+      const warnings = [...moveResult.warnings];
       try {
         await ExcelService.updateControlFromLote(loteNumero);
       } catch (err) {

@@ -274,7 +274,7 @@ test('save capture reports an Excel rebuild failure as a warning after JSON is s
   assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
 });
 
-test('save capture removes its final destination when TEMP unlink fails after an exclusive copy', async t => {
+test('save capture records an exclusive copy when TEMP cleanup fails', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
   const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
@@ -291,11 +291,13 @@ test('save capture removes its final destination when TEMP unlink fails after an
 
   const result = await CapturaService.saveCapture('43', '000123');
 
-  assert.equal(result.ok, false);
-  assert.match(result.error, /no files moved/i);
-  assert.equal(await fs.promises.stat(finalPhoto).then(() => true, () => false), false);
-  assert.equal(await fs.promises.stat(path.join(env.paths.jsons, 'Lote_43.json')).then(() => true, () => false), false);
-  assert.equal(await fs.promises.stat(path.join(env.paths.xlsx, 'controle-lotes.xlsx')).then(() => true, () => false), false);
+  assert.equal(result.ok, true);
+  assert.equal(result.data.fotosMovidas, 1);
+  assert.equal(await fs.promises.stat(finalPhoto).then(() => true, () => false), true);
+  assert.equal(await fs.promises.stat(tempPhoto).then(() => true, () => false), true);
+  assert.match(result.warnings[0].error, /TEMP cleanup failed/i);
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_43.json'), 'utf8'));
+  assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
 });
 
 test('concurrent captures for the same lote and GTIN preserve cumulative JSON state', async t => {
