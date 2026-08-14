@@ -41,3 +41,24 @@ No production spreadsheet data was read or written. No Redmine, Java, start.jar,
 ### Concerns
 
 - ExcelJS preserves `cell.numFmt` but returns raw numeric text for `cell.text`; the implementation explicitly supports integer masks composed only of zeros. More complex Excel formats remain represented by their raw value.
+
+## Fixes Finais da Tarefa 4
+
+### Correcoes
+
+- Added a process-local FIFO lock around `confirmImport`, serializing session lookup, conflict revalidation through `mergeToLookup`, lookup write, and successful session removal.
+- Parallel confirmations with divergent values for the same `(lote, EAN)` now produce exactly one insert and one conflict rejection.
+
+### Testes
+
+- Added `serializes parallel confirmations with divergent lookup values`, using `Promise.allSettled` and verifying one successful confirmation, one conflict response, and one lookup row.
+- `node --test tests/integration/planilhas-products.test.js`: 8 passed, 0 failed.
+- `npm.cmd test`: 143 passed, 0 failed, 1 skipped (Windows symlink permission).
+
+### Commits
+
+- `ff6328f fix: serialize lookup import confirmations`
+
+### Preocupacoes
+
+- The lock is intentionally in-memory and protects confirmations within this local Node.js process only. A future multi-process or distributed deployment needs a shared filesystem or database-backed lock.
