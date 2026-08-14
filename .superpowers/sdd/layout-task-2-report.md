@@ -59,3 +59,9 @@
 - RED antes do CSS: `Palco anterior` terminou em `782px` enquanto o card terminou em `660px`.
 - GREEN apos o CSS: `node --test tests/integration/captura-products.test.js tests/integration/qa-products.test.js`.
 - `git diff --check`.
+
+## Correcao de portabilidade do teste
+
+- O teste de geometria renderizada agora procura um interpretador Python disponivel (`py -3`, `python3` ou `python`) e confirma que ele importa `playwright.sync_api` antes de iniciar o Chromium.
+- Quando nenhum runner de navegador compativel estiver instalado, o teste e marcado como ignorado com uma mensagem explicita; a suite padrao nao falha apenas pela ausencia de Python 3.12 ou Playwright para Python.
+- Quando o runner existe, a mesma verificacao renderizada em `390x844` continua validando que `#previous-grid` permanece dentro de `#capture-stage`.

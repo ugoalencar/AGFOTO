@@ -31,7 +31,37 @@ async function request(app, requestPath, options = {}) {
   }
 }
 
+function findPlaywrightPython() {
+  const candidates = process.platform === 'win32'
+    ? [
+        { command: 'py', args: ['-3'] },
+        { command: 'python3', args: [] },
+        { command: 'python', args: [] }
+      ]
+    : [
+        { command: 'python3', args: [] },
+        { command: 'python', args: [] }
+      ];
+
+  for (const candidate of candidates) {
+    const result = spawnSync(
+      candidate.command,
+      [...candidate.args, '-c', 'import playwright.sync_api'],
+      { encoding: 'utf8', windowsHide: true }
+    );
+    if (result.status === 0) return candidate;
+  }
+
+  return null;
+}
+
 test('phone capture layout keeps the previous stage inside its card', async t => {
+  const python = findPlaywrightPython();
+  if (!python) {
+    t.skip('Python Playwright browser runner unavailable; skipped rendered 390x844 capture geometry regression');
+    return;
+  }
+
   const css = await fs.promises.readFile(path.resolve('frontend/public/css/main.css'), 'utf8');
   const fixtureDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agfoto-phone-layout-'));
   const fixturePath = path.join(fixtureDirectory, 'capture.html');
@@ -71,7 +101,11 @@ print(json.dumps({"previousBottom": previous_grid["y"] + previous_grid["height"]
   await fs.promises.writeFile(fixturePath, fixture, 'utf8');
   t.after(() => fs.promises.rm(fixtureDirectory, { recursive: true, force: true }));
 
-  const result = spawnSync('py', ['-3.12', '-c', playwrightScript, fixturePath], { encoding: 'utf8' });
+  const result = spawnSync(
+    python.command,
+    [...python.args, '-c', playwrightScript, fixturePath],
+    { encoding: 'utf8', windowsHide: true }
+  );
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const geometry = JSON.parse(result.stdout);
 
