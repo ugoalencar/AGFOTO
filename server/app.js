@@ -13,7 +13,7 @@ import { sendError, sendOk } from './response.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
-const PHASE_ONE_BLOCKED_POST_PATHS = new Set([
+const PHASE_ONE_BLOCKED_PATHS = new Set([
   '/api/entregas/executar',
   '/api/qa/executar',
   '/api/retrabalhos/executar',
@@ -23,7 +23,7 @@ const PHASE_ONE_BLOCKED_POST_PATHS = new Set([
 ]);
 
 function blockPhaseOneRoutes(req, res, next) {
-  if (req.method === 'POST' && PHASE_ONE_BLOCKED_POST_PATHS.has(req.path)) {
+  if (MUTATING_METHODS.has(req.method) && PHASE_ONE_BLOCKED_PATHS.has(req.path)) {
     return sendError(res, 404, `Not found: ${req.originalUrl}`);
   }
   return next();

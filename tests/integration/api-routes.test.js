@@ -43,7 +43,7 @@ test('mutating routes reject missing operationId', async t => {
   assert.match(res.body.error, /operationId/i);
 });
 
-test('phase 1 blocked POST routes return 404 before operationId validation', async t => {
+test('phase 1 blocked mutating routes return 404 before operationId validation', async t => {
   const env = await createTestEnv(t);
   const app = createApp({ configOverrides: env.config });
   const paths = [
@@ -55,15 +55,17 @@ test('phase 1 blocked POST routes return 404 before operationId validation', asy
     '/api/adset'
   ];
 
-  for (const path of paths) {
-    for (const headers of [{}, { 'X-Operation-ID': 'blocked-route' }]) {
-      const res = await request(app, path, {
-        method: 'POST',
-        headers,
-        body: '{}'
-      });
+  for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+    for (const path of paths) {
+      for (const headers of [{}, { 'X-Operation-ID': 'blocked-route' }]) {
+        const res = await request(app, path, {
+          method,
+          headers,
+          body: '{}'
+        });
 
-      assert.equal(res.status, 404, `${path} must be unavailable before operationId validation`);
+        assert.equal(res.status, 404, `${method} ${path} must be unavailable before operationId validation`);
+      }
     }
   }
 });
