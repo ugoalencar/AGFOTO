@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'fs';
 import path from 'path';
 import ExcelJS from 'exceljs';
 import { createTestEnv } from '../helpers/test-env.js';
@@ -72,6 +73,78 @@ test('only accepts local workbooks inside the configured xlsx directory', async 
   assert.match(traversal.error, /path traversal|outside/i);
   assert.equal(internet.ok, false);
   assert.match(internet.error, /path/i);
+});
+
+test('rejects .xls files before attempting XLSX parsing', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const legacy = path.join(env.paths.xlsx, 'entrada-legada.xls');
+  await fs.promises.writeFile(legacy, 'not an XLSX workbook');
+
+  const imported = await ExcelService.importWorkbook({ lote: '37', filePath: legacy });
+
+  assert.equal(imported.ok, false);
+  assert.equal(imported.error, 'Only .xlsx files are accepted');
+});
+
+test('revalidates lookup conflicts when concurrent pending imports are confirmed', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const firstPath = path.join(env.paths.xlsx, 'first.xlsx');
+  const secondPath = path.join(env.paths.xlsx, 'second.xlsx');
+  await makeWorkbook(firstPath, [['EAN', 'Codigo', 'Descricao'], ['000125', 'COD-1', 'Produto 1']]);
+  await makeWorkbook(secondPath, [['EAN', 'Codigo', 'Descricao'], ['000125', 'COD-2', 'Produto 2']]);
+
+  const first = await ExcelService.importWorkbook({ lote: '37', filePath: firstPath });
+  const second = await ExcelService.importWorkbook({ lote: '37', filePath: secondPath });
+  assert.equal(first.data.conflicts.length, 0);
+  assert.equal(second.data.conflicts.length, 0);
+
+  assert.equal((await ExcelService.confirmImport(first.data.importId)).ok, true);
+  const blocked = await ExcelService.confirmImport(second.data.importId);
+
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.error, /resolve conflicts/i);
+  assert.equal(blocked.data.conflicts.length, 2);
+  assert.deepEqual((await ExcelService.lookupCodigo('37', '000125')).data, {
+    codigo: 'COD-1',
+    descricao: 'Produto 1'
+  });
+});
+
+test('mergeToLookup sanitizes formula-prefixed legacy items', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  const merged = await ExcelService.mergeToLookup('37', [{
+    ean: '000126',
+    codigo: '=FORMULA()',
+    descricao: '@FORMULA()'
+  }]);
+
+  assert.equal(merged.ok, true);
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(path.join(env.paths.xlsx, 'lookup-integrado.xlsx'));
+  const row = workbook.getWorksheet('Lookup').getRow(2);
+  assert.equal(row.getCell(3).value, "'=FORMULA()");
+  assert.equal(row.getCell(4).value, "'@FORMULA()");
+});
+
+test('preserves displayed leading zeros from formatted numeric EAN cells', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const entrada = path.join(env.paths.xlsx, 'ean-formatado.xlsx');
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Entrada');
+  worksheet.addRow(['EAN', 'Codigo', 'Descricao']);
+  worksheet.addRow([123, 'COD-3', 'Produto 3']);
+  worksheet.getCell('A2').numFmt = '000000';
+  await workbook.xlsx.writeFile(entrada);
+
+  const imported = await ExcelService.importWorkbook({ lote: '37', filePath: entrada });
+
+  assert.equal(imported.ok, true);
+  assert.equal(imported.data.preview[0].ean, '000123');
 });
 
 test('spreadsheet import routes stage then confirm an import', async t => {

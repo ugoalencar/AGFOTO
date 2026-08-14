@@ -36,6 +36,16 @@ async function resolveLocalWorkbook(filePath) {
   return realFile;
 }
 
+function readCellValue(cell) {
+  if (typeof cell.value === 'number') {
+    if (/^0+$/.test(cell.numFmt || '') && Number.isInteger(cell.value) && cell.value >= 0) {
+      return sanitizeCellValue(String(cell.value).padStart(cell.numFmt.length, '0'));
+    }
+    return sanitizeCellValue(cell.text || cell.value);
+  }
+  return toCellString(cell.value);
+}
+
 /**
  * Serviço de Excel
  * Gerencia importação, unificação e exportação de planilhas
@@ -113,11 +123,11 @@ export class ExcelService {
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return; // Skip header
 
-        const ean = sanitizeCellValue(row.getCell(eanIdx + 1).value);
+        const ean = readCellValue(row.getCell(eanIdx + 1));
         if (!ean) return; // Skip empty rows
 
-        const codigo = codigoIdx >= 0 ? sanitizeCellValue(row.getCell(codigoIdx + 1).value) : null;
-        const descricao = descricaoIdx >= 0 ? sanitizeCellValue(row.getCell(descricaoIdx + 1).value) : null;
+        const codigo = codigoIdx >= 0 ? readCellValue(row.getCell(codigoIdx + 1)) : null;
+        const descricao = descricaoIdx >= 0 ? readCellValue(row.getCell(descricaoIdx + 1)) : null;
 
         items.push(new ExcelItem(ean, codigo, descricao));
       });
@@ -188,9 +198,9 @@ export class ExcelService {
   static async importWorkbook({ lote, filePath }) {
     try {
       if (!Lote.isValid(lote)) return { ok: false, error: 'Invalid lote' };
+      const ext = path.extname(filePath || '').toLowerCase();
+      if (ext !== '.xlsx') return { ok: false, error: 'Only .xlsx files are accepted' };
       const safePath = await resolveLocalWorkbook(filePath);
-      const ext = path.extname(safePath).toLowerCase();
-      if (!['.xlsx', '.xls'].includes(ext)) return { ok: false, error: 'Only .xlsx and .xls are accepted' };
       const stats = await fs.promises.stat(safePath);
       if (!stats.isFile()) return { ok: false, error: 'Workbook path must be a file' };
       if (stats.size > config.validation.maxSheetSize) return { ok: false, error: 'Spreadsheet exceeds size limit' };
@@ -212,7 +222,7 @@ export class ExcelService {
     if (session.conflicts.length) {
       return { ok: false, error: 'Resolve conflicts before confirming', data: { conflicts: session.conflicts } };
     }
-    const result = await this.mergeToLookup(session.lote, session.items);
+    const result = await this.mergeToLookup(session.lote, session.items, { rejectConflicts: true });
     if (result.ok) pendingImports.delete(importId);
     return result;
   }
@@ -308,9 +318,14 @@ export class ExcelService {
   /**
    * Merges items no lookup-integrado.xlsx
    */
-  static async mergeToLookup(lote, items) {
+  static async mergeToLookup(lote, items, { rejectConflicts = false } = {}) {
     try {
       const lookupPath = path.join(config.paths.xlsx, 'lookup-integrado.xlsx');
+      const normalizedItems = items.map(item => ({
+        ean: sanitizeCellValue(item.ean),
+        codigo: sanitizeCellValue(item.codigo),
+        descricao: sanitizeCellValue(item.descricao)
+      }));
 
       let workbook = new ExcelJS.Workbook();
       let worksheet;
@@ -340,17 +355,37 @@ export class ExcelService {
         const rowLote = toCellString(row.getCell(1).value);
         const ean = toCellString(row.getCell(2).value);
         if (rowLote && ean) {
-          existingMap.set(`${rowLote}-${ean}`, rowNumber);
+          existingMap.set(`${rowLote}-${ean}`, {
+            rowNumber,
+            codigo: toCellString(row.getCell(3).value),
+            descricao: toCellString(row.getCell(4).value)
+          });
         }
       });
 
       // Adiciona ou atualiza items
+      const conflicts = [];
+      if (rejectConflicts) {
+        for (const item of normalizedItems) {
+          const existing = existingMap.get(`${lote}-${item.ean}`);
+          if (!existing) continue;
+          for (const field of ['codigo', 'descricao']) {
+            if (existing[field] !== item[field]) {
+              conflicts.push(new ExcelConflict(lote, item.ean, field, existing[field], item[field], 'lookup'));
+            }
+          }
+        }
+      }
+      if (conflicts.length) {
+        return { ok: false, error: 'Resolve conflicts before confirming', data: { conflicts } };
+      }
+
       let inserted = 0;
       let unchanged = 0;
-      for (const item of items) {
+      for (const item of normalizedItems) {
         const key = `${lote}-${item.ean}`;
-        const rowIdx = existingMap.get(key);
-        if (rowIdx) {
+        const existing = existingMap.get(key);
+        if (existing) {
           unchanged++;
         } else {
           // Novo
