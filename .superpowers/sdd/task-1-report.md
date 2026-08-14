@@ -96,3 +96,16 @@ Testes executados:
 Commits:
 
 - `81092bb fix: block delivery execution under phase 1 prefixes`
+
+## Fixes Finais da Tarefa 1
+
+- Correcao: `server/app.js` bloqueia os POSTs proibidos da Fase 1 antes do
+  parser JSON e do `operationMiddleware`. Os caminhos `/api/entregas/executar`,
+  `/api/qa/executar`, `/api/retrabalhos/executar`, `/api/relatorios/executar`,
+  `/api/carros` e `/api/adset` retornam `404` com ou sem `X-Operation-ID`.
+  Rotas mutaveis validas permanecem sob validacao de `operationId`, inclusive
+  para JSON malformado sem header.
+- Testes: `node --test tests/integration/api-routes.test.js` (5 aprovados),
+  `node --test tests/unit/operation-store.test.js tests/integration/api-routes.test.js`
+  (7 aprovados) e `npm.cmd test` (117 aprovados), todos sem falhas.
+- Commit: `bbb8b19 fix: block phase 1 routes before operation validation`.
