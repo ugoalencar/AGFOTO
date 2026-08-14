@@ -9,6 +9,28 @@ import ExcelService from './excel-service.js';
  * Orquestra lógica de captura de fotos, salvamento e transições de estado
  */
 export class CapturaService {
+  static captureLocks = new Map();
+
+  static async withCaptureLock(loteNumero, operation) {
+    const key = String(loteNumero ?? '').trim();
+    const previous = this.captureLocks.get(key) || Promise.resolve();
+    let release;
+    const current = new Promise(resolve => {
+      release = resolve;
+    });
+    this.captureLocks.set(key, current);
+
+    await previous.catch(() => {});
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (this.captureLocks.get(key) === current) {
+        this.captureLocks.delete(key);
+      }
+    }
+  }
+
   /**
    * Carrega ou cria lote
    */
@@ -100,6 +122,12 @@ export class CapturaService {
    * 6. Registra auditoria
    */
   static async saveCapture(loteNumero, gtin, codigo = null, descricao = null) {
+    return this.withCaptureLock(loteNumero, () => (
+      this.saveCaptureLocked(loteNumero, gtin, codigo, descricao)
+    ));
+  }
+
+  static async saveCaptureLocked(loteNumero, gtin, codigo = null, descricao = null) {
     let snapshot;
     let normalizedGtin = gtin;
 
@@ -124,8 +152,6 @@ export class CapturaService {
       normalizedGtin = Produto.normalize(gtin);
 
       // 3. Carrega ou cria lote
-      const lote = await LoteRepository.loadOrCreate(loteNumero);
-
       // 4. ObtÃ©m produto alvo
       const moveResult = await FileRepository.moveSnapshotToFinalizadas(
         snapshot,
@@ -142,7 +168,7 @@ export class CapturaService {
           ok: false,
           error: 'No files moved; capture was not saved',
           data: {
-            lote: lote.numero,
+            lote: loteNumero,
             gtin: normalizedGtin,
             fotosMovidas: 0,
             fotosFalhadas: moveResult.failed.length,
@@ -152,6 +178,7 @@ export class CapturaService {
       }
 
       // Atualiza o JSON apenas com as fotos efetivamente movidas.
+      const lote = await LoteRepository.loadOrCreate(loteNumero);
       const produto = lote.getOrCreateItem(normalizedGtin, codigo, descricao);
       produto.markCaptureSaved(moveResult.moved.length);
       await LoteRepository.save(lote);

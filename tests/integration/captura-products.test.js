@@ -207,7 +207,7 @@ test('save capture recaptures the same GTIN with a deterministic suffix and cumu
   assert.equal(produto.historico.filter(evento => evento.evento === 'captura_salva').length, 2);
 });
 
-test('save capture does not persist a product or workbook when no files move', async t => {
+test('save capture does not persist a lote, product, or workbook when no files move', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
   await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto.jpg'), JPG_BYTES);
@@ -223,8 +223,7 @@ test('save capture does not persist a product or workbook when no files move', a
 
   assert.equal(result.ok, false);
   assert.match(result.error, /no files moved/i);
-  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_40.json'), 'utf8'));
-  assert.deepEqual(loteJson.itens, {});
+  assert.equal(await fs.promises.stat(path.join(env.paths.jsons, 'Lote_40.json')).then(() => true, () => false), false);
   assert.equal(await fs.promises.stat(path.join(env.paths.xlsx, 'controle-lotes.xlsx')).then(() => true, () => false), false);
 });
 
@@ -273,4 +272,61 @@ test('save capture reports an Excel rebuild failure as a warning after JSON is s
   assert.match(result.warnings[0].error, /workbook is locked/i);
   const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_42.json'), 'utf8'));
   assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
+});
+
+test('save capture removes its final destination when TEMP unlink fails after an exclusive copy', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
+  const finalPhoto = path.join(env.paths.finalizadas, 'LOTE 43', '000123', 'foto.jpg');
+  await fs.promises.writeFile(tempPhoto, JPG_BYTES);
+  const originalUnlink = fs.promises.unlink;
+  fs.promises.unlink = async filePath => {
+    if (filePath === tempPhoto) throw new Error('simulated TEMP unlink failure');
+    return originalUnlink.call(fs.promises, filePath);
+  };
+  t.after(() => {
+    fs.promises.unlink = originalUnlink;
+  });
+
+  const result = await CapturaService.saveCapture('43', '000123');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /no files moved/i);
+  assert.equal(await fs.promises.stat(finalPhoto).then(() => true, () => false), false);
+  assert.equal(await fs.promises.stat(path.join(env.paths.jsons, 'Lote_43.json')).then(() => true, () => false), false);
+  assert.equal(await fs.promises.stat(path.join(env.paths.xlsx, 'controle-lotes.xlsx')).then(() => true, () => false), false);
+});
+
+test('concurrent captures for the same lote and GTIN preserve cumulative JSON state', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const firstPhoto = path.join(env.paths.imagesTemp, 'first.jpg');
+  const secondPhoto = path.join(env.paths.imagesTemp, 'second.jpg');
+  await fs.promises.writeFile(firstPhoto, JPG_BYTES);
+  await fs.promises.writeFile(secondPhoto, JPG_BYTES);
+
+  const originalSnapshot = FileRepository.snapshotTempFiles;
+  let snapshotCall = 0;
+  FileRepository.snapshotTempFiles = async () => {
+    snapshotCall += 1;
+    return snapshotCall === 1
+      ? [{ name: 'first.jpg', path: firstPhoto }]
+      : [{ name: 'second.jpg', path: secondPhoto }];
+  };
+  t.after(() => {
+    FileRepository.snapshotTempFiles = originalSnapshot;
+  });
+
+  const [first, second] = await Promise.all([
+    CapturaService.saveCapture('44', '000123'),
+    CapturaService.saveCapture('44', '000123')
+  ]);
+
+  assert.equal(first.ok, true);
+  assert.equal(second.ok, true);
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_44.json'), 'utf8'));
+  const produto = loteJson.itens['000123'];
+  assert.equal(produto.quantidadeFotos, 2);
+  assert.equal(produto.historico.filter(evento => evento.evento === 'captura_salva').length, 2);
 });

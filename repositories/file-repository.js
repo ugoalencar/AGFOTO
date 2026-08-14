@@ -117,7 +117,19 @@ export class FileRepository {
           throw err;
         }
 
-        await fs.promises.unlink(safeSrc);
+        try {
+          await fs.promises.unlink(safeSrc);
+        } catch (unlinkError) {
+          try {
+            await fs.promises.unlink(destPath);
+          } catch (cleanupError) {
+            throw new Error(
+              `Source cleanup failed after exclusive copy (${unlinkError.message}); ` +
+              `destination cleanup also failed (${cleanupError.message})`
+            );
+          }
+          throw new Error(`Source cleanup failed after exclusive copy; destination copy was removed (${unlinkError.message})`);
+        }
         return destPath;
       }
     } catch (err) {
