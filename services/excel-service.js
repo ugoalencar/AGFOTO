@@ -7,11 +7,34 @@ import {
   ExcelImportResult,
   EXCEL_HEADERS,
   findColumnIndex,
-  sanitizeCellValue
+  sanitizeCellValue,
+  toCellString
 } from '../domain/excel.js';
 import { config } from '../server/config.js';
 import { auditLogger } from '../server/audit-logger.js';
 import LoteRepository from '../repositories/lote-repository.js';
+import { assertInsideRoot } from '../server/secure-filesystem.js';
+import { Lote } from '../domain/lote.js';
+
+const pendingImports = new Map();
+
+function makeImportId(lote, filePath) {
+  return `${lote}:${path.basename(filePath)}:${Date.now()}`;
+}
+
+async function resolveLocalWorkbook(filePath) {
+  if (typeof filePath !== 'string' || /^https?:\/\//i.test(filePath) || /^file:/i.test(filePath)) {
+    throw new Error('Workbook path must be a local path');
+  }
+  const candidate = path.resolve(filePath);
+  assertInsideRoot(candidate, config.paths.xlsx);
+  const [realRoot, realFile] = await Promise.all([
+    fs.promises.realpath(config.paths.xlsx),
+    fs.promises.realpath(candidate)
+  ]);
+  assertInsideRoot(realFile, realRoot);
+  return realFile;
+}
 
 /**
  * Serviço de Excel
@@ -74,7 +97,7 @@ export class ExcelService {
 
       // Detecta headers (primeira linha)
       const firstRow = worksheet.getRow(1);
-      const headers = firstRow.values || [];
+      const headers = (firstRow.values || []).slice(1);
 
       // Encontra colunas
       const eanIdx = findColumnIndex(headers, EXCEL_HEADERS.ean);
@@ -117,6 +140,99 @@ export class ExcelService {
   /**
    * Importa items e detecta conflitos
    */
+  static async parseWorkbook(filePath, lote) {
+    const parsed = await this.parseExcelFile(filePath);
+    if (!parsed.ok) return parsed;
+    if (parsed.data.count > config.validation.maxSheetRows) {
+      return { ok: false, error: 'Spreadsheet exceeds row limit' };
+    }
+    return { ok: true, data: parsed.data.items };
+  }
+
+  static async detectLookupConflicts(lote, items) {
+    const existing = new Map();
+    const lookupPath = path.join(config.paths.xlsx, 'lookup-integrado.xlsx');
+    try {
+      await fs.promises.access(lookupPath);
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(lookupPath);
+      const worksheet = workbook.getWorksheet('Lookup') || workbook.worksheets[0];
+      worksheet?.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return;
+        const rowLote = toCellString(row.getCell(1).value);
+        const ean = toCellString(row.getCell(2).value);
+        if (rowLote === String(lote) && ean) {
+          existing.set(ean, { codigo: toCellString(row.getCell(3).value), descricao: toCellString(row.getCell(4).value) });
+        }
+      });
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+
+    const conflicts = [];
+    const staged = new Map();
+    for (const item of items) {
+      const current = staged.get(item.ean) || existing.get(item.ean);
+      if (current) {
+        for (const field of ['codigo', 'descricao']) {
+          if (current[field] !== item[field]) {
+            conflicts.push(new ExcelConflict(lote, item.ean, field, current[field], item[field], 'lookup'));
+          }
+        }
+      }
+      staged.set(item.ean, { codigo: item.codigo, descricao: item.descricao });
+    }
+    return conflicts;
+  }
+
+  static async importWorkbook({ lote, filePath }) {
+    try {
+      if (!Lote.isValid(lote)) return { ok: false, error: 'Invalid lote' };
+      const safePath = await resolveLocalWorkbook(filePath);
+      const ext = path.extname(safePath).toLowerCase();
+      if (!['.xlsx', '.xls'].includes(ext)) return { ok: false, error: 'Only .xlsx and .xls are accepted' };
+      const stats = await fs.promises.stat(safePath);
+      if (!stats.isFile()) return { ok: false, error: 'Workbook path must be a file' };
+      if (stats.size > config.validation.maxSheetSize) return { ok: false, error: 'Spreadsheet exceeds size limit' };
+
+      const parsed = await this.parseWorkbook(safePath, lote);
+      if (!parsed.ok) return parsed;
+      const conflicts = await this.detectLookupConflicts(lote, parsed.data);
+      const importId = makeImportId(lote, safePath);
+      pendingImports.set(importId, { lote: String(lote), filePath: safePath, items: parsed.data, conflicts });
+      return { ok: true, data: { importId, preview: parsed.data.slice(0, 20), total: parsed.data.length, conflicts } };
+    } catch (error) {
+      return { ok: false, error: error.message };
+    }
+  }
+
+  static async confirmImport(importId) {
+    const session = pendingImports.get(importId);
+    if (!session) return { ok: false, error: 'Import session not found' };
+    if (session.conflicts.length) {
+      return { ok: false, error: 'Resolve conflicts before confirming', data: { conflicts: session.conflicts } };
+    }
+    const result = await this.mergeToLookup(session.lote, session.items);
+    if (result.ok) pendingImports.delete(importId);
+    return result;
+  }
+
+  static async lookupCodigo(lote, ean) {
+    try {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(path.join(config.paths.xlsx, 'lookup-integrado.xlsx'));
+      const worksheet = workbook.getWorksheet('Lookup') || workbook.worksheets[0];
+      for (const row of worksheet?.getRows(2, Math.max(0, worksheet.rowCount - 1)) || []) {
+        if (toCellString(row.getCell(1).value) === String(lote) && toCellString(row.getCell(2).value) === String(ean)) {
+          return { ok: true, data: { codigo: toCellString(row.getCell(3).value) || '', descricao: toCellString(row.getCell(4).value) || '' } };
+        }
+      }
+      return { ok: false, error: `Codigo not found for lote ${lote} EAN ${ean}` };
+    } catch (error) {
+      return { ok: false, error: `Cannot lookup codigo: ${error.message}` };
+    }
+  }
+
   static async importItems(lote, items, source = 'upload') {
     try {
       const loteObj = await LoteRepository.load(lote);
@@ -221,27 +337,25 @@ export class ExcelService {
       const existingMap = new Map();
       worksheet.eachRow((row, rowNumber) => {
         if (rowNumber === 1) return;
-        const ean = row.getCell('ean').value;
-        if (ean) {
-          existingMap.set(`${lote}-${ean}`, rowNumber);
+        const rowLote = toCellString(row.getCell(1).value);
+        const ean = toCellString(row.getCell(2).value);
+        if (rowLote && ean) {
+          existingMap.set(`${rowLote}-${ean}`, rowNumber);
         }
       });
 
       // Adiciona ou atualiza items
-      let added = 0;
+      let inserted = 0;
+      let unchanged = 0;
       for (const item of items) {
         const key = `${lote}-${item.ean}`;
         const rowIdx = existingMap.get(key);
-        const timestamp = new Date().toISOString();
-
         if (rowIdx) {
-          // Atualiza existente
-          const row = worksheet.getRow(rowIdx);
-          row.assign({ lote, ean: item.ean, codigo: item.codigo, descricao: item.descricao, importedAt: timestamp });
+          unchanged++;
         } else {
           // Novo
-          worksheet.addRow({ lote, ean: item.ean, codigo: item.codigo, descricao: item.descricao, importedAt: timestamp });
-          added++;
+          worksheet.addRow({ lote, ean: item.ean, codigo: item.codigo, descricao: item.descricao, importedAt: new Date().toISOString() });
+          inserted++;
         }
       }
 
@@ -252,7 +366,10 @@ export class ExcelService {
         ok: true,
         data: {
           path: lookupPath,
-          added,
+          added: inserted,
+          inserted,
+          unchanged,
+          conflicts: [],
           total: worksheet.rowCount - 1
         }
       };

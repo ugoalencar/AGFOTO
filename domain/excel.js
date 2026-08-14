@@ -186,6 +186,17 @@ export function sanitizeCellValue(value) {
   return str;
 }
 
+export function toCellString(value) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'object' && value.richText) {
+    return sanitizeCellValue(value.richText.map(part => part.text).join(''));
+  }
+  if (typeof value === 'object' && value.text !== undefined) {
+    return sanitizeCellValue(value.text);
+  }
+  return sanitizeCellValue(value);
+}
+
 export default {
   ExcelConflict,
   ExcelItem,
@@ -193,5 +204,6 @@ export default {
   EXCEL_HEADERS,
   normalizeHeader,
   findColumnIndex,
-  sanitizeCellValue
+  sanitizeCellValue,
+  toCellString
 };
