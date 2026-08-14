@@ -36,3 +36,14 @@
 - `node --test tests/integration/captura-products.test.js tests/integration/qa-products.test.js`: 33 aprovados, 0 falhas, 1 ignorado (symlink do Windows sem permissao).
 - `git diff --check`: sem erros de whitespace.
 - Varredura de referencias de runtime em `frontend/public` (exceto `vendor`): sem referencias remotas ou CDN novas.
+
+## Correcao responsiva adicional
+
+- Em telas de ate 560px, a linha do palco de captura agora usa altura baseada no conteudo. Os dois grids empilhados ficam acessiveis pelo scroll existente da view, sem clipping pelo `overflow: hidden` do card.
+- As regras de layout desktop e medio nao foram alteradas.
+
+### Verificacao da correcao
+
+- Adicionado teste de regressao que confirma a linha de palco com tamanho automatico no breakpoint de telefone.
+- `node --test tests/integration/captura-products.test.js tests/integration/qa-products.test.js`: 34 aprovados, 0 falhas, 1 ignorado (symlink do Windows sem permissao) apos a correcao.
+- `git diff --check`: sem erros de whitespace.

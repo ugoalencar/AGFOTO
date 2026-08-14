@@ -29,6 +29,16 @@ async function request(app, requestPath, options = {}) {
   }
 }
 
+test('phone capture layout allows the stacked stage to size to its contents', async () => {
+  const css = await fs.promises.readFile(path.resolve('frontend/public/css/main.css'), 'utf8');
+  const phoneBreakpoint = css.match(/@media \(max-width: 560px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+
+  assert.match(
+    phoneBreakpoint,
+    /\.capture-view\s*\{\s*grid-template-rows:\s*auto\s+auto\s+minmax\(160px,\s*\.5fr\);\s*\}/
+  );
+});
+
 test('TEMP listing includes only valid image signatures with stable state', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);

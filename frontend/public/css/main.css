@@ -854,6 +854,10 @@ select {
 }
 
 @media (max-width: 560px) {
+  .capture-view {
+    grid-template-rows: auto auto minmax(160px, .5fr);
+  }
+
   .capture-stage {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto minmax(180px, 1fr) auto minmax(180px, 1fr);
