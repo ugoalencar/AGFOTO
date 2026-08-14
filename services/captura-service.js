@@ -95,7 +95,7 @@ export class CapturaService {
    * 1. Snapshots nomes disponíveis em TEMP
    * 2. Valida GTIN
    * 3. Carrega/cria lote
-   * 4. Copia snapshot para Finalizadas/LOTE/GTIN/
+   * 4. Move snapshot para Finalizadas/LOTE/GTIN/
    * 5. Atualiza JSON com novo status
    * 6. Registra auditoria
    */
@@ -127,9 +127,6 @@ export class CapturaService {
       const lote = await LoteRepository.loadOrCreate(loteNumero);
 
       // 4. ObtÃ©m produto alvo
-      const produto = lote.getOrCreateItem(normalizedGtin, codigo, descricao);
-
-      // 5. Move snapshot para Finalizadas
       const moveResult = await FileRepository.moveSnapshotToFinalizadas(
         snapshot,
         loteNumero,
@@ -140,10 +137,34 @@ export class CapturaService {
         console.warn(`Some files failed to move: `, moveResult.failed);
       }
 
-      // 6. Atualiza o JSON apenas com as fotos efetivamente movidas.
+      if (moveResult.moved.length === 0) {
+        return {
+          ok: false,
+          error: 'No files moved; capture was not saved',
+          data: {
+            lote: lote.numero,
+            gtin: normalizedGtin,
+            fotosMovidas: 0,
+            fotosFalhadas: moveResult.failed.length,
+            detalhes: moveResult
+          }
+        };
+      }
+
+      // Atualiza o JSON apenas com as fotos efetivamente movidas.
+      const produto = lote.getOrCreateItem(normalizedGtin, codigo, descricao);
       produto.markCaptureSaved(moveResult.moved.length);
       await LoteRepository.save(lote);
-      await ExcelService.updateControlFromLote(loteNumero);
+
+      const warnings = [];
+      try {
+        await ExcelService.updateControlFromLote(loteNumero);
+      } catch (err) {
+        warnings.push({
+          code: 'CONTROL_WORKBOOK_UPDATE_FAILED',
+          error: err.message
+        });
+      }
 
       // 7. Registra auditoria
       await auditLogger.log('CAPTURA_SALVA', {
@@ -164,7 +185,8 @@ export class CapturaService {
           status: produto.status,
           detalhes: moveResult
         },
-        error: moveResult.failed.length ? 'Some files failed to move' : undefined
+        error: moveResult.failed.length ? 'Some files failed to move' : undefined,
+        warnings: warnings.length > 0 ? warnings : undefined
       };
     } catch (err) {
       await auditLogger.log('CAPTURA_ERRO', {

@@ -6,7 +6,6 @@ import {
   validateFilename,
   createSecureDirectory,
   listAllowedFiles,
-  fileExists,
   removeSecureFile,
   waitForFileStability
 } from '../server/secure-filesystem.js';
@@ -77,21 +76,15 @@ export class FileRepository {
   }
 
   /**
-   * Copia arquivo de TEMP para Finalizadas com snapshot atomicidade
+   * Move arquivo de TEMP para Finalizadas sem sobrescrever.
    * Não sobrescreve, usa nome determinístico em colisão
    */
-  static async uniqueDestPath(destDir, filename) {
+  static async uniqueDestPath(destDir, filename, counter = 0) {
     const ext = path.extname(filename);
     const base = path.basename(filename, ext);
-    let candidate = path.join(destDir, filename);
-    let counter = 1;
-
-    while (await fileExists(candidate)) {
-      candidate = path.join(destDir, `${base}_${String(counter).padStart(3, '0')}${ext}`);
-      counter++;
-    }
-
-    return candidate;
+    return counter === 0
+      ? path.join(destDir, filename)
+      : path.join(destDir, `${base}_${String(counter).padStart(3, '0')}${ext}`);
   }
 
   /**
@@ -114,16 +107,19 @@ export class FileRepository {
       );
       await createSecureDirectory(destDir, config.paths.finalizadas);
       const filename = validateFilename(path.basename(safeSrc));
-      const destPath = await this.uniqueDestPath(destDir, filename);
 
-      try {
-        await fs.promises.rename(safeSrc, destPath);
-      } catch (err) {
-        if (err.code !== 'EXDEV') throw err;
-        await fs.promises.copyFile(safeSrc, destPath, fs.constants.COPYFILE_EXCL);
+      for (let counter = 0; ; counter++) {
+        const destPath = await this.uniqueDestPath(destDir, filename, counter);
+        try {
+          await fs.promises.copyFile(safeSrc, destPath, fs.constants.COPYFILE_EXCL);
+        } catch (err) {
+          if (err.code === 'EEXIST') continue;
+          throw err;
+        }
+
         await fs.promises.unlink(safeSrc);
+        return destPath;
       }
-      return destPath;
     } catch (err) {
       throw new Error(`Cannot move to finalizadas: ${err.message}`);
     }
@@ -236,7 +232,7 @@ export class FileRepository {
   }
 
   /**
-   * Copia snapshot de arquivos para Finalizadas
+   * Move snapshot de arquivos para Finalizadas
    */
   static async moveSnapshotToFinalizadas(snapshot, loteNumero, gtin) {
     try {

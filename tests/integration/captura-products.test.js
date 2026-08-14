@@ -5,6 +5,7 @@ import path from 'path';
 import ExcelJS from 'exceljs';
 import { FileRepository } from '../../repositories/file-repository.js';
 import CapturaService from '../../services/captura-service.js';
+import ExcelService from '../../services/excel-service.js';
 import { createApp } from '../../server/app.js';
 import { createTestEnv } from '../helpers/test-env.js';
 import { applyConfigOverrides } from '../../server/config.js';
@@ -158,4 +159,118 @@ test('save capture uses the normalized GTIN as the JSON key and final folder', a
   );
   const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_38.json'), 'utf8'));
   assert.ok(loteJson.itens['000123']);
+});
+
+test('moving colliding filenames concurrently preserves both files with deterministic suffixes', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const firstSource = path.join(env.paths.imagesTemp, 'primeira', 'foto.jpg');
+  const secondSource = path.join(env.paths.imagesTemp, 'segunda', 'foto.jpg');
+  await fs.promises.mkdir(path.dirname(firstSource), { recursive: true });
+  await fs.promises.mkdir(path.dirname(secondSource), { recursive: true });
+  await fs.promises.writeFile(firstSource, Buffer.from('first'));
+  await fs.promises.writeFile(secondSource, Buffer.from('second'));
+
+  await Promise.all([
+    FileRepository.moveToFinalizadas(firstSource, '38', '000123'),
+    FileRepository.moveToFinalizadas(secondSource, '38', '000123')
+  ]);
+
+  const destination = path.join(env.paths.finalizadas, 'LOTE 38', '000123');
+  const contents = await Promise.all([
+    fs.promises.readFile(path.join(destination, 'foto.jpg'), 'utf8'),
+    fs.promises.readFile(path.join(destination, 'foto_001.jpg'), 'utf8')
+  ]);
+  assert.deepEqual(contents.sort(), ['first', 'second']);
+});
+
+test('save capture recaptures the same GTIN with a deterministic suffix and cumulative photo count', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
+
+  await fs.promises.writeFile(tempPhoto, JPG_BYTES);
+  const firstCapture = await CapturaService.saveCapture('39', '000123');
+  await fs.promises.writeFile(tempPhoto, JPG_BYTES);
+  const secondCapture = await CapturaService.saveCapture('39', '000123');
+
+  assert.equal(firstCapture.ok, true);
+  assert.equal(secondCapture.ok, true);
+  assert.equal(secondCapture.data.fotosMovidas, 1);
+  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 39', '000123', 'foto.jpg')).then(() => true, () => false), true);
+  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 39', '000123', 'foto_001.jpg')).then(() => true, () => false), true);
+
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_39.json'), 'utf8'));
+  const produto = loteJson.itens['000123'];
+  assert.equal(produto.status, 'pendente_qa');
+  assert.equal(produto.quantidadeFotos, 2);
+  assert.equal(produto.historico.filter(evento => evento.evento === 'captura_salva').length, 2);
+});
+
+test('save capture does not persist a product or workbook when no files move', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto.jpg'), JPG_BYTES);
+  const originalMove = FileRepository.moveToFinalizadas;
+  FileRepository.moveToFinalizadas = async () => {
+    throw new Error('destination unavailable');
+  };
+  t.after(() => {
+    FileRepository.moveToFinalizadas = originalMove;
+  });
+
+  const result = await CapturaService.saveCapture('40', '000123');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /no files moved/i);
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_40.json'), 'utf8'));
+  assert.deepEqual(loteJson.itens, {});
+  assert.equal(await fs.promises.stat(path.join(env.paths.xlsx, 'controle-lotes.xlsx')).then(() => true, () => false), false);
+});
+
+test('save capture persists only moved files when a later move fails', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'a.jpg'), JPG_BYTES);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'b.jpg'), JPG_BYTES);
+  const originalMove = FileRepository.moveToFinalizadas;
+  FileRepository.moveToFinalizadas = async (srcPath, ...args) => {
+    if (path.basename(srcPath) === 'b.jpg') throw new Error('simulated move failure');
+    return originalMove.call(FileRepository, srcPath, ...args);
+  };
+  t.after(() => {
+    FileRepository.moveToFinalizadas = originalMove;
+  });
+
+  const result = await CapturaService.saveCapture('41', '000123');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /some files failed to move/i);
+  assert.equal(result.data.fotosMovidas, 1);
+  assert.equal(result.data.fotosFalhadas, 1);
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_41.json'), 'utf8'));
+  assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
+  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 41', '000123', 'a.jpg')).then(() => true, () => false), true);
+  assert.equal(await fs.promises.stat(path.join(env.paths.imagesTemp, 'b.jpg')).then(() => true, () => false), true);
+});
+
+test('save capture reports an Excel rebuild failure as a warning after JSON is saved', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto.jpg'), JPG_BYTES);
+  const originalUpdateControl = ExcelService.updateControlFromLote;
+  ExcelService.updateControlFromLote = async () => {
+    throw new Error('workbook is locked');
+  };
+  t.after(() => {
+    ExcelService.updateControlFromLote = originalUpdateControl;
+  });
+
+  const result = await CapturaService.saveCapture('42', '000123');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.fotosMovidas, 1);
+  assert.match(result.warnings[0].error, /workbook is locked/i);
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_42.json'), 'utf8'));
+  assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
 });

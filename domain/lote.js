@@ -154,11 +154,25 @@ export class Produto {
   }
 
   /**
-   * Marca como captura salva (muda status para pendente_qa)
+   * Registra fotos movidas e conserva o produto em pendente_qa em recapturas.
    */
   markCaptureSaved(photoCount) {
-    this.updatePhotoCount(photoCount);
-    transitionProduct(this, ProductEvents.CAPTURA_SALVA, { quantidadeFotos: photoCount });
+    const quantidadeFotos = this.quantidadeFotos + photoCount;
+    this.updatePhotoCount(quantidadeFotos);
+
+    if (this.status === ProductStatus.PENDENTE_QA) {
+      this.addHistoricoEvent(ProductEvents.CAPTURA_SALVA, {
+        quantidadeFotos: photoCount,
+        totalFotos: quantidadeFotos,
+        recaptura: true
+      });
+      return;
+    }
+
+    transitionProduct(this, ProductEvents.CAPTURA_SALVA, {
+      quantidadeFotos: photoCount,
+      totalFotos: quantidadeFotos
+    });
   }
 
   /**
