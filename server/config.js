@@ -65,7 +65,7 @@ export const config = {
 
   // Camera
   camera: {
-    executable: process.env.CAMERA_EXE || 'simplusCamera.exe'
+    executable: process.env.CAMERA_EXE || path.join(ROOT, 'simplusCameraLib', 'simplusCamera.exe')
   },
 
   // Timezone

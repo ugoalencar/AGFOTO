@@ -25,7 +25,22 @@ export class FileRepository {
    */
   static async listTempImages() {
     try {
-      return await listAllowedFiles(config.paths.imagesTemp);
+      const files = await listAllowedFiles(config.paths.imagesTemp, config.paths.imagesTemp);
+      const images = [];
+      for (const file of files) {
+        const stats = await fs.promises.stat(file.path);
+        images.push({
+          name: file.name,
+          path: file.path,
+          url: `/api/captura/imagem/temp/${encodeURIComponent(file.name)}`,
+          size: stats.size,
+          modified: stats.mtime.toISOString(),
+          stable: true,
+          signatureOk: true,
+          state: 'stable'
+        });
+      }
+      return images;
     } catch (err) {
       throw new Error(`Cannot list temp images: ${err.message}`);
     }

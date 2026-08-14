@@ -9,6 +9,7 @@ import { auditLogger } from './audit-logger.js';
 import { applyConfigOverrides } from './config.js';
 import { createOperationStore } from './operation-store.js';
 import { sendError, sendOk } from './response.js';
+import { CameraService } from '../services/camera-service.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
@@ -86,9 +87,22 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
     name: 'AG Fotografia',
     displayName: 'AG Foto'
   }));
-  app.get('/api/status/camera', (_req, res) => sendOk(res, {
-    camera: { connected: false, message: 'Camera status check not yet implemented' }
-  }));
+  app.get('/api/status/camera', async (_req, res, next) => {
+    try {
+      const service = app.locals.services.cameraService || new CameraService();
+      return sendOk(res, await service.getStatus());
+    } catch (error) {
+      return next(error);
+    }
+  });
+  app.post('/api/status/camera/open', async (_req, res, next) => {
+    try {
+      const service = app.locals.services.cameraService || new CameraService();
+      return sendOk(res, await service.open());
+    } catch (error) {
+      return next(error);
+    }
+  });
 
   app.use('/api/captura', capturaRoutes);
   app.use('/api/lotes', capturaRoutes);

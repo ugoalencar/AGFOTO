@@ -2,6 +2,8 @@ import express from 'express';
 import { Router } from 'express';
 import CapturaService from '../services/captura-service.js';
 import { Lote, Produto } from '../domain/lote.js';
+import { PreviewService } from '../services/preview-service.js';
+import { sendError } from '../server/response.js';
 
 const router = Router();
 
@@ -238,6 +240,15 @@ router.get('/anterior', async (req, res) => {
       error: result.error,
       requestId: req.id
     });
+  }
+});
+
+router.get('/imagem/temp/:filename', async (req, res) => {
+  try {
+    const service = req.app.locals.services.previewService || new PreviewService();
+    return res.sendFile(await service.resolveTempImage(req.params.filename));
+  } catch (error) {
+    return sendError(res, error.code === 'ENOENT' ? 404 : 400, error);
   }
 });
 

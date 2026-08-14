@@ -30,13 +30,10 @@ export function securePath(userPath, allowedRoot = ROOT) {
     throw new Error('Path must be a non-empty string');
   }
 
-  const resolved = path.resolve(allowedRoot, userPath);
-  const normalized = path.normalize(resolved);
+  const normalized = path.resolve(path.isAbsolute(userPath) ? userPath : path.join(allowedRoot, userPath));
 
   // Verifica se está realmente dentro da raiz
-  if (!normalized.startsWith(path.normalize(allowedRoot))) {
-    throw new Error(`Path traversal attempt: ${userPath}`);
-  }
+  assertInsideRoot(normalized, allowedRoot);
 
   // Rejeita caminhos UNC (\\server\share)
   if (normalized.startsWith('\\\\')) {
@@ -44,6 +41,14 @@ export function securePath(userPath, allowedRoot = ROOT) {
   }
 
   return normalized;
+}
+
+export function assertInsideRoot(resolvedPath, allowedRoot) {
+  const root = path.resolve(allowedRoot);
+  const target = path.resolve(resolvedPath);
+  const relative = path.relative(root, target);
+  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) return target;
+  throw new Error(`Path traversal attempt: ${resolvedPath}`);
 }
 
 /**
@@ -164,13 +169,18 @@ export async function listAllowedFiles(dirPath, root = ROOT) {
 
   try {
     const entries = await fs.promises.readdir(safe, { withFileTypes: true });
-    return entries
-      .filter(entry => entry.isFile() && ALLOWED_IMAGE_EXTENSIONS.includes(path.extname(entry.name).toLowerCase()))
-      .map(entry => ({
-        name: entry.name,
-        path: path.join(safe, entry.name)
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const files = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !ALLOWED_IMAGE_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())) continue;
+      const filePath = assertInsideRoot(path.join(safe, entry.name), root);
+      try {
+        await validateImageSignature(filePath);
+        files.push({ name: entry.name, path: filePath });
+      } catch {
+        // Do not expose incomplete or mislabeled camera files.
+      }
+    }
+    return files.sort((a, b) => a.name.localeCompare(b.name));
   } catch (err) {
     throw new Error(`Cannot list files: ${err.message}`);
   }
@@ -232,6 +242,7 @@ export async function fileExists(filePath) {
 
 export default {
   securePath,
+  assertInsideRoot,
   validateFilename,
   validateImageSignature,
   waitForFileStability,
