@@ -1,5 +1,6 @@
 import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+import fs from 'fs';
+import crypto from 'crypto';
 import LoteRepository from '../repositories/lote-repository.js';
 import { FileRepository } from '../repositories/file-repository.js';
 import { Manifest, DeliveryRecord, DeliveryType, DeliveryStatus } from '../domain/delivery.js';
@@ -293,45 +294,13 @@ export class DeliveryService {
    */
   static async prepareDelivery(lote, gtin, codigo, deliveryType = DeliveryType.NORMAL) {
     try {
-      const loteObj = await LoteRepository.load(lote);
-      const produto = loteObj.itens[gtin];
-
-      if (!produto) {
-        throw new Error(`Product not found: ${gtin}`);
-      }
-
-      if (!codigo) {
-        throw new Error('Internal code required for delivery');
-      }
-
-      // Seleciona fotos conforme tipo de entrega
-      let photos;
-      if (deliveryType === DeliveryType.ATUALIZACAO) {
-        photos = await FileRepository.listFinalizadasImages(lote, gtin, 'AT');
-      } else {
-        photos = await FileRepository.listFinalizadasImages(lote, gtin);
-        // Filtra AP/
-        photos = photos.filter(p => !p.name.includes('AP/'));
-      }
-
-      if (photos.length === 0) {
-        throw new Error('No eligible photos for delivery');
-      }
-
-      // Cria manifest
-      const manifest = new Manifest(lote, gtin, codigo, deliveryType);
-      photos.forEach(photo => {
-        // TODO: Calcular hash real
-        manifest.addFile(photo.name, 0, uuidv4());
-      });
-
-      return {
-        ok: true,
-        data: {
-          manifest: manifest.toJSON(),
-          readyForDelivery: true
-        }
-      };
+      const delivery = await this.buildDeliveryManifest(lote, gtin, codigo, deliveryType);
+      const record = new DeliveryRecord(delivery.normalizedLote, delivery.normalizedGtin, codigo, deliveryType);
+      record.status = DeliveryStatus.STAGING;
+      record.manifest = delivery.manifest;
+      record.remoteFolder = getFtpService().buildRemotePath(delivery.normalizedLote, codigo);
+      await this.persistDeliveryRecord(record);
+      return { ok: true, data: { manifest: delivery.manifest.toJSON(), attemptId: record.id, readyForDelivery: true } };
     } catch (err) {
       return { ok: false, error: err.message };
     }
@@ -341,8 +310,13 @@ export class DeliveryService {
    * Executa entrega via FTP
    */
   static async executeDelivery(lote, gtin, codigo, deliveryType = DeliveryType.NORMAL) {
+    let record = null;
+    let loaded = null;
+    let ftpService = null;
     try {
-      const ftpService = getFtpService();
+      const delivery = await this.buildDeliveryManifest(lote, gtin, codigo, deliveryType);
+      loaded = delivery.loaded;
+      ftpService = getFtpService();
 
       // Conecta ao FTP
       const connectResult = await ftpService.connect();
@@ -351,42 +325,65 @@ export class DeliveryService {
       }
 
       // Constrói caminho remoto
-      const remotePath = ftpService.buildRemotePath(lote, codigo);
-      const tempPath = `${remotePath}_${uuidv4().substring(0, 8)}_tmp`;
+      const remotePath = ftpService.buildRemotePath(delivery.normalizedLote, codigo);
+      record = new DeliveryRecord(delivery.normalizedLote, delivery.normalizedGtin, codigo, deliveryType);
+      record.remoteFolder = remotePath;
+      record.startAttempt(delivery.manifest);
+      await this.persistDeliveryRecord(record);
 
-      // TODO: Upload de arquivos
-      // 1. Criar pasta temporária
-      // 2. Upload cada arquivo
-      // 3. Verificar checksums
-      // 4. Renomear para destino final
+      for (const file of delivery.manifest.files) {
+        const upload = await ftpService.uploadFile(file.stagingPath, path.join(remotePath, file.name));
+        if (!upload.ok) throw new Error(`Upload failed for ${file.name}: ${upload.error}`);
+      }
+      const listed = await ftpService.listRemoteFiles(remotePath);
+      if (!listed.ok || listed.data.count !== delivery.manifest.fileCount) throw new Error('Remote verification failed: unexpected file count');
+      for (const file of delivery.manifest.files) {
+        const verified = await ftpService.verifyRemoteFile(path.join(remotePath, file.name));
+        if (!verified.ok || !verified.data.exists || verified.data.size !== file.size || verified.data.hash !== file.checksum) {
+          throw new Error(`Remote verification failed for ${file.name}`);
+        }
+      }
+      record.verify(delivery.manifest.fileCount);
+      delivery.manifest.complete();
+      record.complete(remotePath);
+      record.manifest = delivery.manifest;
 
       // Marca como entregue
-      const loteObj = await LoteRepository.load(lote);
-      const produto = loteObj.itens[gtin];
-      produto.markDelivered();
-      await LoteRepository.save(loteObj);
+      loaded.produto.markDelivered();
+      await LoteRepository.save(loaded.loteObj);
+      await ExcelService.updateControlFromLote(delivery.normalizedLote);
+      await this.persistDeliveryRecord(record);
 
       // Auditoria
       await auditLogger.log('ENTREGA_COMPLETA', {
-        lote,
-        gtin,
+        lote: delivery.normalizedLote,
+        gtin: delivery.normalizedGtin,
         codigo,
         deliveryType,
         remotePath
       });
 
-      // Desconecta
-      await ftpService.disconnect();
-
       return {
         ok: true,
         data: {
-          status: 'delivered',
+          status: ProductStatus.ENTREGUE,
           remotePath,
-          productoStatus: ProductStatus.ENTREGUE
+          produtoStatus: ProductStatus.ENTREGUE
         }
       };
     } catch (err) {
+      if (!loaded) {
+        try { loaded = await this.loadQaProduct(lote, gtin); } catch { /* invalid identities cannot be persisted */ }
+      }
+      if (record) {
+        record.fail(err.message);
+        await this.persistDeliveryRecord(record);
+      }
+      if (loaded) {
+        loaded.produto.recordDeliveryError(err.message);
+        await LoteRepository.save(loaded.loteObj);
+        await ExcelService.updateControlFromLote(loaded.lote);
+      }
       await auditLogger.log('ENTREGA_ERRO', {
         lote,
         gtin,
@@ -395,7 +392,46 @@ export class DeliveryService {
       });
 
       return { ok: false, error: err.message };
+    } finally {
+      if (ftpService) await ftpService.disconnect();
     }
+  }
+
+  static async buildDeliveryManifest(lote, gtin, codigo, deliveryType) {
+    if (![DeliveryType.NORMAL, DeliveryType.ATUALIZACAO].includes(deliveryType)) throw new Error('Invalid delivery type');
+    if (typeof codigo !== 'string' || codigo.trim().length === 0 || /[\\/:*?"<>|]/.test(codigo) || codigo.includes('..')) throw new Error('Internal code required for delivery');
+    const loaded = await this.loadQaProduct(lote, gtin);
+    if (loaded.produto.status !== ProductStatus.PRONTO_PARA_ENTREGA) throw new Error('Product is not ready for delivery');
+    const photos = await FileRepository.listFinalizadasImages(loaded.lote, loaded.gtin, deliveryType === DeliveryType.ATUALIZACAO ? 'AT' : null);
+    if (photos.length === 0) throw new Error('No eligible photos for delivery');
+    const stagingDir = path.join(config.paths.entrega, `LOTE ${loaded.lote}`, codigo);
+    await fs.promises.mkdir(stagingDir, { recursive: true });
+    const manifest = new Manifest(loaded.lote, loaded.gtin, codigo, deliveryType);
+    for (const photo of photos) {
+      const stagingPath = await this.copyToStaging(photo.path, stagingDir, photo.name);
+      const contents = await fs.promises.readFile(stagingPath);
+      manifest.addFile(path.basename(stagingPath), contents.length, crypto.createHash('sha256').update(contents).digest('hex'), stagingPath);
+    }
+    return { loaded, manifest, normalizedLote: loaded.lote, normalizedGtin: loaded.gtin };
+  }
+
+  static async copyToStaging(sourcePath, stagingDir, filename) {
+    const extension = path.extname(filename);
+    const basename = path.basename(filename, extension);
+    for (let index = 0; ; index += 1) {
+      const destination = path.join(stagingDir, index === 0 ? filename : `${basename}_${String(index).padStart(3, '0')}${extension}`);
+      try {
+        await fs.promises.copyFile(sourcePath, destination, fs.constants.COPYFILE_EXCL);
+        return destination;
+      } catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+      }
+    }
+  }
+
+  static async persistDeliveryRecord(record) {
+    await fs.promises.mkdir(config.paths.envios, { recursive: true });
+    await fs.promises.writeFile(path.join(config.paths.envios, `${record.id}.json`), JSON.stringify(record.toJSON(), null, 2), 'utf8');
   }
 
   /**

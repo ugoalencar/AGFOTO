@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import { MockFtpProvider, FtpService } from '../../services/ftp-service.js';
+
+async function createPhoto(t, name = 'photo.jpg') {
+  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agfoto-ftp-'));
+  t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
+  const filePath = path.join(root, name);
+  await fs.promises.writeFile(filePath, Buffer.from(`photo:${name}`));
+  return filePath;
+}
 
 test('MockFtpProvider - connect/disconnect', async () => {
   const provider = new MockFtpProvider();
@@ -14,23 +25,23 @@ test('MockFtpProvider - connect/disconnect', async () => {
   assert.strictEqual(provider.connected, false);
 });
 
-test('MockFtpProvider - upload file', async () => {
+test('MockFtpProvider - upload file', async t => {
   const provider = new MockFtpProvider();
   await provider.connect();
 
-  const result = await provider.uploadFile('/local/photo.jpg', '/remote/LOTE 37/CODE/photo.jpg');
+  const result = await provider.uploadFile(await createPhoto(t), '/remote/LOTE 37/CODE/photo.jpg');
 
   assert.ok(result.success);
   assert.ok(result.hash);
   assert.ok(result.size > 0);
 });
 
-test('MockFtpProvider - verify file', async () => {
+test('MockFtpProvider - verify file', async t => {
   const provider = new MockFtpProvider();
   await provider.connect();
 
   // Upload first
-  const uploadResult = await provider.uploadFile('/local/photo.jpg', '/remote/LOTE 37/photo.jpg');
+  const uploadResult = await provider.uploadFile(await createPhoto(t), '/remote/LOTE 37/photo.jpg');
   assert.ok(uploadResult.success);
 
   // Verify
@@ -39,12 +50,12 @@ test('MockFtpProvider - verify file', async () => {
   assert.strictEqual(verifyResult.hash, uploadResult.hash);
 });
 
-test('MockFtpProvider - list files', async () => {
+test('MockFtpProvider - list files', async t => {
   const provider = new MockFtpProvider();
   await provider.connect();
 
-  await provider.uploadFile('/local/photo1.jpg', '/remote/LOTE 37/photo1.jpg');
-  await provider.uploadFile('/local/photo2.jpg', '/remote/LOTE 37/photo2.jpg');
+  await provider.uploadFile(await createPhoto(t, 'photo1.jpg'), '/remote/LOTE 37/photo1.jpg');
+  await provider.uploadFile(await createPhoto(t, 'photo2.jpg'), '/remote/LOTE 37/photo2.jpg');
 
   const files = await provider.listFiles('/remote/LOTE 37');
 
@@ -53,11 +64,11 @@ test('MockFtpProvider - list files', async () => {
   assert.ok(files.some(f => f.name === 'photo2.jpg'));
 });
 
-test('MockFtpProvider - rename file', async () => {
+test('MockFtpProvider - rename file', async t => {
   const provider = new MockFtpProvider();
   await provider.connect();
 
-  await provider.uploadFile('/local/photo.jpg', '/remote/LOTE 37/photo.jpg');
+  await provider.uploadFile(await createPhoto(t), '/remote/LOTE 37/photo.jpg');
 
   const renameResult = await provider.renameRemote(
     '/remote/LOTE 37/photo.jpg',
@@ -112,26 +123,26 @@ test('FtpService - connect and disconnect', async () => {
   assert.ok(disconnectResult.ok);
 });
 
-test('FtpService - upload file', async () => {
+test('FtpService - upload file', async t => {
   const provider = new MockFtpProvider();
   const service = new FtpService(provider);
 
   await service.connect();
 
-  const result = await service.uploadFile('/local/photo.jpg', '/remote/photo.jpg');
+  const result = await service.uploadFile(await createPhoto(t), '/remote/photo.jpg');
 
   assert.ok(result.ok);
   assert.ok(result.data.hash);
 });
 
-test('FtpService - list remote files', async () => {
+test('FtpService - list remote files', async t => {
   const provider = new MockFtpProvider();
   const service = new FtpService(provider);
 
   await service.connect();
 
-  await service.uploadFile('/local/photo1.jpg', '/remote/photo1.jpg');
-  await service.uploadFile('/local/photo2.jpg', '/remote/photo2.jpg');
+  await service.uploadFile(await createPhoto(t, 'photo1.jpg'), '/remote/photo1.jpg');
+  await service.uploadFile(await createPhoto(t, 'photo2.jpg'), '/remote/photo2.jpg');
 
   const result = await service.listRemoteFiles('/remote');
 

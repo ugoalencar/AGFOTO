@@ -1,6 +1,6 @@
 import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import { auditLogger } from '../server/audit-logger.js';
+import fs from 'fs';
+import crypto from 'crypto';
 import { config } from '../server/config.js';
 
 /**
@@ -49,13 +49,11 @@ export class MockFtpProvider extends FtpProvider {
   }
 
   async connect() {
-    console.log('🔌 Mock FTP: Connecting...');
     this.connected = true;
     return true;
   }
 
   async disconnect() {
-    console.log('🔌 Mock FTP: Disconnecting...');
     this.connected = false;
     return true;
   }
@@ -65,25 +63,20 @@ export class MockFtpProvider extends FtpProvider {
       throw new Error('Not connected');
     }
 
-    // Simula upload de arquivo
-    console.log(`📤 Mock FTP: Upload ${localPath} → ${remotePath}`);
-
-    const fakeSize = Math.random() * 5000000 + 500000; // 0.5-5.5 MB
-    const fakeHash = uuidv4();
+    const contents = await fs.promises.readFile(localPath);
+    const size = contents.length;
+    const hash = crypto.createHash('sha256').update(contents).digest('hex');
 
     this.files.set(remotePath, {
-      size: fakeSize,
-      hash: fakeHash,
+      size,
+      hash,
       uploadedAt: new Date().toISOString()
     });
 
-    // Simula delay
-    await new Promise(resolve => setTimeout(resolve, 200));
-
     return {
       success: true,
-      size: fakeSize,
-      hash: fakeHash
+      size,
+      hash
     };
   }
 
@@ -92,16 +85,12 @@ export class MockFtpProvider extends FtpProvider {
       throw new Error('Not connected');
     }
 
-    console.log(`📋 Mock FTP: List ${remotePath}`);
-
     const files = [];
-    const normPath = remotePath.endsWith('/') ? remotePath : `${remotePath}/`;
 
-    for (const [path, info] of this.files.entries()) {
-      if (path.startsWith(normPath)) {
-        const relativeName = path.substring(normPath.length);
-        // Only include direct children, not subdirectories
-        if (!relativeName.includes('/')) {
+    for (const [filePath, info] of this.files.entries()) {
+      const relativeName = path.relative(remotePath, filePath);
+      if (relativeName && !relativeName.startsWith('..') && !path.isAbsolute(relativeName)) {
+        if (!relativeName.includes(path.sep)) {
           files.push({
             name: relativeName,
             size: info.size,
@@ -137,8 +126,6 @@ export class MockFtpProvider extends FtpProvider {
       throw new Error('Not connected');
     }
 
-    console.log(`📝 Mock FTP: Rename ${oldPath} → ${newPath}`);
-
     const file = this.files.get(oldPath);
     if (!file) {
       throw new Error(`File not found: ${oldPath}`);
@@ -155,7 +142,6 @@ export class MockFtpProvider extends FtpProvider {
       throw new Error('Not connected');
     }
 
-    console.log(`🗑️ Mock FTP: Delete ${remotePath}`);
     this.files.delete(remotePath);
     return { success: true };
   }
@@ -175,20 +161,10 @@ export class FtpService {
    * Valida e constrói caminho remoto
    */
   buildRemotePath(lote, codigo, baseRemote = null) {
-    const remote = baseRemote || this.remoteTemplate;
-
-    // Substitui template
-    let path = remote
-      .replace('<remoteRoot>', config.ftp?.remoteRoot || '/fotos')
-      .replace('<lote>', lote)
-      .replace('<codigo>', codigo);
-
-    // Bloqueia path traversal, absolute paths
-    if (path.includes('..') || path.startsWith('/') && path[1] === '/' || path.includes('\\')) {
+    if (typeof lote !== 'string' || typeof codigo !== 'string' || lote.includes('..') || codigo.includes('..') || /[\\/:*?"<>|]/.test(codigo)) {
       throw new Error('Invalid remote path');
     }
-
-    return path;
+    return path.join(baseRemote || config.ftp?.remoteRoot || 'remote-ftp', `LOTE ${lote}`, codigo);
   }
 
   /**
@@ -222,7 +198,6 @@ export class FtpService {
   async connect() {
     try {
       await this.provider.connect();
-      console.log('✓ FTP connected');
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };
@@ -235,7 +210,6 @@ export class FtpService {
   async disconnect() {
     try {
       await this.provider.disconnect();
-      console.log('✓ FTP disconnected');
       return { ok: true };
     } catch (err) {
       return { ok: false, error: err.message };

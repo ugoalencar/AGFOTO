@@ -47,7 +47,6 @@ test('phase 1 blocked mutating routes return 404 before operationId validation',
   const env = await createTestEnv(t);
   const app = createApp({ configOverrides: env.config });
   const paths = [
-    '/api/entregas/executar',
     '/api/qa/executar',
     '/api/retrabalhos/executar',
     '/api/relatorios/executar',
