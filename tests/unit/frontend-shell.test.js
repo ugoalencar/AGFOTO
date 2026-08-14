@@ -25,10 +25,17 @@ test('public runtime has no CDN dependencies', async () => {
   }
 });
 
-test('legacy hub tabs synchronize the rail active page', async () => {
+test('product QA rail routes render direct views without hub tabs', async () => {
   const app = await readFile(path.join(root, 'frontend', 'src', 'App.vue'), 'utf8');
+  const publicApp = await readFile(path.join(publicDir, 'App.vue'), 'utf8');
 
   for (const page of ['entregar', 'qa', 'relatorios']) {
-    assert.match(app, new RegExp(`@click="activePage = '${page}'; qaHubTab = '${page}'"`));
+    assert.match(app, new RegExp(`@click="activePage = '${page}'"`));
+    assert.match(app, new RegExp(`v-if="activePage === '${page}'"`));
   }
+
+  assert.doesNotMatch(app, /qaHubTab/);
+  assert.doesNotMatch(app, /QA Hub Page/);
+  assert.doesNotMatch(app, /v-if="false"/);
+  assert.equal(publicApp, app);
 });

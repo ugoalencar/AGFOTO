@@ -6,15 +6,15 @@
         <span>CAP</span>
         <small>Captura</small>
       </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="activePage = 'entregar'; qaHubTab = 'entregar'">
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="activePage = 'entregar'">
         <span>ENT</span>
         <small>Entregar</small>
       </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="activePage = 'qa'; qaHubTab = 'qa'">
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="activePage = 'qa'">
         <span>QA</span>
         <small>QA</small>
       </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'; qaHubTab = 'relatorios'">
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'">
         <span>REL</span>
         <small>Relat.</small>
       </button>
@@ -188,226 +188,19 @@
       </div>
     </main>
 
-    <!-- QA Hub Page -->
-    <main v-if="['entregar', 'qa', 'relatorios'].includes(activePage)" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
-      <!-- Sub-tabs -->
-      <div style="display: flex; gap: 0; background: #333; border-bottom: 2px solid #FF0000;">
-        <button
-          @click="activePage = 'entregar'; qaHubTab = 'entregar'"
-          :style="{ flex: 1, background: qaHubTab === 'entregar' ? '#FF0000' : '#444', color: '#fff', border: 'none', padding: '1rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }">
-          📤 Entregar
-        </button>
-        <button
-          @click="activePage = 'qa'; qaHubTab = 'qa'"
-          :style="{ flex: 1, background: qaHubTab === 'qa' ? '#FF0000' : '#444', color: '#fff', border: 'none', padding: '1rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }">
-          🔍 QA
-        </button>
-        <button
-          @click="activePage = 'relatorios'; qaHubTab = 'relatorios'"
-          :style="{ flex: 1, background: qaHubTab === 'relatorios' ? '#FF0000' : '#444', color: '#fff', border: 'none', padding: '1rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }">
-          📊 Relatórios
-        </button>
-      </div>
-
-      <!-- Tab Content -->
-      <div style="flex: 1; overflow-y: auto; padding: 2rem;">
-        <!-- Aba Entregar -->
-        <div v-if="qaHubTab === 'entregar'">
-          <h2 style="color: #FF0000;">📤 Entrega de Produtos</h2>
-
-          <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
-            <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Selecione Lote:</label>
-            <input
-              v-model="qaSelectedLote"
-              type="text"
-              placeholder="Digite número do lote"
-              style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
-
-            <button
-              @click="onLoadQaProducts"
-              :disabled="!qaSelectedLote"
-              class="btn-action primary"
-              style="width: 100%;">
-              Carregar Produtos
-            </button>
-          </div>
-
-          <div v-if="qaProducts.length > 0" style="margin-top: 2rem;">
-            <h3>Produtos Prontos para Entrega ({{ qaProducts.length }})</h3>
-            <div style="overflow-x: auto; border: 1px solid var(--ag-border);">
-              <table style="width: 100%; font-size: 0.875rem;">
-                <thead style="background: var(--ag-dark-gray);">
-                  <tr>
-                    <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">GTIN</th>
-                    <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">Código</th>
-                    <th style="padding: 0.75rem; text-align: left; border-right: 1px solid var(--ag-border);">Qtd Fotos</th>
-                    <th style="padding: 0.75rem; text-align: left;">Ação</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(product, idx) in qaProducts" :key="idx" style="border-bottom: 1px solid var(--ag-border);">
-                    <td style="padding: 0.75rem;">{{ product.gtin }}</td>
-                    <td style="padding: 0.75rem;">{{ product.codigo }}</td>
-                    <td style="padding: 0.75rem;">{{ product.quantidadeFotos }}</td>
-                    <td style="padding: 0.75rem;">
-                      <button
-                        @click="onPrepareDelivery(product)"
-                        :disabled="deliveryProductKey === `${product.gtin}:${product.codigo}`"
-                        style="background: #FF8800; color: #000; border: none; padding: 0.5rem 1rem; cursor: pointer; font-weight: bold; font-size: 0.75rem;">
-                        {{ deliveryProductKey === `${product.gtin}:${product.codigo}` ? 'Entregando...' : 'Entregar' }}
-                      </button>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-
-        <!-- Aba QA -->
-        <div v-if="qaHubTab === 'qa'">
-          <h2 style="color: #FF0000;">🔍 Classificação de Fotos</h2>
-
-          <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
-              <div>
-                <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
-                <input
-                  v-model="qaPhotoLote"
-                  type="text"
-                  placeholder="Lote"
-                  style="width: 100%; padding: 0.75rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
-              </div>
-              <div>
-                <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">GTIN:</label>
-                <input
-                  v-model="qaPhotoGtin"
-                  type="text"
-                  placeholder="GTIN"
-                  style="width: 100%; padding: 0.75rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
-              </div>
-            </div>
-
-            <button
-              @click="onLoadQaPhotos"
-              :disabled="!qaPhotoLote || !qaPhotoGtin"
-              class="btn-action primary"
-              style="width: 100%; margin-top: 1rem;">
-              Carregar Fotos
-            </button>
-          </div>
-
-          <div v-if="qaPhotos.length > 0" style="margin-top: 2rem;">
-            <h3>Fotos para QA ({{ qaPhotos.length }})</h3>
-            <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 1rem;">
-              <div
-                v-for="(photo, idx) in qaPhotos"
-                :key="idx"
-                style="border: 2px solid var(--ag-border); padding: 0.5rem; text-align: center; font-size: 0.75rem;">
-                <div style="background: var(--ag-dark-gray); height: 100px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.5rem;">
-                  📷
-                </div>
-                <div style="margin-bottom: 0.5rem;">{{ photo.filename.substring(0, 15) }}...</div>
-                <div style="display: flex; gap: 0.25rem; margin-bottom: 0.5rem;">
-                  <button
-                    @click="onClassifyPhoto(photo, 'AP')"
-                    style="flex: 1; background: #FFB400; color: #000; border: none; padding: 0.25rem; cursor: pointer; font-size: 0.7rem;">
-                    AP
-                  </button>
-                  <button
-                    @click="onClassifyPhoto(photo, 'AT')"
-                    style="flex: 1; background: #00AA00; color: #fff; border: none; padding: 0.25rem; cursor: pointer; font-size: 0.7rem;">
-                    AT
-                  </button>
-                </div>
-                <div style="padding: 0.25rem; background: var(--ag-border); border-radius: 2px;">
-                  {{ photo.classification || '—' }}
-                </div>
-              </div>
-            </div>
-
-            <div style="margin-top: 2rem; display: flex; gap: 1rem;">
-              <button
-                @click="onCompleteQa"
-                class="btn-action primary"
-                style="flex: 1;">
-                Concluir QA
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Aba Relatórios -->
-        <div v-if="qaHubTab === 'relatorios'">
-          <h2 style="color: #FF0000;">📊 Relatórios</h2>
-
-          <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
-            <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Filtrar por Status:</label>
-            <select
-              v-model="reportStatus"
-              style="width: 100%; padding: 0.75rem; margin-bottom: 1rem; border: 2px solid var(--ag-border); background: var(--ag-bg); color: var(--ag-fg);">
-              <option value="">— Todos —</option>
-              <option value="pendente_qa">Pendente QA</option>
-              <option value="pronto_para_entrega">Pronto para Entrega</option>
-              <option value="entregue">Entregue</option>
-              <option value="erro_entrega">Erro na Entrega</option>
-              <option value="retrabalho">Retrabalho</option>
-            </select>
-
-            <button
-              @click="onLoadReport"
-              class="btn-action primary"
-              style="width: 100%;">
-              Gerar Relatório
-            </button>
-          </div>
-
-          <div v-if="reportStats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; margin-bottom: 2rem;">
-            <div style="background: #FF0000; padding: 1rem; border-radius: 4px; color: #fff;">
-              <div style="font-size: 0.75rem; opacity: 0.8;">Total Itens</div>
-              <div style="font-size: 1.5rem; font-weight: bold;">{{ reportStats.totalItens }}</div>
-            </div>
-            <div style="background: #00AA00; padding: 1rem; border-radius: 4px; color: #fff;">
-              <div style="font-size: 0.75rem; opacity: 0.8;">Entregues</div>
-              <div style="font-size: 1.5rem; font-weight: bold;">{{ reportStats.entregues }}</div>
-            </div>
-            <div style="background: #FFB400; padding: 1rem; border-radius: 4px; color: #000;">
-              <div style="font-size: 0.75rem; opacity: 0.8;">Pendentes</div>
-              <div style="font-size: 1.5rem; font-weight: bold;">{{ reportStats.pendentes }}</div>
-            </div>
-            <div style="background: #FF6600; padding: 1rem; border-radius: 4px; color: #fff;">
-              <div style="font-size: 0.75rem; opacity: 0.8;">Erros</div>
-              <div style="font-size: 1.5rem; font-weight: bold;">{{ reportStats.erros }}</div>
-            </div>
-          </div>
-
-          <div v-if="reportItems.length > 0" style="margin-top: 2rem;">
-            <h3>Resultados ({{ reportItems.length }} itens)</h3>
-            <div style="overflow-x: auto; border: 1px solid var(--ag-border); max-height: 400px; overflow-y: auto;">
-              <table style="width: 100%; font-size: 0.75rem;">
-                <thead style="background: var(--ag-dark-gray); position: sticky; top: 0;">
-                  <tr>
-                    <th style="padding: 0.5rem; text-align: left;">GTIN</th>
-                    <th style="padding: 0.5rem; text-align: left;">Código</th>
-                    <th style="padding: 0.5rem; text-align: left;">Status</th>
-                    <th style="padding: 0.5rem; text-align: left;">Fotos</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="(item, idx) in reportItems.slice(0, 20)" :key="idx" style="border-bottom: 1px solid var(--ag-border);">
-                    <td style="padding: 0.5rem;">{{ item.gtin }}</td>
-                    <td style="padding: 0.5rem;">{{ item.codigo }}</td>
-                    <td style="padding: 0.5rem;"><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td>
-                    <td style="padding: 0.5rem;">{{ item.quantidadeFotos }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
+    <main v-if="activePage === 'entregar'" class="ag-view two-column-view">
+      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Lote</h2></header><div class="ag-card-body"><label class="ag-label">Selecionar lote</label><input class="ag-field" v-model="qaSelectedLote" type="text" placeholder="Numero do lote"><button class="ag-btn is-primary" style="width:100%;margin-top:10px" @click="onLoadQaProducts" :disabled="!qaSelectedLote">Carregar produtos</button><p style="color:var(--ag-muted);font-size:12px;margin-top:14px">Entrega local/mock com staging, manifesto e verificacao antes de marcar entregue.</p></div></section>
+      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Produtos prontos para entrega</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaProducts.length }} itens</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>GTIN</th><th>Codigo</th><th>Fotos</th><th>Acao</th></tr></thead><tbody><tr v-for="product in qaProducts" :key="`${product.gtin}:${product.codigo}`"><td>{{ product.gtin }}</td><td>{{ product.codigo }}</td><td>{{ product.quantidadeFotos }}</td><td><button class="ag-btn is-warning" @click="onPrepareDelivery(product)" :disabled="deliveryProductKey === `${product.gtin}:${product.codigo}`">{{ deliveryProductKey === `${product.gtin}:${product.codigo}` ? 'Entregando' : 'Entregar' }}</button></td></tr></tbody></table></div></section>
     </main>
-
+    <main v-if="activePage === 'qa'" class="ag-view qa-view">
+      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Navegar</h2></header><div class="ag-card-body"><label class="ag-label">Lote</label><input class="ag-field" v-model="qaPhotoLote" type="text" placeholder="Lote"><label class="ag-label" style="margin-top:12px">GTIN</label><input class="ag-field" v-model="qaPhotoGtin" type="text" placeholder="GTIN"><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadQaPhotos" :disabled="!qaPhotoLote || !qaPhotoGtin">Carregar fotos</button></div></section>
+      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header><div class="stage-grid"><div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card"><div style="height:74px;display:grid;place-items:center;background:var(--ag-panel);margin-bottom:8px">Foto</div><div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div><div style="display:flex;gap:4px;margin-top:8px"><button class="ag-btn" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button><button class="ag-btn is-warning" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button></div></div></div><div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div></section>
+      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Marcacoes</h2></header><div class="ag-card-body" style="color:var(--ag-muted);font-size:13px"><p><b style="color:var(--ag-yellow)">AP</b> fica fora da entrega normal.</p><p><b style="color:var(--ag-orange)">AT</b> entra na entrega de atualizacao.</p><p>Desfazer e exclusao continuam registrados por auditoria.</p></div></section>
+    </main>
+    <main v-if="activePage === 'relatorios'" class="ag-view report-view">
+      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Filtros e totais</h2></header><div class="ag-card-body"><label class="ag-label">Status</label><select class="ag-field" v-model="reportStatus"><option value="">Todos</option><option value="pendente_qa">Pendente QA</option><option value="pronto_para_entrega">Pronto para Entrega</option><option value="entregue">Entregue</option><option value="erro_entrega">Erro na Entrega</option><option value="retrabalho">Retrabalho</option></select><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadReport">Gerar relatorio</button><div v-if="reportStats" class="kpi-grid" style="margin-top:14px"><div class="kpi-card"><strong>{{ reportStats.totalItens ?? reportStats.totalItems ?? 0 }}</strong><span>Itens</span></div><div class="kpi-card"><strong>{{ reportStats.entregues ?? reportStats.entregue ?? 0 }}</strong><span>Entregues</span></div><div class="kpi-card"><strong>{{ reportStats.prontos ?? reportStats.pronto_para_entrega ?? 0 }}</strong><span>Prontos</span></div><div class="kpi-card"><strong>{{ reportStats.retrabalho ?? 0 }}</strong><span>Retrabalho</span></div></div></div></section>
+      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Detalhamento</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ reportItems.length }} linhas</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Lote</th><th>GTIN</th><th>Codigo</th><th>Descricao</th><th>Fotos</th><th>Status</th></tr></thead><tbody><tr v-for="item in reportItems" :key="`${item.lote}:${item.gtin}`"><td>{{ item.lote }}</td><td>{{ item.gtin }}</td><td>{{ item.codigo }}</td><td>{{ item.descricao }}</td><td>{{ item.quantidadeFotos }}</td><td><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td></tr></tbody></table></div></section>
+    </main>
     <!-- Veículos Page -->
     <main v-if="activePage === 'veiculos'" style="padding: 2rem; overflow-y: auto;">
       <div style="max-width: 1000px;">
@@ -511,7 +304,6 @@ export default {
   name: 'App',
   setup() {
     const activePage = ref('captura'); // 'captura', 'entregar', 'qa', 'relatorios'
-    const qaHubTab = ref('entregar'); // 'entregar', 'qa', 'relatorios'
     const selectedLote = ref('');
     const selectedGtin = ref('');
     const inputGtin = ref('');
@@ -526,7 +318,7 @@ export default {
     const excelItems = ref([]);
     const excelConflicts = ref([]);
 
-    // QA Hub state
+    // Product QA state
     const qaSelectedLote = ref('');
     const qaProducts = ref([]);
     const deliveryProductKey = ref('');
@@ -752,7 +544,7 @@ export default {
       }
     };
 
-    // QA Hub methods
+    // Product QA methods
     const onLoadQaProducts = async () => {
       if (!qaSelectedLote.value) return;
 
@@ -983,7 +775,6 @@ export default {
       excelFile,
       excelItems,
       excelConflicts,
-      qaHubTab,
       qaSelectedLote,
       qaProducts,
       deliveryProductKey,
