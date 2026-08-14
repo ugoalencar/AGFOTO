@@ -52,4 +52,4 @@ Implemented local, non-blocking camera status and launch support using the confi
 
 ### Commits
 
-- `38f1b3f fix: harden temp image previews`
+- `2368e43 fix: harden temp image previews`
