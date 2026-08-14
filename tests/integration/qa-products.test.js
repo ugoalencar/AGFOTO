@@ -57,6 +57,92 @@ test('classifies AP and AT by moving files, then unclassifies without overwrite'
   assert.equal(fs.existsSync(path.join(root, 'AT', 'a_001.jpg')), true);
 });
 
+test('classifies into AP and AT without overwriting an existing destination', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '41');
+  const root = path.join(env.paths.finalizadas, 'LOTE 41', '000123');
+
+  await fs.promises.mkdir(path.join(root, 'AP'), { recursive: true });
+  await fs.promises.writeFile(path.join(root, 'AP', 'a.jpg'), Buffer.from('existing AP'));
+  const ap = await DeliveryService.classifyPhotoAP('41', '000123', 'a.jpg');
+  assert.equal(ap.ok, true);
+  assert.equal(ap.data.filename, 'a_001.jpg');
+  assert.deepEqual(await fs.promises.readFile(path.join(root, 'AP', 'a.jpg')), Buffer.from('existing AP'));
+  assert.equal(fs.existsSync(path.join(root, 'AP', 'a_001.jpg')), true);
+
+  await fs.promises.writeFile(path.join(root, 'a_001.jpg'), JPG_BYTES);
+  await fs.promises.mkdir(path.join(root, 'AT'), { recursive: true });
+  await fs.promises.writeFile(path.join(root, 'AT', 'a_001.jpg'), Buffer.from('existing AT'));
+  const at = await DeliveryService.classifyPhotoAT('41', '000123', 'a_001.jpg');
+  assert.equal(at.ok, true);
+  assert.equal(at.data.filename, 'a_001_001.jpg');
+  assert.deepEqual(await fs.promises.readFile(path.join(root, 'AT', 'a_001.jpg')), Buffer.from('existing AT'));
+  assert.equal(fs.existsSync(path.join(root, 'AT', 'a_001_001.jpg')), true);
+});
+
+test('rejects unsafe QA path inputs without changing files', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '42');
+  const root = path.join(env.paths.finalizadas, 'LOTE 42', '000123');
+  const source = path.join(root, 'a.jpg');
+  const escapedProduct = path.join(env.paths.finalizadas, 'outro');
+  const escapedLote = path.join(env.paths.finalizadas, 'outro', '000123');
+  await fs.promises.mkdir(escapedProduct, { recursive: true });
+  await fs.promises.mkdir(escapedLote, { recursive: true });
+  await fs.promises.writeFile(path.join(escapedProduct, 'a.jpg'), Buffer.from('other product'));
+  await fs.promises.writeFile(path.join(escapedLote, 'a.jpg'), Buffer.from('other lote'));
+  const invalidInputs = [
+    () => DeliveryService.classifyPhotoAP('42', '../outro', 'a.jpg'),
+    () => DeliveryService.classifyPhotoAP('42/../outro', '000123', 'a.jpg'),
+    () => DeliveryService.classifyPhotoAP('42', '000123', '../a.jpg'),
+    () => DeliveryService.deletePhoto('42', '000123', 'a.jpg', '../AP')
+  ];
+
+  for (const operation of invalidInputs) {
+    const result = await operation();
+    assert.equal(result.ok, false);
+    assert.equal(fs.existsSync(source), true);
+  }
+  assert.equal(fs.existsSync(path.join(escapedProduct, 'AP', 'a.jpg')), false);
+  assert.equal(fs.existsSync(path.join(escapedLote, 'AP', 'a.jpg')), false);
+  assert.deepEqual(await fs.promises.readFile(path.join(escapedProduct, 'a.jpg')), Buffer.from('other product'));
+  assert.deepEqual(await fs.promises.readFile(path.join(escapedLote, 'a.jpg')), Buffer.from('other lote'));
+});
+
+test('does not mutate photos when the lote or product is absent from JSON', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const root = path.join(env.paths.finalizadas, 'LOTE 43', '000123');
+  await fs.promises.mkdir(root, { recursive: true });
+  await fs.promises.writeFile(path.join(root, 'a.jpg'), JPG_BYTES);
+
+  const missingLote = await DeliveryService.classifyPhotoAP('43', '000123', 'a.jpg');
+  assert.equal(missingLote.ok, false);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+
+  await savePhoto(env, '44');
+  const missingProductRoot = path.join(env.paths.finalizadas, 'LOTE 44', '999999');
+  await fs.promises.mkdir(missingProductRoot, { recursive: true });
+  await fs.promises.writeFile(path.join(missingProductRoot, 'orphan.jpg'), JPG_BYTES);
+  const missingProduct = await DeliveryService.deletePhoto('44', '999999', 'orphan.jpg');
+  assert.equal(missingProduct.ok, false);
+  assert.equal(fs.existsSync(path.join(missingProductRoot, 'orphan.jpg')), true);
+});
+
+test('rejects an invalid unclassify source without moving the photo', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '45');
+  const root = path.join(env.paths.finalizadas, 'LOTE 45', '000123');
+
+  const result = await DeliveryService.unclassifyPhoto('45', '000123', 'a.jpg', 'invalid');
+  assert.equal(result.ok, false);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
+});
+
 test('deletes a classified photo with an audit trail and updates product history', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
@@ -96,6 +182,19 @@ test('completes QA from JSON, updates the control workbook, and does not deliver
   assert.equal(workbook.getWorksheet('Lote 39').getCell('F2').value, 'pronto_para_entrega');
 });
 
+test('rejects an unknown QA delivery type without changing JSON', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '46');
+  const jsonPath = path.join(env.paths.jsons, 'Lote_46.json');
+  const before = await fs.promises.readFile(jsonPath, 'utf8');
+
+  const result = await DeliveryService.completeQa('46', '000123', 'express');
+
+  assert.equal(result.ok, false);
+  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
+});
+
 test('QA routes use the global operationId envelope and expose all commands', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
@@ -120,4 +219,24 @@ test('QA routes use the global operationId envelope and expose all commands', as
   }, 'qa-delete');
   assert.equal(deleted.status, 200);
   assert.equal(deleted.body.data.deleted, true);
+});
+
+test('QA routes reject invalid lote and GTIN before commands run', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '47');
+  const app = createApp({ configOverrides: env.config });
+  const root = path.join(env.paths.finalizadas, 'LOTE 47', '000123');
+
+  const invalidGtin = await request(app, '/api/qa/classificar', {
+    lote: '47', gtin: '../outro', filename: 'a.jpg', classification: 'AP'
+  }, 'qa-invalid-gtin');
+  assert.equal(invalidGtin.status, 400);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
+
+  const invalidLote = await request(app, '/api/qa/excluir', {
+    lote: '47/../outro', gtin: '000123', filename: 'a.jpg', location: 'root'
+  }, 'qa-invalid-lote');
+  assert.equal(invalidLote.status, 400);
+  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
 });

@@ -11,9 +11,17 @@ import {
 } from '../server/secure-filesystem.js';
 import { config } from '../server/config.js';
 import { auditDelete } from '../server/audit-logger.js';
+import { Lote, Produto } from '../domain/lote.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
+
+function normalizeFinalizadaPathComponents(loteNumero, gtin) {
+  const normalizedLote = Lote.normalize(loteNumero);
+  if (!Lote.isValid(normalizedLote)) throw new Error(`Invalid lote number: ${loteNumero}`);
+  if (!Produto.isValid(gtin)) throw new Error(`Invalid GTIN: ${gtin}`);
+  return { loteNumero: normalizedLote, gtin: Produto.normalize(gtin) };
+}
 
 /**
  * Repository para operações de arquivo (imagens, cópias, exclusões)
@@ -136,12 +144,13 @@ export class FileRepository {
   }
 
   static async moveFinalizadaPhoto({ loteNumero, gtin, filename, fromSubfolder = null, toSubfolder = null }) {
+    const components = normalizeFinalizadaPathComponents(loteNumero, gtin);
     const cleanFilename = validateFilename(filename);
     if (cleanFilename !== filename) throw new Error('Filename must not include a path');
     if (fromSubfolder && !['AP', 'AT'].includes(fromSubfolder)) throw new Error(`Invalid source subfolder: ${fromSubfolder}`);
     if (toSubfolder && !['AP', 'AT'].includes(toSubfolder)) throw new Error(`Invalid destination subfolder: ${toSubfolder}`);
 
-    const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${loteNumero}`, String(gtin)), config.paths.finalizadas);
+    const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${components.loteNumero}`, components.gtin), config.paths.finalizadas);
     const srcDir = fromSubfolder ? path.join(baseDir, fromSubfolder) : baseDir;
     const destDir = toSubfolder ? path.join(baseDir, toSubfolder) : baseDir;
     const srcPath = securePath(path.join(srcDir, cleanFilename), config.paths.finalizadas);
@@ -166,11 +175,12 @@ export class FileRepository {
   }
 
   static async deleteFinalizadaPhoto({ loteNumero, gtin, filename, location = null }) {
+    const components = normalizeFinalizadaPathComponents(loteNumero, gtin);
     const cleanFilename = validateFilename(filename);
     if (cleanFilename !== filename) throw new Error('Filename must not include a path');
     const subfolder = location === 'root' ? null : location;
     if (subfolder && !['AP', 'AT'].includes(subfolder)) throw new Error('location must be root, AP, or AT');
-    const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${loteNumero}`, String(gtin)), config.paths.finalizadas);
+    const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${components.loteNumero}`, components.gtin), config.paths.finalizadas);
     const filePath = securePath(path.join(subfolder ? path.join(baseDir, subfolder) : baseDir, cleanFilename), config.paths.finalizadas);
     await fs.promises.unlink(filePath);
     return { filePath, filename: cleanFilename, location: subfolder || 'root' };

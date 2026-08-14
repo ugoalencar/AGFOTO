@@ -8,6 +8,7 @@ import { getFtpService } from './ftp-service.js';
 import { auditLogger } from '../server/audit-logger.js';
 import { config } from '../server/config.js';
 import ExcelService from './excel-service.js';
+import { Lote, Produto } from '../domain/lote.js';
 
 /**
  * Serviço de Entrega
@@ -69,17 +70,16 @@ export class DeliveryService {
    */
   static async unclassifyPhoto(lote, gtin, filename, fromClassification = null, operationContext = null) {
     try {
-      const inferredClassification = fromClassification || (filename.includes('/') ? filename.split('/')[0] : null);
-      const cleanFilename = filename.includes('/') ? filename.split('/').pop() : filename;
-      if (!['AP', 'AT'].includes(inferredClassification)) return { ok: false, error: 'fromClassification must be AP or AT' };
+      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
+      if (!['AP', 'AT'].includes(fromClassification)) return { ok: false, error: 'fromClassification must be AP or AT' };
       const moved = await FileRepository.moveFinalizadaPhoto({
-        loteNumero: lote, gtin, filename: cleanFilename, fromSubfolder: inferredClassification
+        loteNumero: normalizedLote, gtin: normalizedGtin, filename, fromSubfolder: fromClassification
       });
-      await this.recordQaHistory(lote, gtin, 'foto_desclassificada', {
-        classificacaoAnterior: inferredClassification, filename: moved.destName
+      await this.recordQaHistory(loteObj, produto, 'foto_desclassificada', {
+        classificacaoAnterior: fromClassification, filename: moved.destName
       });
       await auditLogger.log('UNCLASSIFY', {
-        lote, gtin, filename: cleanFilename, fromClassification: inferredClassification,
+        lote: normalizedLote, gtin: normalizedGtin, filename, fromClassification,
         destName: moved.destName, operationId: operationContext?.operationId || null
       });
       return { ok: true, data: { unclassified: true, filename: moved.destName } };
@@ -91,10 +91,11 @@ export class DeliveryService {
   static async classifyPhoto(lote, gtin, filename, classification, operationContext = null) {
     try {
       if (!['AP', 'AT'].includes(classification)) return { ok: false, error: 'Invalid classification' };
-      const moved = await FileRepository.moveFinalizadaPhoto({ loteNumero: lote, gtin, filename, toSubfolder: classification });
-      await this.recordQaHistory(lote, gtin, 'foto_classificada', { classificacao: classification, filename: moved.destName });
+      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
+      const moved = await FileRepository.moveFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, toSubfolder: classification });
+      await this.recordQaHistory(loteObj, produto, 'foto_classificada', { classificacao: classification, filename: moved.destName });
       await auditLogger.log(`CLASSIFY_${classification}`, {
-        lote, gtin, filename, destName: moved.destName,
+        lote: normalizedLote, gtin: normalizedGtin, filename, destName: moved.destName,
         operationId: operationContext?.operationId || null
       });
       return { ok: true, data: { classified: classification, filename: moved.destName } };
@@ -105,12 +106,13 @@ export class DeliveryService {
 
   static async deletePhoto(lote, gtin, filename, location = 'root', operationContext = null) {
     try {
-      const deleted = await FileRepository.deleteFinalizadaPhoto({ loteNumero: lote, gtin, filename, location });
-      await this.recordQaHistory(lote, gtin, 'foto_excluida', {
+      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
+      const deleted = await FileRepository.deleteFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, location });
+      await this.recordQaHistory(loteObj, produto, 'foto_excluida', {
         filename: deleted.filename, location: deleted.location
       }, -1);
       await auditLogger.log('DELETE_PHOTO', {
-        lote, gtin, filename: deleted.filename, location: deleted.location,
+        lote: normalizedLote, gtin: normalizedGtin, filename: deleted.filename, location: deleted.location,
         operationId: operationContext?.operationId || null
       });
       return { ok: true, data: { deleted: true, filename: deleted.filename, location: deleted.location } };
@@ -119,18 +121,21 @@ export class DeliveryService {
     }
   }
 
-  static async recordQaHistory(lote, gtin, event, details, photoCountDelta = 0) {
-    try {
-      const loteObj = await LoteRepository.load(lote);
-      const produto = loteObj.itens[gtin];
-      if (!produto) return;
-      if (photoCountDelta !== 0) produto.quantidadeFotos = Math.max(0, produto.quantidadeFotos + photoCountDelta);
-      produto.addHistoricoEvent(event, details);
-      await LoteRepository.save(loteObj);
-    } catch (err) {
-      if (err.message.includes('ENOENT')) return;
-      throw err;
-    }
+  static async loadQaProduct(lote, gtin) {
+    const normalizedLote = Lote.normalize(lote);
+    if (!Lote.isValid(normalizedLote)) throw new Error(`Invalid lote number: ${lote}`);
+    if (!Produto.isValid(gtin)) throw new Error(`Invalid GTIN: ${gtin}`);
+    const normalizedGtin = Produto.normalize(gtin);
+    const loteObj = await LoteRepository.load(normalizedLote);
+    const produto = loteObj.itens[normalizedGtin];
+    if (!produto) throw new Error(`Product not found: ${normalizedGtin}`);
+    return { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin };
+  }
+
+  static async recordQaHistory(loteObj, produto, event, details, photoCountDelta = 0) {
+    if (photoCountDelta !== 0) produto.quantidadeFotos = Math.max(0, produto.quantidadeFotos + photoCountDelta);
+    produto.addHistoricoEvent(event, details);
+    await LoteRepository.save(loteObj);
   }
 
   /**
@@ -138,12 +143,12 @@ export class DeliveryService {
    */
   static async completeQa(lote, gtin, deliveryType = DeliveryType.NORMAL) {
     try {
-      const loteObj = await LoteRepository.load(lote);
-      const produto = loteObj.itens[gtin];
-
-      if (!produto) return { ok: false, error: `Product not found: ${gtin}` };
+      if (![DeliveryType.NORMAL, DeliveryType.ATUALIZACAO].includes(deliveryType)) {
+        return { ok: false, error: 'Invalid delivery type' };
+      }
+      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
       const subfolder = deliveryType === DeliveryType.ATUALIZACAO ? 'AT' : null;
-      const photos = await FileRepository.listFinalizadasImages(lote, gtin, subfolder);
+      const photos = await FileRepository.listFinalizadasImages(normalizedLote, normalizedGtin, subfolder);
       if (photos.length === 0) {
         return {
           ok: false,
@@ -153,30 +158,15 @@ export class DeliveryService {
         };
       }
 
-      // Valida que tem fotos elegíveis
-      if (deliveryType === DeliveryType.NORMAL) {
-        // Deve ter fotos na raiz
-        const raizPhotos = await FileRepository.listFinalizadasImages(lote, gtin);
-        if (raizPhotos.length === 0) {
-          return { ok: false, error: 'No photos in root folder for normal delivery' };
-        }
-      } else if (deliveryType === DeliveryType.ATUALIZACAO) {
-        // Deve ter fotos em AT/
-        const atPhotos = await FileRepository.listFinalizadasImages(lote, gtin, 'AT');
-        if (atPhotos.length === 0) {
-          return { ok: false, error: 'No photos in AT folder for update delivery' };
-        }
-      }
-
       // Muda status
       produto.status = ProductStatus.PRONTO_PARA_ENTREGA;
       produto.addHistoricoEvent('qa_concluido', { deliveryType, quantidadeFotosElegiveis: photos.length });
       await LoteRepository.save(loteObj);
-      await ExcelService.updateControlFromLote(lote);
+      await ExcelService.updateControlFromLote(normalizedLote);
 
       await auditLogger.log('QA_COMPLETO', {
-        lote,
-        gtin,
+        lote: normalizedLote,
+        gtin: normalizedGtin,
         deliveryType,
         quantidadeFotosElegiveis: photos.length
       });

@@ -5,6 +5,10 @@ import { Lote, Produto } from '../domain/lote.js';
 
 const router = Router();
 
+function hasValidQaIdentifiers(lote, gtin) {
+  return Lote.isValid(lote) && Produto.isValid(gtin);
+}
+
 /**
  * GET /api/qa/produtos/:lote
  * Lista produtos de um lote prontos para QA
@@ -62,7 +66,7 @@ router.get('/fotos/:lote/:gtin', async (req, res) => {
 router.post('/classificar', express.json(), async (req, res) => {
   const { lote, gtin, filename, classification } = req.body;
 
-  if (!lote || !gtin || !filename || !['AP', 'AT'].includes(classification)) {
+  if (!hasValidQaIdentifiers(lote, gtin) || !filename || !['AP', 'AT'].includes(classification)) {
     return res.status(400).json({
       ok: false,
       error: 'Invalid parameters',
@@ -92,7 +96,7 @@ router.post('/classificar', express.json(), async (req, res) => {
 router.post('/desclassificar', express.json(), async (req, res) => {
   const { lote, gtin, filename, fromClassification = null } = req.body;
 
-  if (!lote || !gtin || !filename) {
+  if (!hasValidQaIdentifiers(lote, gtin) || !filename) {
     return res.status(400).json({
       ok: false,
       error: 'Invalid parameters',
@@ -117,7 +121,7 @@ router.post('/desclassificar', express.json(), async (req, res) => {
 router.post('/excluir', express.json(), async (req, res) => {
   const { lote, gtin, filename, location = 'root' } = req.body;
 
-  if (!lote || !gtin || !filename) {
+  if (!hasValidQaIdentifiers(lote, gtin) || !filename) {
     return res.status(400).json({ ok: false, error: 'Invalid parameters', requestId: req.id });
   }
 
@@ -136,7 +140,7 @@ router.post('/excluir', express.json(), async (req, res) => {
 router.post('/concluir', express.json(), async (req, res) => {
   const { lote, gtin, deliveryType = 'normal' } = req.body;
 
-  if (!lote || !gtin) {
+  if (!hasValidQaIdentifiers(lote, gtin)) {
     return res.status(400).json({
       ok: false,
       error: 'Lote and GTIN required',
