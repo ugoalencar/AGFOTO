@@ -13,9 +13,9 @@ import { FtpProvider, resetFtpService } from '../../services/ftp-service.js';
 
 const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
 
-async function saveReadyProduct(env, lote = '37', gtin = '000123') {
+async function saveReadyProduct(env, lote = '37', gtin = '000123', codigo = 'COD-1') {
   await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'root.jpg'), JPG_BYTES);
-  const saved = await CapturaService.saveCapture(lote, gtin, 'COD-1', 'Produto local');
+  const saved = await CapturaService.saveCapture(lote, gtin, codigo, 'Produto local');
   assert.equal(saved.ok, true);
   const qa = await DeliveryService.completeQa(lote, gtin, DeliveryType.NORMAL);
   assert.equal(qa.ok, true);
@@ -119,6 +119,60 @@ test('execute requires a prepared attempt and preserves status for validation fa
   assert.equal(lote.itens['000123'].status, 'pronto_para_entrega');
   assert.equal(lote.itens['000123'].ultimoErro, null);
   assert.equal((await fs.promises.readdir(env.paths.envios)).length, 1);
+});
+
+test('incompatible prepared attempt remains staged and does not create an operational failure', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await saveReadyProduct(env, '44');
+  const prepared = await DeliveryService.prepareDelivery('44', '000123', 'COD-1', DeliveryType.NORMAL);
+
+  const executed = await DeliveryService.executeDelivery('44', '000123', 'COD-1', DeliveryType.ATUALIZACAO, prepared.data.attemptId);
+  const record = JSON.parse(await fs.promises.readFile(path.join(env.paths.envios, prepared.data.attemptId + '.json'), 'utf8'));
+  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_44.json'), 'utf8'));
+
+  assert.equal(executed.ok, false);
+  assert.match(executed.error, /does not match/i);
+  assert.equal(record.status, 'staging');
+  assert.equal(lote.itens['000123'].status, 'pronto_para_entrega');
+  assert.equal(lote.itens['000123'].ultimoErro, null);
+});
+
+test('connection failure after a valid prepared attempt records delivery error', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await saveReadyProduct(env, '45');
+  const prepared = await DeliveryService.prepareDelivery('45', '000123', 'COD-1', DeliveryType.NORMAL);
+  class BrokenConnectProvider extends FtpProvider {
+    async connect() { throw new Error('forced connect failure'); }
+    async disconnect() { return true; }
+  }
+  resetFtpService(new BrokenConnectProvider());
+  t.after(() => resetFtpService());
+
+  const executed = await DeliveryService.executeDelivery('45', '000123', 'COD-1', DeliveryType.NORMAL, prepared.data.attemptId);
+  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_45.json'), 'utf8'));
+  const record = JSON.parse(await fs.promises.readFile(path.join(env.paths.envios, prepared.data.attemptId + '.json'), 'utf8'));
+
+  assert.equal(executed.ok, false);
+  assert.match(executed.error, /connect/i);
+  assert.equal(record.status, 'erro_entrega');
+  assert.equal(lote.itens['000123'].status, 'erro_entrega');
+  assert.match(lote.itens['000123'].ultimoErro, /connect/i);
+});
+
+test('prepare rejects products without an internal code instead of accepting an arbitrary codigo', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await saveReadyProduct(env, '46', '000123', null);
+
+  const prepared = await DeliveryService.prepareDelivery('46', '000123', 'ARBITRARY-CODE', DeliveryType.NORMAL);
+  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_46.json'), 'utf8'));
+
+  assert.equal(prepared.ok, false);
+  assert.match(prepared.error, /product internal code/i);
+  assert.equal(lote.itens['000123'].status, 'pronto_para_entrega');
+  assert.equal((await fs.promises.readdir(env.paths.envios)).length, 0);
 });
 
 test('execute uses the prepared attempt instead of rebuilding staging from later files', async t => {

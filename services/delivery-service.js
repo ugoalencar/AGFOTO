@@ -332,6 +332,7 @@ export class DeliveryService {
       }
       if (!record.manifest || record.manifest.fileCount === 0) throw new Error('Prepared delivery attempt has no manifest files');
       ftpService = getFtpService();
+      deliveryStarted = true;
 
       // Conecta ao FTP
       const connectResult = await ftpService.connect();
@@ -389,7 +390,7 @@ export class DeliveryService {
       if (!loaded) {
         try { loaded = await this.loadQaProduct(lote, gtin); } catch { /* invalid identities cannot be persisted */ }
       }
-      if (record) {
+      if (record && deliveryStarted) {
         record.fail(err.message);
         await this.persistDeliveryRecord(record);
       }
@@ -398,12 +399,14 @@ export class DeliveryService {
         await LoteRepository.save(loaded.loteObj);
         await ExcelService.updateControlFromLote(loaded.lote);
       }
-      await auditLogger.log('ENTREGA_ERRO', {
-        lote,
-        gtin,
-        codigo,
-        erro: err.message
-      });
+      if (deliveryStarted) {
+        await auditLogger.log('ENTREGA_ERRO', {
+          lote,
+          gtin,
+          codigo,
+          erro: err.message
+        });
+      }
 
       return { ok: false, error: err.message };
     } finally {
@@ -440,7 +443,10 @@ export class DeliveryService {
     ) {
       throw new Error('Internal code required for delivery');
     }
-    if (produto.codigo && produto.codigo !== codigo) {
+    if (typeof produto.codigo !== 'string' || produto.codigo.trim().length === 0) {
+      throw new Error('Product internal code required for delivery');
+    }
+    if (produto.codigo !== codigo) {
       throw new Error(`Delivery codigo does not match product codigo: ${codigo}`);
     }
   }

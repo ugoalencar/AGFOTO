@@ -34,3 +34,15 @@
 - `node --test tests/integration/delivery-products.test.js`: 7 passed.
 - `node --test tests/integration/qa-products.test.js tests/integration/api-routes.test.js tests/unit/ftp-service.test.js`: 36 passed.
 - `npm.cmd test`: 174 passed, 0 failed, 1 skipped because Windows symlink creation requires Developer Mode or elevation.
+
+## Second Review Fixes
+
+- Incompatible prepared attempts now remain staged and return a validation error without persisting a false operational delivery failure.
+- Provider connection failures after a valid prepared attempt now persist `erro_entrega`, update `ultimoErro`, and refresh the local control workbook.
+- Delivery preparation and execution now require the product to already have a non-empty internal `codigo`; arbitrary requested codes are rejected.
+
+### Tests
+
+- `node --test tests/integration/delivery-products.test.js`: 10 passed.
+- `node --test tests/integration/qa-products.test.js tests/integration/api-routes.test.js tests/unit/ftp-service.test.js`: 36 passed.
+- `npm.cmd test`: 177 passed, 0 failed, 1 skipped because Windows symlink creation requires Developer Mode or elevation.
