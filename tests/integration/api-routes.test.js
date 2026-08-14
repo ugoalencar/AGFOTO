@@ -53,6 +53,21 @@ test('phase 1 app does not expose carros or adset routes', async t => {
   }
 });
 
+test('phase 1 app does not expose delivery execution', async t => {
+  const env = await createTestEnv(t);
+  const app = createApp({ configOverrides: env.config });
+  const res = await request(app, '/api/entregas/executar', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Operation-ID': 'delivery-execution-is-disabled'
+    },
+    body: JSON.stringify({ lote: '37', gtin: '000123', codigo: 'A-1' })
+  });
+
+  assert.equal(res.status, 404);
+});
+
 test('mutating routes require operationId before reporting malformed JSON', async t => {
   const env = await createTestEnv(t);
   const app = createApp({ configOverrides: env.config });

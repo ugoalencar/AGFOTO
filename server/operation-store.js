@@ -15,7 +15,12 @@ export function createOperationStore() {
       if (existing?.status === 'started') {
         throw new Error(`operationId already in progress: ${operationId}`);
       }
-      if (existing?.status === 'completed') return existing;
+      if (existing?.status === 'completed') {
+        if (existing.action !== action) {
+          throw new Error(`operationId already completed for a different action: ${operationId}`);
+        }
+        return existing;
+      }
 
       const record = {
         operationId,

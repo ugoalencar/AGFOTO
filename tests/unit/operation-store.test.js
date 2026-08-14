@@ -12,3 +12,15 @@ test('operation store requires unique operationId lifecycle', () => {
   store.complete('op-1', { ok: true, data: { saved: 1 } });
   assert.deepEqual(store.get('op-1').result, { ok: true, data: { saved: 1 } });
 });
+
+test('operation store rejects a completed operationId reused by another action', () => {
+  const store = createOperationStore();
+
+  store.begin('op-1', 'POST /api/captura/salvar');
+  store.complete('op-1', { ok: true });
+
+  assert.throws(
+    () => store.begin('op-1', 'POST /api/planilhas/importar'),
+    /already completed for a different action/
+  );
+});

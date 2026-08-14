@@ -79,7 +79,6 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
   app.use('/api/imagens', capturaRoutes);
   app.use('/api/planilhas', planilhasRoutes);
   app.use('/api/qa', qaHubRoutes);
-  app.use('/api/entregas', qaHubRoutes);
   app.use('/api/retrabalhos', qaHubRoutes);
   app.use('/api/relatorios', qaHubRoutes);
 
