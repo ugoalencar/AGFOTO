@@ -8,6 +8,10 @@ import { createTestEnv } from '../helpers/test-env.js';
 import { applyConfigOverrides } from '../../server/config.js';
 
 const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+const RIFF_WAV_BYTES = Buffer.from([
+  0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
+  0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20
+]);
 
 async function request(app, requestPath, options = {}) {
   const server = app.listen(0, '127.0.0.1');
@@ -48,6 +52,40 @@ test('TEMP preview serves only a valid image inside its configured directory', a
   assert.match(image.contentType, /^image\/jpeg/);
   assert.deepEqual(image.body, JPG_BYTES);
   assert.equal(traversal.status, 400);
+});
+
+test('TEMP preview rejects a valid image reached through a symlink outside TEMP', async t => {
+  const env = await createTestEnv(t);
+  const outsideImage = path.join(env.root, 'outside.jpg');
+  const linkedImage = path.join(env.paths.imagesTemp, 'linked.jpg');
+  await fs.promises.writeFile(outsideImage, JPG_BYTES);
+  try {
+    await fs.promises.symlink(outsideImage, linkedImage, 'file');
+  } catch (error) {
+    if (error.code === 'EPERM') {
+      t.skip('Creating symlinks requires Windows Developer Mode or elevated privileges');
+      return;
+    }
+    throw error;
+  }
+  const app = createApp({ configOverrides: env.config });
+
+  const preview = await request(app, '/api/captura/imagem/temp/linked.jpg');
+
+  assert.equal(preview.status, 400);
+});
+
+test('TEMP listing and preview reject a WAV file renamed as WebP', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'audio.webp'), RIFF_WAV_BYTES);
+  const app = createApp({ configOverrides: env.config });
+
+  const images = await FileRepository.listTempImages();
+  const preview = await request(app, '/api/captura/imagem/temp/audio.webp');
+
+  assert.deepEqual(images, []);
+  assert.equal(preview.status, 400);
 });
 
 test('camera API reports status and opens through the operation middleware', async t => {

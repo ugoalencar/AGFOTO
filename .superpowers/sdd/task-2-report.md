@@ -35,3 +35,21 @@ Implemented local, non-blocking camera status and launch support using the confi
 - No physical camera process was started during testing; `CameraService` uses injected process-list and starter fakes in temporary environments. Production launching is deliberately detached and non-blocking.
 - Existing integration tests emit expected legacy JSON/backup log messages while passing; they are unrelated to this task.
 - No Redmine, Java, `start.jar`, `C:\\sphoto-terminais`, or `D:\\Syndi_qa` integration was introduced.
+
+## Fix Review Findings
+
+### Correcoes
+
+- `PreviewService.resolveTempImage()` agora resolve os realpaths tanto de `imagesTemp` quanto do arquivo solicitado e aplica contenção ao caminho físico antes de validar/servir a imagem. Links simbólicos que apontem para fora da TEMP são rejeitados com o erro de caminho existente, retornando `400` pela rota de preview.
+- `validateImageSignature()` agora associa cada extensão permitida a seu único formato aceito. WebP exige `RIFF` nos bytes `0-3` e `WEBP` nos bytes `8-11`; JPEG, PNG e GIF também só são aceitos com suas assinaturas correspondentes.
+
+### Testes
+
+- `node --test tests/integration/captura-products.test.js tests/unit/camera-service.test.js`: 7 passed, 0 failed, 1 skipped.
+- `npm.cmd test`: 124 passed, 0 failed, 1 skipped.
+- A regressão RIFF/WAV renomeada como `.webp` confirma rejeição tanto na listagem quanto no preview.
+- A regressão de symlink confirma o endpoint em ambientes que permitem criar symlinks. Neste Windows, o processo de teste recebeu `EPERM` ao criar o link, portanto o teste é ignorado com mensagem explícita (requer Developer Mode ou privilégios elevados).
+
+### Commits
+
+- `38f1b3f fix: harden temp image previews`

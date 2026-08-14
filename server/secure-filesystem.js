@@ -7,11 +7,21 @@ const ROOT = path.resolve(__dirname, '..');
 
 // Extensões permitidas para imagens
 const ALLOWED_IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+const IMAGE_FORMAT_BY_EXTENSION = {
+  '.jpg': 'jpg',
+  '.jpeg': 'jpg',
+  '.png': 'png',
+  '.gif': 'gif',
+  '.webp': 'webp'
+};
 const ALLOWED_IMAGE_SIGNATURES = {
-  jpg: Buffer.from([0xFF, 0xD8, 0xFF]),
-  png: Buffer.from([0x89, 0x50, 0x4E, 0x47]),
-  gif: Buffer.from([0x47, 0x49, 0x46]),
-  webp: Buffer.from([0x52, 0x49, 0x46, 0x46])
+  jpg: buffer => buffer.subarray(0, 3).equals(Buffer.from([0xFF, 0xD8, 0xFF])),
+  png: buffer => buffer.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4E, 0x47])),
+  gif: buffer => buffer.subarray(0, 3).equals(Buffer.from([0x47, 0x49, 0x46])),
+  webp: buffer => (
+    buffer.subarray(0, 4).equals(Buffer.from([0x52, 0x49, 0x46, 0x46])) &&
+    buffer.subarray(8, 12).equals(Buffer.from([0x57, 0x45, 0x42, 0x50]))
+  )
 };
 
 // Nomes reservados do Windows
@@ -92,11 +102,9 @@ export async function validateImageSignature(filePath) {
     await fd.read(buffer, 0, 16, 0);
     await fd.close();
 
-    // Valida assinatura
-    for (const [format, signature] of Object.entries(ALLOWED_IMAGE_SIGNATURES)) {
-      if (buffer.toString('hex').startsWith(signature.toString('hex'))) {
-        return format;
-      }
+    const expectedFormat = IMAGE_FORMAT_BY_EXTENSION[ext];
+    if (ALLOWED_IMAGE_SIGNATURES[expectedFormat](buffer)) {
+      return expectedFormat;
     }
 
     throw new Error('Invalid image signature');
