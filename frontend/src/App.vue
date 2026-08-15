@@ -630,7 +630,7 @@ export default {
           `/api/lotes/${qaPhotoLote.value}/itens`
         );
         if (response.ok) {
-          qaAvailableGtins.value = response.data.itens || [];
+          qaAvailableGtins.value = (response.data.itens || []).map(item => item.gtin || item);
           showStatus(`✓ ${qaAvailableGtins.value.length} GTINs carregados`, 'success');
         }
       } catch (err) {
