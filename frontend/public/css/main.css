@@ -1732,3 +1732,92 @@ select {
   padding: 3px 10px;
   font-size: 11px;
 }
+
+/* ============================================================
+   Explorador de pastas (escolher a origem sem digitar)
+   ============================================================ */
+.explorer {
+  margin-top: 12px;
+  border: 1px solid var(--ag-line);
+  border-radius: var(--ag-radius);
+  background: var(--ag-panel);
+  overflow: hidden;
+}
+
+.explorer-topo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--ag-line);
+  background: var(--ag-panel-2);
+}
+
+.explorer-subir,
+.explorer-fechar {
+  padding: 2px 9px;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.explorer-fechar { margin-left: auto; }
+
+.explorer-caminho {
+  font-family: var(--ag-mono);
+  font-size: 11px;
+  color: var(--ag-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+}
+
+.explorer-lista {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.explorer-lista li {
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--ag-line);
+}
+
+.explorer-lista li:hover {
+  background: var(--ag-orange);
+  color: #000;
+}
+
+.explorer-lista li.explorer-vazio {
+  color: var(--ag-muted);
+  cursor: default;
+  font-style: italic;
+}
+
+.explorer-lista li.explorer-vazio:hover {
+  background: none;
+  color: var(--ag-muted);
+}
+
+.explorer-erro {
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--ag-yellow);
+  border-bottom: 1px solid var(--ag-line);
+}
+
+.explorer-rodape {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px;
+  border-top: 1px solid var(--ag-line);
+  font-size: 11px;
+  color: var(--ag-muted);
+}

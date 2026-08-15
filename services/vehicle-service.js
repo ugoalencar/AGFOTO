@@ -1,5 +1,9 @@
 import path from 'path';
 import fs from 'fs';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 import { VehicleBatch, Vehicle } from '../domain/vehicle.js';
 import { config } from '../server/config.js';
 import { createSecureDirectory, assertInsideRoot, validateImageSignature } from '../server/secure-filesystem.js';
@@ -12,6 +16,53 @@ const EXTENSOES_FOTO = ['.jpg', '.jpeg', '.png', '.webp', '.cr2', '.cr3', '.nef'
 
 // Ultima pasta lida. As miniaturas so podem sair daqui.
 let pastaOrigemAtual = null;
+
+// Unidade de rede desconectada leva 21 SEGUNDOS para responder, e ha varias
+// nesta maquina. Qualquer leitura de pasta precisa de prazo, senao a tela fica
+// pendurada esperando o Windows desistir.
+const TIMEOUT_PASTA_MS = 3000;
+
+async function comPrazo(promessa, ms, mensagem) {
+  let timer;
+  try {
+    return await Promise.race([
+      promessa,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(mensagem)), ms);
+      })
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Unidades disponiveis, perguntando ao sistema em vez de sondar letra por letra.
+ *
+ * Sondar com fs.access nao funciona aqui: as unidades de rede desconectadas
+ * ocupam as threads do pool de I/O do Node por 21 segundos cada, e as locais
+ * ficam presas na fila atras delas - nem em paralelo elas respondiam a tempo.
+ * O Get-PSDrive roda fora desse pool e devolve a lista inteira em ~0,5s.
+ */
+async function listarUnidades() {
+  if (process.platform !== 'win32') return [path.sep];
+
+  try {
+    const { stdout } = await execFileAsync(
+      'powershell',
+      ['-NoProfile', '-NonInteractive', '-Command',
+        'Get-PSDrive -PSProvider FileSystem | Select-Object -ExpandProperty Root'],
+      { timeout: 5000, windowsHide: true }
+    );
+    const unidades = stdout.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    if (unidades.length > 0) return unidades;
+  } catch {
+    // cai no plano B abaixo
+  }
+
+  // Plano B: pelo menos a unidade onde o proprio sistema esta.
+  return [path.parse(path.resolve(config.paths.carros)).root];
+}
 
 /**
  * Serviço de Veículos
@@ -87,6 +138,65 @@ export class VehicleService {
       return { ok: true, data: { pasta, fotos, total: fotos.length } };
     } catch (err) {
       return { ok: false, error: `Nao foi possivel ler a pasta: ${err.message}` };
+    }
+  }
+
+  /**
+   * Navegacao de pastas para o usuario escolher a origem sem digitar caminho.
+   *
+   * Quem lista e o servidor porque o navegador nao entrega o caminho real de
+   * uma pasta escolhida - por seguranca, ele so da os arquivos.
+   *
+   * Sem caminho, devolve as unidades. Com caminho, as subpastas e o pai.
+   * So nomes de pasta saem daqui; arquivo nenhum e listado.
+   */
+  static async navegar(caminho) {
+    try {
+      // Esta rota mostra a arvore de pastas da maquina. Isso e aceitavel para
+      // um app que so escuta em 127.0.0.1, e nao para um exposto na rede.
+      if (config.server?.lanEnabled) {
+        return { ok: false, error: 'Navegacao de pastas indisponivel com a LAN ligada' };
+      }
+
+      const alvo = String(caminho || '').trim();
+
+      if (!alvo) {
+        const unidades = await listarUnidades();
+        return { ok: true, data: { atual: null, pai: null, pastas: unidades.map(u => ({ nome: u, caminho: u })) } };
+      }
+
+      const atual = path.resolve(alvo);
+
+      // Prazo tambem aqui: entrar numa unidade de rede desconectada penduraria
+      // a tela pelos mesmos 21 segundos.
+      let entries;
+      try {
+        entries = await comPrazo(
+          fs.promises.readdir(atual, { withFileTypes: true }),
+          TIMEOUT_PASTA_MS,
+          `A pasta nao respondeu a tempo (unidade desconectada?): ${atual}`
+        );
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+
+      const pastas = entries
+        .filter(e => e.isDirectory() && !e.name.startsWith('$') && !e.name.startsWith('.'))
+        .map(e => ({ nome: e.name, caminho: path.join(atual, e.name) }))
+        .sort((a, b) => a.nome.localeCompare(b.nome));
+
+      // Quantas fotos ha aqui, para o usuario reconhecer a pasta certa.
+      const fotos = entries.filter(
+        e => e.isFile() && EXTENSOES_FOTO.includes(path.extname(e.name).toLowerCase())
+      ).length;
+
+      const pai = path.dirname(atual);
+      return {
+        ok: true,
+        data: { atual, pai: pai === atual ? null : pai, pastas, fotos }
+      };
+    } catch (err) {
+      return { ok: false, error: err.message };
     }
   }
 

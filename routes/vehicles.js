@@ -4,6 +4,22 @@ import { VehicleRepository } from '../repositories/vehicle-repository.js';
 
 const router = express.Router();
 
+const responder = (res, result) => res
+  .status(result.ok ? 200 : 400)
+  .json(result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error });
+
+/**
+ * GET /api/carros/navegar?caminho=
+ * Lista unidades e subpastas para escolher a origem sem digitar o caminho.
+ */
+router.get('/navegar', async (req, res, next) => {
+  try {
+    responder(res, await VehicleService.navegar(req.query.caminho));
+  } catch (err) {
+    next(err);
+  }
+});
+
 /**
  * GET /api/carros/pasta?caminho=E:/DCIM/100CANON
  * Le a pasta de origem (cartao de memoria ou outra) e devolve as fotos na
@@ -32,10 +48,6 @@ router.get('/pasta/imagem/:filename', async (req, res) => {
     return res.status(error.code === 'ENOENT' ? 404 : 400).json({ ok: false, error: error.message });
   }
 });
-
-const responder = (res, result) => res
-  .status(result.ok ? 200 : 400)
-  .json(result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error });
 
 /**
  * GET /api/carros/datas

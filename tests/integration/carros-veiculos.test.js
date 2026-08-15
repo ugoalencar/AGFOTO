@@ -255,3 +255,48 @@ test('mover foto recusa nome com caminho', async t => {
   assert.match(result.error, /traversal/i);
   assert.deepEqual(await marcas(env, 'ABC1234'), [0, 1]);
 });
+
+test('navegar lista subpastas e conta as fotos da pasta atual', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  const raiz = path.join(env.root, 'cartao');
+  const dcim = path.join(raiz, 'DCIM');
+  await fs.promises.mkdir(dcim, { recursive: true });
+  await fs.promises.writeFile(path.join(dcim, 'a.jpg'), bytesDaFoto(1));
+  await fs.promises.writeFile(path.join(dcim, 'b.jpg'), bytesDaFoto(2));
+
+  const naRaiz = await VehicleService.navegar(raiz);
+  assert.equal(naRaiz.ok, true, naRaiz.error);
+  assert.deepEqual(naRaiz.data.pastas.map(p => p.nome), ['DCIM']);
+  assert.equal(naRaiz.data.fotos, 0);
+  assert.equal(naRaiz.data.pai, path.dirname(raiz));
+
+  const dentro = await VehicleService.navegar(dcim);
+  assert.equal(dentro.data.fotos, 2, 'a contagem ajuda a reconhecer a pasta certa');
+  assert.deepEqual(dentro.data.pastas, []);
+});
+
+test('navegar devolve erro em vez de pendurar quando a pasta nao responde', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  const result = await VehicleService.navegar(path.join(env.root, 'nao-existe'));
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /nao respondeu|nao encontrada|ENOENT/i);
+});
+
+test('navegar e recusado quando a LAN esta ligada', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const { config } = await import('../../server/config.js');
+  const antes = config.server.lanEnabled;
+  config.server.lanEnabled = true;
+  t.after(() => { config.server.lanEnabled = antes; });
+
+  const result = await VehicleService.navegar(env.root);
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /LAN/i);
+});

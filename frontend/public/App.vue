@@ -460,12 +460,45 @@
           </div>
 
           <label class="ag-label" style="margin-top:14px">Pasta das fotos</label>
-          <input class="ag-field" v-model="carrosPasta" type="text"
-                 placeholder="E:/DCIM/100CANON" @keydown.enter="onLerPastaCarros">
+          <div style="display:flex;gap:8px">
+            <input class="ag-field" v-model="carrosPasta" type="text"
+                   placeholder="E:/DCIM/100CANON" @keydown.enter="onLerPastaCarros" style="flex:1">
+            <button class="ag-btn" @click="onAbrirExplorador">Procurar</button>
+          </div>
           <button class="ag-btn is-primary" style="width:100%;margin-top:10px"
                   @click="onLerPastaCarros" :disabled="!carrosPasta || carrosLendo">
             {{ carrosLendo ? 'Lendo...' : 'Carregar' }}
           </button>
+
+          <!-- Explorador: o navegador nao entrega o caminho real de uma pasta,
+               entao quem lista o disco e o servidor. -->
+          <div v-if="explorerAberto" class="explorer">
+            <div class="explorer-topo">
+              <button class="ag-btn explorer-subir" @click="onExplorarPai"
+                      :disabled="!explorerPai && !explorerAtual">&larr;</button>
+              <span class="explorer-caminho">{{ explorerAtual || 'Este computador' }}</span>
+              <button class="ag-btn explorer-fechar" @click="explorerAberto = false">&times;</button>
+            </div>
+
+            <div v-if="explorerErro" class="explorer-erro">{{ explorerErro }}</div>
+
+            <ul class="explorer-lista">
+              <li v-for="pasta in explorerPastas" :key="pasta.caminho"
+                  @click="onExplorar(pasta.caminho)">
+                {{ pasta.nome }}
+              </li>
+              <li v-if="explorerPastas.length === 0" class="explorer-vazio">
+                Nenhuma subpasta aqui
+              </li>
+            </ul>
+
+            <div class="explorer-rodape">
+              <span>{{ explorerFotos }} foto(s) nesta pasta</span>
+              <button class="ag-btn is-ok" @click="onUsarPastaAtual" :disabled="!explorerAtual">
+                Usar esta pasta
+              </button>
+            </div>
+          </div>
 
           <div v-if="carrosFotos.length > 0" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--ag-line)">
             <div style="font-size:12px;color:var(--ag-muted);margin-bottom:8px">
@@ -733,6 +766,12 @@ export default {
     const carrosNovaPlaca = ref('');
     const carrosPlacaAlvo = ref('');
     const carrosFotoAlvo = ref('');
+    const explorerAberto = ref(false);
+    const explorerAtual = ref(null);
+    const explorerPai = ref(null);
+    const explorerPastas = ref([]);
+    const explorerFotos = ref(0);
+    const explorerErro = ref('');
     const carrosArrastando = ref(null);
     const carrosPasta = ref('');
     const carrosFotos = ref([]);
@@ -1162,6 +1201,42 @@ export default {
         await onCarregarPlanilhas();
         await sincronizarPlanilhas();
       }
+    };
+
+    const onExplorar = async caminho => {
+      explorerErro.value = '';
+      try {
+        const response = await this.$api.request('/api/carros/navegar', {
+          query: caminho ? { caminho } : {}
+        });
+        if (!response.ok) {
+          explorerErro.value = response.error;
+          return;
+        }
+        explorerAtual.value = response.data.atual;
+        explorerPai.value = response.data.pai;
+        explorerPastas.value = response.data.pastas || [];
+        explorerFotos.value = response.data.fotos || 0;
+      } catch (err) {
+        explorerErro.value = err.message;
+      }
+    };
+
+    const onAbrirExplorador = async () => {
+      explorerAberto.value = true;
+      // Abre onde o caminho digitado aponta, se houver; senao, nas unidades.
+      await onExplorar(carrosPasta.value || '');
+    };
+
+    const onExplorarPai = async () => {
+      await onExplorar(explorerPai.value || '');
+    };
+
+    const onUsarPastaAtual = async () => {
+      if (!explorerAtual.value) return;
+      carrosPasta.value = explorerAtual.value;
+      explorerAberto.value = false;
+      await onLerPastaCarros();
     };
 
     const onLerPastaCarros = async () => {
@@ -2014,6 +2089,16 @@ export default {
       carrosNovaPlaca,
       carrosPlacaAlvo,
       carrosFotoAlvo,
+      explorerAberto,
+      explorerAtual,
+      explorerPai,
+      explorerPastas,
+      explorerFotos,
+      explorerErro,
+      onAbrirExplorador,
+      onExplorar,
+      onExplorarPai,
+      onUsarPastaAtual,
       carrosTotalFotos,
       carrosPasta,
       carrosFotos,
