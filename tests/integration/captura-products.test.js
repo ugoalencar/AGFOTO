@@ -8,6 +8,7 @@ import ExcelJS from 'exceljs';
 import { FileRepository } from '../../repositories/file-repository.js';
 import LoteRepository from '../../repositories/lote-repository.js';
 import CapturaService from '../../services/captura-service.js';
+import DeliveryServiceForFinalize from '../../services/delivery-service.js';
 import ExcelService from '../../services/excel-service.js';
 import { createApp } from '../../server/app.js';
 import { createTestEnv } from '../helpers/test-env.js';
@@ -757,4 +758,79 @@ test('a name belonging to another GTIN is renumbered for the GTIN being saved', 
   assert.equal(salvo.ok, true);
   const dest = salvo.data.detalhes.moved[0].dest;
   assert.match(dest, /^000123_/, `deveria assumir o GTIN salvo: ${dest}`);
+});
+
+test('finalizing a GTIN whose photos are already on disk sends it to QA', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('90', '000123');
+
+  // Cenario real: as fotos ja estao salvas e a TEMP esta vazia. O Finalizar
+  // precisa fechar a captura mesmo assim - antes ele so limpava a tela.
+  assert.deepEqual(await fs.promises.readdir(env.paths.imagesTemp), []);
+
+  const lote = await LoteRepository.loadOrCreate('90');
+  lote.itens['000123'].status = 'em_captura';
+  lote.itens['000123'].historico = [];
+  await LoteRepository.save(lote);
+
+  const result = await CapturaService.finalizeCapture('90', '000123');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.status, 'pendente_qa');
+  assert.equal(result.data.quantidadeFotos, 1);
+
+  const salvo = await LoteRepository.load('90');
+  assert.equal(salvo.itens['000123'].status, 'pendente_qa');
+  assert.ok(salvo.itens['000123'].historico.length > 0, 'a finalizacao tem que deixar rastro');
+});
+
+test('finalizing counts photos found on disk even when the JSON never recorded them', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  // Pasta montada na mao: 3 fotos em disco, JSON sem nenhuma.
+  const produto = path.join(env.paths.finalizadas, 'LOTE 91', '000123');
+  await fs.promises.mkdir(produto, { recursive: true });
+  for (const nome of ['000123_0.jpg', '000123_1.jpg', '000123_2.jpg']) {
+    await fs.promises.writeFile(path.join(produto, nome), JPG_BYTES);
+  }
+
+  const result = await CapturaService.finalizeCapture('91', '000123');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.quantidadeFotos, 3);
+  const salvo = await LoteRepository.load('91');
+  assert.equal(salvo.itens['000123'].status, 'pendente_qa');
+  assert.equal(salvo.itens['000123'].quantidadeFotos, 3);
+});
+
+test('finalizing refuses a GTIN with no photos instead of reporting success', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const lote = await LoteRepository.loadOrCreate('92');
+  lote.getOrCreateItem('000123', 'COD-1', 'Sem foto nenhuma');
+  await LoteRepository.save(lote);
+
+  const result = await CapturaService.finalizeCapture('92', '000123');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /sem fotos/i);
+  const salvo = await LoteRepository.load('92');
+  assert.equal(salvo.itens['000123'].status, 'em_captura');
+});
+
+test('finalizing a GTIN already past capture keeps its status and refreshes the count', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('93', '000123');
+  await DeliveryServiceForFinalize.completeQa('93', '000123', 'normal');
+
+  const result = await CapturaService.finalizeCapture('93', '000123');
+
+  assert.equal(result.ok, true);
+  // Nao volta para pendente_qa quem ja passou pelo QA.
+  assert.equal(result.data.status, 'pronto_para_entrega');
 });

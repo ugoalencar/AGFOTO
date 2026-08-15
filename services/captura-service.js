@@ -2,6 +2,7 @@ import fs from 'fs';
 import LoteRepository from '../repositories/lote-repository.js';
 import { FileRepository } from '../repositories/file-repository.js';
 import { Produto } from '../domain/lote.js';
+import { ProductStatus, ProductEvents, transitionProduct } from '../domain/status.js';
 import { auditLogger } from '../server/audit-logger.js';
 import ExcelService from './excel-service.js';
 
@@ -263,6 +264,74 @@ export class CapturaService {
         ok: false,
         error: err.message
       };
+    }
+  }
+
+  /**
+   * Fecha a captura de um GTIN e o manda para o QA.
+   *
+   * Existe porque nem toda finalizacao vem de um salvar: o produto pode ja ter
+   * as fotos em Finalizadas (recaptura, pasta montada na mao, fotos salvas numa
+   * sessao anterior) e mesmo assim precisar sair de em_captura. Sem isso o
+   * Finalizar so limpava a tela e o GTIN nunca aparecia no QA.
+   *
+   * O que manda e o disco: sem foto na pasta nao ha o que revisar.
+   */
+  static async finalizeCapture(loteNumero, gtin) {
+    try {
+      if (!Produto.isValid(gtin)) {
+        return { ok: false, error: `Invalid GTIN: ${gtin}` };
+      }
+      const normalizedGtin = Produto.normalize(gtin);
+
+      const contagem = await LoteRepository.listGtinsWithImages(loteNumero);
+      const quantidadeFotos = contagem.get(normalizedGtin) || 0;
+      if (quantidadeFotos === 0) {
+        return {
+          ok: false,
+          error: 'Sem fotos em Finalizadas para este GTIN: nao ha o que finalizar'
+        };
+      }
+
+      const lote = await LoteRepository.loadOrCreate(loteNumero);
+      const produto = lote.getOrCreateItem(normalizedGtin, null, null);
+
+      if (produto.status === ProductStatus.EM_CAPTURA) {
+        // Fotos que chegaram por fora (pasta montada na mao, sessao anterior)
+        // ficam sem registro; o disco e a fonte para acertar a contagem.
+        produto.quantidadeFotos = quantidadeFotos;
+        transitionProduct(produto, ProductEvents.CAPTURA_SALVA, {
+          quantidadeFotos,
+          origem: 'finalizar'
+        });
+      } else {
+        produto.quantidadeFotos = quantidadeFotos;
+        produto.addHistoricoEvent('captura_finalizada', { quantidadeFotos });
+      }
+
+      await LoteRepository.save(lote);
+
+      const warnings = [];
+      try {
+        await ExcelService.updateControlFromLote(loteNumero);
+      } catch (err) {
+        warnings.push({ code: 'CONTROL_WORKBOOK_UPDATE_FAILED', error: err.message });
+      }
+
+      await auditLogger.log('CAPTURA_FINALIZADA', {
+        lote: loteNumero,
+        gtin: normalizedGtin,
+        quantidadeFotos,
+        status: produto.status
+      });
+
+      return {
+        ok: true,
+        data: { lote: loteNumero, gtin: normalizedGtin, status: produto.status, quantidadeFotos },
+        warnings: warnings.length > 0 ? warnings : undefined
+      };
+    } catch (err) {
+      return { ok: false, error: err.message };
     }
   }
 

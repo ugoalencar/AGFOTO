@@ -111,8 +111,9 @@
                 :disabled="!selectedLote || !selectedGtin || tempImages.length === 0 || salvandoCaptura">
           {{ salvandoCaptura ? 'Salvando...' : `Salvar (${tempImages.length})` }}
         </button>
-        <button class="ag-btn is-ok" @click="onFinalizar" :disabled="!selectedLote || !selectedGtin">
-          Finalizar
+        <button class="ag-btn is-ok" @click="onFinalizar"
+                :disabled="!selectedLote || !selectedGtin || finalizandoCaptura">
+          {{ finalizandoCaptura ? 'Finalizando...' : 'Finalizar' }}
         </button>
         <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0">
           Limpar TEMP
@@ -507,6 +508,7 @@ export default {
     const descricaoProduto = ref('...');
     const marcacaoEmCurso = ref(false);
     const salvandoCaptura = ref(false);
+    const finalizandoCaptura = ref(false);
     const checkCoding = ref(false);
     const checkRT = ref(false);
     const checkIS = ref(false);
@@ -1308,18 +1310,43 @@ export default {
     // chamada extra - no sphoto este botao avisa o Redmine, que aqui nao existe.
     const onFinalizar = async () => {
       if (!selectedLote.value || !selectedGtin.value) return;
+      if (finalizandoCaptura.value) return;
 
-      if (tempImages.value.length > 0) {
-        await onSaveCapture();
+      finalizandoCaptura.value = true;
+      try {
+        // Salva o que estiver no palco Atual antes de fechar.
+        if (tempImages.value.length > 0) {
+          await onSaveCapture();
+        }
+
+        // Fechar de verdade e mudar o status: sem isso o GTIN nunca chega ao QA.
+        const response = await this.$api.request('/api/captura/finalizar', {
+          method: 'POST',
+          data: {
+            lote: selectedLote.value,
+            gtin: selectedGtin.value,
+            operationId: makeOperationId('finalizar')
+          }
+        });
+
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+
+        showStatus(`✓ ${selectedGtin.value} finalizado - ${response.data.quantidadeFotos} fotos pendentes de QA`, 'success');
+        await loadLote();
+        selectedGtin.value = '';
+        inputGtin.value = '';
+        descricaoProduto.value = '...';
+        currentStatus.value = '';
+        previousImages.value = [];
+        observacoes.value = '';
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        finalizandoCaptura.value = false;
       }
-
-      await loadLote();
-      selectedGtin.value = '';
-      inputGtin.value = '';
-      descricaoProduto.value = '...';
-      previousImages.value = [];
-      observacoes.value = '';
-      showStatus('✓ GTIN finalizado - pendente de QA', 'success');
     };
 
     onUnmounted(() => {
@@ -1348,6 +1375,7 @@ export default {
       descricaoProduto,
       marcacaoEmCurso,
       salvandoCaptura,
+      finalizandoCaptura,
       checkCoding,
       checkRT,
       checkIS,

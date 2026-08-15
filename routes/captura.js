@@ -318,6 +318,32 @@ router.get('/imagem/finalizadas/:lote/:gtin/:subfolder/:filename', async (req, r
 });
 
 /**
+ * POST /api/captura/finalizar
+ * Fecha a captura do GTIN e o manda para o QA.
+ *
+ * Body: { lote, gtin }
+ */
+router.post('/finalizar', express.json(), async (req, res) => {
+  const { lote, gtin } = req.body;
+
+  if (!Lote.isValid(lote)) {
+    return res.status(400).json({ ok: false, error: `Invalid lote: ${lote}`, requestId: req.id });
+  }
+  if (!Produto.isValid(gtin)) {
+    return res.status(400).json({ ok: false, error: `Invalid GTIN: ${gtin}`, requestId: req.id });
+  }
+
+  const result = await CapturaService.finalizeCapture(lote, gtin);
+  return res.status(result.ok ? 200 : 400).json({
+    ok: result.ok,
+    data: result.data,
+    error: result.error,
+    warnings: result.warnings,
+    requestId: req.id
+  });
+});
+
+/**
  * POST /api/captura/marcar
  * Toggle de sufixo (_coding, _RT, _IS, _AP) no nome dos arquivos marcados.
  *
