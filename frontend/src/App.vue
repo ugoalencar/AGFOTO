@@ -41,8 +41,10 @@
     <div class="ag-card-body" style="display:flex;flex-direction:column;gap:18px">
       <div>
         <label class="ag-label">Lote</label>
-        <input class="ag-field is-large" v-model="selectedLote" @keydown.enter="onLoteSelected" type="text" placeholder="Numero do lote" autocomplete="off">
-        <button class="ag-btn is-warning" style="width:100%;margin-top:8px" @click="onLoteSelected" :disabled="!selectedLote">Selecionar lote</button>
+        <select class="ag-field is-large" v-model="selectedLote" @change="onLoteSelected">
+          <option value="">Selecione um lote</option>
+          <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ lote }}</option>
+        </select>
       </div>
 
       <div>
@@ -345,6 +347,7 @@ export default {
     const tempImages = ref([]);
     const previousImages = ref([]);
     const loteItems = ref([]);
+    const availableLotes = ref([]);
     const modalImage = ref(null);
     const status = ref('');
     const statusType = ref('');
@@ -401,6 +404,17 @@ export default {
         ? crypto.randomUUID()
         : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       return `${prefix}-${randomId}`;
+    };
+
+    const loadAvailableLotes = async () => {
+      try {
+        const response = await this.$api.request('/api/lotes');
+        if (response.ok) {
+          availableLotes.value = response.data.lotes || [];
+        }
+      } catch (err) {
+        availableLotes.value = [];
+      }
     };
 
     const loadTempImages = async () => {
@@ -824,6 +838,7 @@ export default {
 
     onMounted(async () => {
       // Load initial data
+      await loadAvailableLotes();
       await loadTempImages();
       await loadQaLotes();
 
@@ -845,6 +860,7 @@ export default {
       tempImages,
       previousImages,
       loteItems,
+      availableLotes,
       modalImage,
       status,
       statusType,
