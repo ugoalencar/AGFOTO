@@ -107,8 +107,9 @@
 
       <!-- Botoes de acao -->
       <div class="capture-acoes">
-        <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedLote || !selectedGtin || tempImages.length === 0">
-          Salvar ({{ tempImages.length }})
+        <button class="ag-btn is-primary" @click="onSaveCapture"
+                :disabled="!selectedLote || !selectedGtin || tempImages.length === 0 || salvandoCaptura">
+          {{ salvandoCaptura ? 'Salvando...' : `Salvar (${tempImages.length})` }}
         </button>
         <button class="ag-btn is-ok" @click="onFinalizar" :disabled="!selectedLote || !selectedGtin">
           Finalizar
@@ -505,6 +506,7 @@ export default {
     const observacoes = ref('');
     const descricaoProduto = ref('...');
     const marcacaoEmCurso = ref(false);
+    const salvandoCaptura = ref(false);
     const checkCoding = ref(false);
     const checkRT = ref(false);
     const checkIS = ref(false);
@@ -575,7 +577,10 @@ export default {
     const loadTempImages = async () => {
       try {
         // Manda o GTIN selecionado para a foto ja entrar no palco com o nome dele.
-        const response = await this.$api.getTempImages(selectedGtin.value || null);
+        const response = await this.$api.getTempImages(
+          selectedGtin.value || null,
+          selectedLote.value || null
+        );
         if (response.ok) {
           tempImages.value = response.data.images || [];
         }
@@ -653,7 +658,9 @@ export default {
 
     const onSaveCapture = async () => {
       if (!selectedLote.value || !selectedGtin.value || tempImages.value.length === 0) return;
+      if (salvandoCaptura.value) return;
 
+      salvandoCaptura.value = true;
       try {
         const response = await this.$api.saveCaptureCapture(
           selectedLote.value,
@@ -677,6 +684,8 @@ export default {
         }
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        salvandoCaptura.value = false;
       }
     };
 
@@ -1338,6 +1347,7 @@ export default {
       observacoes,
       descricaoProduto,
       marcacaoEmCurso,
+      salvandoCaptura,
       checkCoding,
       checkRT,
       checkIS,

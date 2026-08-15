@@ -15,10 +15,10 @@ import { applyConfigOverrides } from '../../server/config.js';
 
 const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
 
-// Salvar renomeia no padrao do sphoto: GTIN_dd_MM_yyyy_HH_mm_ss_indice[_sufixos].ext
-// O timestamp e do momento da gravacao, entao os testes casam por padrao.
+// Salvar renomeia para GTIN_indice[_sufixos].ext - a hora de cada foto fica no
+// JSON do lote, nao no nome do arquivo.
 function padraoCapturado(gtin, indice = 0, extras = '') {
-  return new RegExp(`^${gtin}_\\d{2}_\\d{2}_\\d{4}_\\d{2}_\\d{2}_\\d{2}_${indice}${extras}\\.jpg$`);
+  return new RegExp(`^${gtin}_${indice}${extras}\\.jpg$`);
 }
 
 function pastaProduto(env, lote, gtin, subpasta = null) {
@@ -246,7 +246,7 @@ test('save capture moves snapshot, updates JSON and control workbook without ove
   assert.deepEqual(await fs.promises.readFile(finalPhoto), Buffer.from('existing photo'));
 
   const capturado = await acharCapturado(env, '37', '000123');
-  assert.ok(capturado, 'foto salva deve usar o nome GTIN_data_hora_indice');
+  assert.ok(capturado, 'foto salva deve usar o nome GTIN_indice');
   assert.deepEqual(await fs.promises.readFile(pastaProduto(env, '37', '000123', null) + path.sep + capturado), JPG_BYTES);
 
   const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_37.json'), 'utf8'));
@@ -681,19 +681,18 @@ test('TEMP renames incoming camera files with the selected GTIN, using the photo
   const arquivos = (await fs.promises.readdir(temp)).sort();
   assert.equal(arquivos.length, 2);
   for (const nome of arquivos) {
-    assert.match(nome, /^000123_\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}_\d+\.jpg$/, nome);
+    assert.match(nome, /^000123_\d+\.jpg$/, nome);
   }
   // A foto mais antiga leva o indice 0.
-  assert.ok(arquivos[0].endsWith('_0.jpg'));
-  assert.match(arquivos[0], /^000123_10_08_2026_/);
+  assert.deepEqual(arquivos, ['000123_0.jpg', '000123_1.jpg']);
 });
 
 test('TEMP leaves already-named files alone and keeps numbering from the highest index', async t => {
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
   const temp = env.paths.imagesTemp;
-  const existente = '000123_10_08_2026_09_00_00_7.jpg';
-  const marcada = '000123_10_08_2026_09_00_00_8_coding.jpg';
+  const existente = '000123_7.jpg';
+  const marcada = '000123_8_coding.jpg';
   await fs.promises.writeFile(path.join(temp, existente), JPG_BYTES);
   await fs.promises.writeFile(path.join(temp, marcada), JPG_BYTES);
   await fs.promises.writeFile(path.join(temp, 'IMG_NOVA.jpg'), JPG_BYTES);
@@ -751,10 +750,7 @@ test('a name belonging to another GTIN is renumbered for the GTIN being saved', 
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
   // Sobra de outro produto: nao pode ser salva com o nome do GTIN antigo.
-  await fs.promises.writeFile(
-    path.join(env.paths.imagesTemp, '000999_10_08_2026_09_00_00_0.jpg'),
-    JPG_BYTES
-  );
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, '000999_0.jpg'), JPG_BYTES);
 
   const salvo = await CapturaService.saveCapture('84', '000123');
 

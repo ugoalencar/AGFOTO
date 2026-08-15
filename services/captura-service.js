@@ -102,13 +102,14 @@ export class CapturaService {
   /**
    * Lista imagens atuais em TEMP
    */
-  static async getTempImages(gtin = null) {
+  static async getTempImages(gtin = null, lote = null) {
     try {
       // Com um GTIN selecionado, o que chega na TEMP ja aparece no palco com o
       // nome final. Sem GTIN, lista como esta.
       if (gtin) {
         try {
-          await FileRepository.renameTempWithGtin(gtin);
+          // O lote entra na conta para a numeracao nao repetir o que ja foi salvo.
+          await FileRepository.renameTempWithGtin(gtin, lote);
         } catch (err) {
           console.warn(`[TEMP] rename skipped: ${err.message}`);
         }
@@ -202,6 +203,12 @@ export class CapturaService {
       // Atualiza o JSON apenas com as fotos efetivamente movidas.
       const lote = await LoteRepository.loadOrCreate(loteNumero);
       const produto = lote.getOrCreateItem(normalizedGtin, codigo, descricao);
+      // O nome do arquivo e so GTIN_indice: a hora de cada foto fica aqui.
+      produto.registerPhotos(moveResult.moved.map(item => ({
+        arquivo: item.dest,
+        subpasta: item.subfolder,
+        capturadaEm: item.capturadaEm
+      })));
       produto.markCaptureSaved(moveResult.moved.length);
       await LoteRepository.save(lote);
 

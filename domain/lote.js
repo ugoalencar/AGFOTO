@@ -110,6 +110,9 @@ export class Produto {
     this.quantidadeFotos = 0;
     this.ultimaEntregaEm = null;
     this.ultimoErro = null;
+    // Um registro por arquivo salvo: o nome no disco e so GTIN_indice, entao e
+    // aqui que fica a hora em que cada foto foi tirada.
+    this.fotos = [];
     this.historico = [];
   }
 
@@ -158,6 +161,25 @@ export class Produto {
   /**
    * Registra fotos movidas e conserva o produto em pendente_qa em recapturas.
    */
+  /**
+   * Guarda nome, subpasta e hora de cada arquivo que acabou de ser salvo.
+   * Regravar o mesmo nome (recaptura no lugar) atualiza o registro existente.
+   */
+  registerPhotos(fotos = []) {
+    for (const foto of fotos) {
+      if (!foto || !foto.arquivo) continue;
+      const registro = {
+        arquivo: foto.arquivo,
+        subpasta: foto.subpasta || 'raiz',
+        capturadaEm: foto.capturadaEm || null,
+        salvaEm: new Date().toISOString()
+      };
+      const existente = this.fotos.findIndex(f => f.arquivo === registro.arquivo);
+      if (existente >= 0) this.fotos[existente] = registro;
+      else this.fotos.push(registro);
+    }
+  }
+
   markCaptureSaved(photoCount) {
     const quantidadeFotos = this.quantidadeFotos + photoCount;
     this.updatePhotoCount(quantidadeFotos);
@@ -209,6 +231,7 @@ export class Produto {
       quantidadeFotos: this.quantidadeFotos,
       ultimaEntregaEm: this.ultimaEntregaEm,
       ultimoErro: this.ultimoErro,
+      fotos: this.fotos,
       historico: this.historico
     };
   }
@@ -223,6 +246,7 @@ export class Produto {
     produto.quantidadeFotos = data.quantidadeFotos;
     produto.ultimaEntregaEm = data.ultimaEntregaEm;
     produto.ultimoErro = data.ultimoErro;
+    produto.fotos = data.fotos || [];
     produto.historico = data.historico || [];
     return produto;
   }

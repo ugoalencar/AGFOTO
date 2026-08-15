@@ -119,38 +119,48 @@ export async function validateImageSignature(filePath) {
 /**
  * Monitora estabilidade de arquivo (para câmera gravando)
  */
+// Tempo sem escrita a partir do qual o arquivo e considerado pronto sem precisar
+// ficar observando. Cobre a camera que ainda esta gravando sem cobrar o pedagio
+// de quem so quer salvar uma foto que ja esta parada no disco.
+const QUIET_PERIOD_MS = 750;
+const STABILITY_POLL_MS = 120;
+
+/**
+ * Resolve quando o arquivo para de crescer.
+ *
+ * Antes isso custava 2 segundos fixos por arquivo (3 conferencias a 500ms) mesmo
+ * para foto parada ha horas, e o salvar chamava em serie - 10 fotos viravam 20
+ * segundos de espera. Agora o arquivo que ja esta quieto passa direto.
+ */
 export async function waitForFileStability(filePath, timeoutMs = 5000) {
   const startTime = Date.now();
-  let lastSize = -1;
-  let stableCount = 0;
-  const requiredStableChecks = 3;
 
-  return new Promise((resolve, reject) => {
-    const checkInterval = setInterval(async () => {
-      try {
-        const stats = await fs.promises.stat(filePath);
+  let stats = await fs.promises.stat(filePath);
+  if (Date.now() - stats.mtimeMs >= QUIET_PERIOD_MS) return stats.size;
 
-        if (stats.size === lastSize) {
-          stableCount++;
-          if (stableCount >= requiredStableChecks) {
-            clearInterval(checkInterval);
-            resolve(stats.size);
-          }
-        } else {
-          stableCount = 0;
-          lastSize = stats.size;
-        }
+  let lastSize = stats.size;
+  let stableChecks = 0;
 
-        if (Date.now() - startTime > timeoutMs) {
-          clearInterval(checkInterval);
-          reject(new Error(`File stability timeout: ${filePath}`));
-        }
-      } catch (err) {
-        clearInterval(checkInterval);
-        reject(err);
+  for (;;) {
+    if (Date.now() - startTime > timeoutMs) {
+      throw new Error(`File stability timeout: ${filePath}`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, STABILITY_POLL_MS));
+    stats = await fs.promises.stat(filePath);
+
+    if (stats.size === lastSize) {
+      stableChecks++;
+      // Duas leituras iguais seguidas, ou o arquivo parou de ser escrito ha tempo
+      // suficiente: nao ha mais o que esperar.
+      if (stableChecks >= 2 || Date.now() - stats.mtimeMs >= QUIET_PERIOD_MS) {
+        return stats.size;
       }
-    }, 500);
-  });
+    } else {
+      stableChecks = 0;
+      lastSize = stats.size;
+    }
+  }
 }
 
 /**

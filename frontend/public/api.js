@@ -49,8 +49,11 @@ export class ApiClient {
   /**
    * GET /api/captura/temp
    */
-  async getTempImages(gtin = null) {
-    return this.request('/api/captura/temp', gtin ? { query: { gtin } } : {});
+  async getTempImages(gtin = null, lote = null) {
+    if (!gtin) return this.request('/api/captura/temp');
+    const query = { gtin };
+    if (lote) query.lote = lote;
+    return this.request('/api/captura/temp', { query });
   }
 
   /**

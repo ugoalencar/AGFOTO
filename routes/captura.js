@@ -15,7 +15,10 @@ const router = Router();
  */
 router.get('/temp', async (req, res) => {
   // ?gtin= renomeia o que chegou usando o GTIN selecionado, antes de listar.
-  const result = await CapturaService.getTempImages(req.query.gtin || null);
+  const result = await CapturaService.getTempImages(
+    req.query.gtin || null,
+    req.query.lote || null
+  );
 
   if (result.ok) {
     res.json({
