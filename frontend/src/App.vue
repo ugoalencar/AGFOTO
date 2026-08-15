@@ -33,92 +33,131 @@
 
       <div class="ag-content">
 
-<main v-if="activePage === 'captura'" class="ag-view capture-view">
-  <section class="ag-card capture-entry">
-    <header class="ag-card-header">
-      <h2 class="ag-card-title">Buscar</h2>
-    </header>
-    <div class="ag-card-body" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:flex-end">
-      <div>
-        <label class="ag-label">Lote</label>
-        <select class="ag-field" v-model="selectedLote" @change="onLoteSelected">
-          <option value="">Selecione um lote</option>
-          <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ lote }}</option>
-        </select>
-      </div>
-
+<main v-if="activePage === 'captura'" class="ag-view capture-view" style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;grid-auto-rows:max-content">
+  <!-- Row 1: GTIN Search + Description -->
+  <section class="ag-card" style="grid-column:1/-1;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;align-items:flex-start">
       <div>
         <label class="ag-label">GTIN / EAN</label>
-        <input class="ag-field" v-model="inputGtin" @keydown.enter="onGtinSearch" type="text" placeholder="Leitor ou digitação" autocomplete="off">
+        <div style="display:flex;gap:8px">
+          <input class="ag-field" v-model="inputGtin" @keydown.enter="onGtinSearch" type="text" placeholder="Digite ou leia o GTIN" autocomplete="off" style="flex:1">
+          <button class="ag-btn is-primary" @click="onGtinSearch" :disabled="!inputGtin">Buscar</button>
+        </div>
       </div>
-
-      <button class="ag-btn is-primary" @click="onGtinSearch" :disabled="!inputGtin">Buscar</button>
-
-      <div v-if="selectedGtin" style="grid-column:1/-1;padding-top:8px;border-top:1px solid var(--ag-line)">
-        <label class="ag-label" style="margin-bottom:6px">Status</label>
-        <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span>
+      <div v-if="selectedGtin" style="padding:8px 12px;background:var(--ag-panel);border-radius:4px;border:1px solid var(--ag-line)">
+        <div style="font-size:12px;color:var(--ag-muted);margin-bottom:4px">Produto</div>
+        <div style="font-weight:bold">{{ selectedGtin }}</div>
+        <div style="font-size:12px;color:var(--ag-muted)">Status: <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span></div>
       </div>
     </div>
   </section>
 
-  <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;grid-column:1/-1">
-    <section id="capture-stage" class="ag-card capture-stage">
-      <div class="stage-head">
-        <h3 class="stage-title">Palco atual</h3>
-        <span class="ag-chip">TEMP monitorando</span>
-        <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ tempImages.length }} imagens</span>
+  <!-- Left Column: Imagens -->
+  <section class="ag-card" style="grid-column:1;grid-row:2">
+    <header class="ag-card-header">
+      <h3 class="ag-card-title">Atual (TEMP)</h3>
+      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ tempImages.length }} imagens</span>
+    </header>
+    <div class="ag-card-body">
+      <div v-if="tempImages.length === 0" style="text-align:center;padding:20px;color:var(--ag-muted)">
+        Aguardando imagens da câmera
       </div>
-      <div v-if="tempImages.length === 0" class="stage-grid stage-empty">Aguardando imagens da camera</div>
-      <div v-else class="stage-grid">
-        <div v-for="img in tempImages" :key="img.name" class="thumbnail" @click="openModal(img)">
-          <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @error="onImageError">
-          <div class="thumbnail-overlay">
-            <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
-            <button @click.stop="onImageDelete(img)" class="btn-thumbnail" title="Excluir">x</button>
-          </div>
+      <div v-else style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px">
+        <div v-for="img in tempImages" :key="img.name" class="thumbnail-item" :class="{ marked: imagensMarcadasTemp.includes(img.name) }">
+          <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @click="openModal(img)" @error="onImageError" style="cursor:pointer;width:100%;height:100px;object-fit:cover">
+          <button class="btn-delete-thumb" @click="onImageDelete(img)" title="Deletar"><i>×</i></button>
+          <button class="btn-mark-thumb" @click="toggleMarcacao(img.name, 'temp')" title="Marcar"><i>✓</i></button>
         </div>
       </div>
+    </div>
+  </section>
 
-      <div class="stage-head">
-        <h3 class="stage-title">Palco anterior</h3>
-        <span class="ag-chip">{{ selectedGtin || 'sem GTIN' }}</span>
-        <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
-      </div>
-      <div v-if="!selectedGtin || previousImages.length === 0" class="stage-grid stage-empty">
-        {{ selectedGtin ? 'Nenhuma imagem anterior' : 'Selecione um GTIN' }}
-      </div>
-      <div v-else id="previous-grid" class="stage-grid">
-        <div v-for="img in previousImages" :key="img.name" class="thumbnail" @click="openModal(img)">
-          <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @error="onImageError">
-          <div class="thumbnail-overlay">
-            <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
-          </div>
-        </div>
-      </div>
-    </section>
+  <!-- Center Column: Buttons + Obs -->
+  <section class="ag-card" style="grid-column:2;grid-row:2;width:120px">
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedGtin || tempImages.length === 0" style="width:100%;height:40px;font-size:12px;flex:1" title="Salvar ({{ tempImages.length }})">
+        <div style="font-size:18px">↓</div>
+        <div>Salvar</div>
+      </button>
+      <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0" style="width:100%;height:40px;font-size:12px;flex:1" title="Limpar TEMP">
+        <div style="font-size:18px">🗑</div>
+        <div>Limpar</div>
+      </button>
+    </div>
+  </section>
 
-    <section class="ag-card">
-      <header class="ag-card-header">
-        <h2 class="ag-card-title">GTINs do lote</h2>
-        <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ loteItems.length }} itens</span>
-      </header>
-      <ul class="capture-lote-list">
-        <li v-for="item in loteItems" :key="item.gtin" @click="inputGtin = item.gtin; onGtinSearch()">
-          <span>{{ item.gtin }}</span>
-          <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
-        </li>
-      </ul>
-    </section>
-  </div>
+  <!-- Right Column: Lote + Imagens Anteriores -->
+  <section class="ag-card" style="grid-column:3;grid-row:2">
+    <div style="margin-bottom:12px">
+      <label class="ag-label">Lote</label>
+      <select class="ag-field" v-model="selectedLote" @change="onLoteSelected">
+        <option value="">Selecione um lote</option>
+        <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ lote }}</option>
+      </select>
+    </div>
 
+    <div style="margin-bottom:12px">
+      <label class="ag-label">GTINs ({{ loteItems.length }})</label>
+      <div style="max-height:150px;overflow-y:auto;border:1px solid var(--ag-line);border-radius:4px">
+        <button v-for="item in loteItems" :key="item.gtin"
+                @click="inputGtin = item.gtin; onGtinSearch()"
+                style="display:block;width:100%;text-align:left;padding:8px;border:none;background:none;border-bottom:1px solid var(--ag-line);cursor:pointer;color:var(--ag-fg)"
+                :style="{ background: selectedGtin === item.gtin ? 'var(--ag-orange)' : 'transparent', color: selectedGtin === item.gtin ? '#000' : 'var(--ag-fg)' }">
+          <div style="font-weight:bold">{{ item.gtin }}</div>
+          <div style="font-size:11px;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</div>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Row 3: Palco Anterior (Full Width) -->
   <section class="ag-card" style="grid-column:1/-1">
-    <div class="capture-actions" style="display:flex;gap:8px">
-      <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedLote || !selectedGtin || tempImages.length === 0" style="flex:1">
-        Salvar ({{ tempImages.length }})
-      </button>
-      <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0" style="flex:1">
-        Limpar TEMP
-      </button>
+    <header class="ag-card-header">
+      <h3 class="ag-card-title">Anterior (Finalizadas)</h3>
+      <span v-if="selectedGtin" style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
+    </header>
+    <div class="ag-card-body">
+      <div v-if="!selectedGtin" style="text-align:center;padding:20px;color:var(--ag-muted)">
+        Selecione um GTIN para ver as imagens anteriores
+      </div>
+      <div v-else-if="previousImages.length === 0" style="text-align:center;padding:20px;color:var(--ag-muted)">
+        Nenhuma imagem anterior
+      </div>
+      <div v-else style="display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:8px">
+        <div v-for="img in previousImages" :key="img.name" class="thumbnail-item" :class="{ marked: imagensMarcadasAnterior.includes(img.name) }">
+          <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @click="openModal(img)" @error="onImageError" style="cursor:pointer;width:100%;height:100px;object-fit:cover">
+          <button class="btn-delete-thumb" @click="onImageDelete(img)" title="Deletar"><i>×</i></button>
+          <button class="btn-mark-thumb" @click="toggleMarcacao(img.name, 'anterior')" title="Marcar"><i>✓</i></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Row 4: Obs + Checkboxes -->
+  <section class="ag-card" style="grid-column:1/-1" v-if="selectedGtin">
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      <div style="flex:1">
+        <label class="ag-label">Obs</label>
+        <textarea class="ag-field" v-model="observacoes" rows="2" placeholder="Observações sobre o GTIN" style="resize:none;width:100%"></textarea>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:24px">
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
+          <input type="checkbox" v-model="checkCoding">
+          <span style="font-size:12px">_coding</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
+          <input type="checkbox" v-model="checkRT">
+          <span style="font-size:12px">_RT</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
+          <input type="checkbox" v-model="checkIS">
+          <span style="font-size:12px">_IS</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
+          <input type="checkbox" v-model="checkAP">
+          <span style="font-size:12px">_AP</span>
+        </label>
+      </div>
     </div>
   </section>
 </main>
@@ -241,7 +280,23 @@
           </div>
         </div>
       </section>
-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header><div class="stage-grid"><div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card"><div style="height:74px;display:grid;place-items:center;background:var(--ag-panel);margin-bottom:8px">Foto</div><div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div><div style="display:flex;gap:4px;margin-top:8px"><button class="ag-btn" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button><button class="ag-btn is-warning" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button></div></div></div><div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div></section>
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header>
+        <div class="stage-grid">
+          <div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card" :class="{ 'photo-ap': photo.classification === 'AP', 'photo-at': photo.classification === 'AT' }">
+            <div style="height:120px;background:var(--ag-panel);margin-bottom:8px;border:2px solid var(--ag-line);position:relative;cursor:pointer;overflow:hidden" @click="openModal(photo)">
+              <img :src="photo.url || getImageUrl(photo)" style="width:100%;height:100%;object-fit:cover" @error="onImageError">
+              <div v-if="photo.classification" style="position:absolute;top:4px;right:4px;background:var(--ag-red);color:#fff;padding:2px 6px;font-size:11px;font-weight:bold;border-radius:3px">{{ photo.classification }}</div>
+            </div>
+            <div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div>
+            <div style="display:flex;gap:4px;margin-top:8px">
+              <button class="ag-btn" :class="{ 'is-primary': photo.classification === 'AP' }" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button>
+              <button class="ag-btn is-warning" :class="{ 'is-primary': photo.classification === 'AT' }" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button>
+            </div>
+          </div>
+        </div>
+        <div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div>
+      </section>
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Marcacoes</h2></header><div class="ag-card-body" style="color:var(--ag-muted);font-size:13px"><p><b style="color:var(--ag-yellow)">AP</b> fica fora da entrega normal.</p><p><b style="color:var(--ag-orange)">AT</b> entra na entrega de atualizacao.</p><p>Desfazer e exclusao continuam registrados por auditoria.</p></div></section>
     </main>
     <main v-if="activePage === 'relatorios'" class="ag-view report-view">
@@ -382,6 +437,15 @@ export default {
     // Vehicles state
     const vehiclesLote = ref('');
     const vehicles = ref([]);
+
+    // Thumbnail & marking state (sphoto-style)
+    const imagensMarcadasTemp = ref([]);
+    const imagensMarcadasAnterior = ref([]);
+    const observacoes = ref('');
+    const checkCoding = ref(false);
+    const checkRT = ref(false);
+    const checkIS = ref(false);
+    const checkAP = ref(false);
 
     let refreshInterval = null;
 
@@ -867,6 +931,16 @@ export default {
       refreshInterval = setInterval(loadTempImages, 2000);
     });
 
+    const toggleMarcacao = (nome, tipo) => {
+      const lista = tipo === 'anterior' ? imagensMarcadasAnterior.value : imagensMarcadasTemp.value;
+      const indice = lista.indexOf(nome);
+      if (indice >= 0) {
+        lista.splice(indice, 1);
+      } else {
+        lista.push(nome);
+      }
+    };
+
     onUnmounted(() => {
       if (refreshInterval) {
         clearInterval(refreshInterval);
@@ -887,6 +961,14 @@ export default {
       statusType,
       currentStatus,
       currentStatusLabel,
+      imagensMarcadasTemp,
+      imagensMarcadasAnterior,
+      observacoes,
+      checkCoding,
+      checkRT,
+      checkIS,
+      checkAP,
+      toggleMarcacao,
       excelFile,
       excelItems,
       excelConflicts,

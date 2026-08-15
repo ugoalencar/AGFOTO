@@ -1055,3 +1055,86 @@ select {
     grid-template-rows: auto minmax(180px, 1fr) auto minmax(180px, 1fr);
   }
 }
+
+/* Thumbnails - sphoto style */
+.thumbnail-item {
+  position: relative;
+  aspect-ratio: 1;
+  background: var(--ag-panel);
+  border: 2px solid var(--ag-line);
+  border-radius: 4px;
+  overflow: hidden;
+  transition: all 0.2s;
+}
+
+.thumbnail-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.thumbnail-item.marked {
+  border-color: var(--ag-orange);
+  box-shadow: 0 0 0 2px var(--ag-orange), inset 0 0 0 1px var(--ag-orange);
+  background: rgba(255, 106, 19, 0.1);
+}
+
+.thumbnail-item.has-coding {
+  border-left: 4px solid var(--ag-orange);
+}
+
+.thumbnail-item.has-rt {
+  border-left: 4px solid #E8262B;
+}
+
+.thumbnail-item.has-is {
+  border-left: 4px solid #2EA043;
+}
+
+.thumbnail-item.has-ap {
+  border-left: 4px solid #6B46C1;
+}
+
+.btn-delete-thumb,
+.btn-mark-thumb {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  background: rgba(0, 0, 0, 0.7);
+  color: white;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: bold;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.thumbnail-item:hover .btn-delete-thumb,
+.thumbnail-item:hover .btn-mark-thumb {
+  opacity: 1;
+}
+
+.btn-delete-thumb {
+  top: 4px;
+  right: 4px;
+  background: rgba(232, 38, 43, 0.8);
+}
+
+.btn-delete-thumb:hover {
+  background: #E8262B;
+}
+
+.btn-mark-thumb {
+  top: 4px;
+  left: 4px;
+  background: rgba(46, 160, 67, 0.8);
+}
+
+.btn-mark-thumb:hover {
+  background: #2EA043;
+}
