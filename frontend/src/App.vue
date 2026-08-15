@@ -49,7 +49,24 @@
 
       <div>
         <label class="ag-label">GTIN / EAN</label>
-        <input class="ag-field is-large" v-model="inputGtin" @keydown.enter="onGtinEnter" type="text" placeholder="Leitor ou digitação" autocomplete="off">
+        <div style="display:flex;gap:8px">
+          <input class="ag-field is-large" v-model="inputGtin" @keydown.enter="onGtinSearch" type="text" placeholder="Leitor ou digitação" autocomplete="off" style="flex:1">
+          <button class="ag-btn is-primary" @click="onGtinSearch" :disabled="!inputGtin" style="flex:0 0 auto">Buscar</button>
+        </div>
+      </div>
+
+      <div>
+        <label class="ag-label">GTINs do Lote</label>
+        <ul class="clinerules" v-if="loteItems.length > 0">
+          <li v-for="item in loteItems" :key="item.gtin"
+              class="clinerule" :class="{ active: selectedGtin === item.gtin }"
+              @click="inputGtin = item.gtin; onGtinSearch()">
+            {{ item.gtin }} ({{ item.quantidadeFotos }} fotos)
+          </li>
+        </ul>
+        <div v-else style="padding:0.75rem;color:var(--ag-muted);font-size:0.875rem">
+          Nenhum GTIN no lote
+        </div>
       </div>
 
       <div v-if="selectedGtin">
@@ -103,13 +120,7 @@
     </div>
   </section>
 
-  <section class="ag-card">
-    <header class="ag-card-header">
-      <h2 class="ag-card-title">GTINs do lote</h2>
-      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ loteItems.length }} itens</span>
-    </header>
-    <ul class="capture-lote-list">
-      <li v-for="item in loteItems" :key="item.gtin" @click="selectedGtin = item.gtin">
+  <!-- Seção de GTINs removida - agora listada em "Entrada" acima -->
         <span>{{ item.gtin }}</span>
         <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
       </li>
@@ -489,6 +500,14 @@ export default {
         inputGtin.value = '';
         loadPreviousImages();
       }
+    };
+
+    const onGtinSearch = async () => {
+      if (!inputGtin.value || !selectedLote.value) return;
+
+      selectedGtin.value = inputGtin.value;
+      await loadPreviousImages();
+      showStatus(`✓ GTIN ${inputGtin.value} carregado`, 'success');
     };
 
     const onSaveCapture = async () => {
@@ -891,6 +910,7 @@ export default {
       vehicles,
       onLoteSelected,
       onGtinEnter,
+      onGtinSearch,
       onSaveCapture,
       onClearTemp,
       onImageDelete,
