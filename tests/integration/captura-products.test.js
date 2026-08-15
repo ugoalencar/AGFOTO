@@ -6,6 +6,7 @@ import path from 'path';
 import { spawnSync } from 'node:child_process';
 import ExcelJS from 'exceljs';
 import { FileRepository } from '../../repositories/file-repository.js';
+import LoteRepository from '../../repositories/lote-repository.js';
 import CapturaService from '../../services/captura-service.js';
 import ExcelService from '../../services/excel-service.js';
 import { createApp } from '../../server/app.js';
@@ -541,4 +542,121 @@ test('concurrent captures for the same lote and GTIN preserve cumulative JSON st
   const produto = loteJson.itens['000123'];
   assert.equal(produto.quantidadeFotos, 2);
   assert.equal(produto.historico.filter(evento => evento.evento === 'captura_salva').length, 2);
+});
+
+// --- Regra: quem gerencia imagem (Captura/QA) enxerga o disco; o JSON e historico ---
+
+test('capture listing shows only lotes that exist on disk, reports still see the history', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('70', '000123');
+
+  // Lote que so existe no JSON: foi entregue e o usuario limpou as pastas.
+  // (loadOrCreate cria a pasta do lote, entao o cenario exige remove-la.)
+  const semDisco = await LoteRepository.loadOrCreate('71');
+  semDisco.getOrCreateItem('000999', 'COD-9', 'Produto entregue');
+  await LoteRepository.save(semDisco);
+  await fs.promises.rm(path.join(env.paths.finalizadas, 'LOTE 71'), { recursive: true, force: true });
+
+  const gerenciaveis = await CapturaService.listLotesComImagens();
+  const numeros = gerenciaveis.data.lotes.map(l => l.numero);
+  assert.deepEqual(numeros, ['70'], `lote sem pasta nao pode aparecer: ${numeros}`);
+
+  // O historico continua completo para os relatorios.
+  const historico = await CapturaService.listAllLotes();
+  const todos = historico.data.lotes.map(l => l.numero).sort();
+  assert.deepEqual(todos, ['70', '71']);
+});
+
+test('capture listing hides a lote after its folder is removed', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('72', '000123');
+
+  const antes = await CapturaService.listLotesComImagens();
+  assert.deepEqual(antes.data.lotes.map(l => l.numero), ['72']);
+
+  // Usuario limpa as imagens depois de entregar.
+  await fs.promises.rm(path.join(env.paths.finalizadas, 'LOTE 72'), { recursive: true, force: true });
+
+  const depois = await CapturaService.listLotesComImagens();
+  assert.deepEqual(depois.data.lotes, [], 'lote sem pasta continuou aparecendo');
+
+  // Mas o JSON sobreviveu: o relatorio ainda responde por ele.
+  const historico = await CapturaService.listAllLotes();
+  assert.deepEqual(historico.data.lotes.map(l => l.numero), ['72']);
+});
+
+test('capture GTIN listing hides products without images and counts from disk', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_2.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('73', '000123');
+
+  // Produto cadastrado no JSON que nunca foi fotografado.
+  const lote = await LoteRepository.loadOrCreate('73');
+  lote.getOrCreateItem('000999', 'COD-9', 'Ainda sem foto');
+  await LoteRepository.save(lote);
+
+  const gerenciavel = await CapturaService.getLoteDetails('73', { somenteComImagens: true });
+  assert.deepEqual(gerenciavel.data.itens.map(i => i.gtin), ['000123']);
+  // Contagem vem do disco, nao do acumulado do JSON.
+  assert.equal(gerenciavel.data.itens[0].quantidadeFotos, 2);
+
+  const completo = await CapturaService.getLoteDetails('73');
+  assert.deepEqual(completo.data.itens.map(i => i.gtin).sort(), ['000123', '000999']);
+});
+
+test('an empty Finalizadas leaves capture with nothing while reports keep answering', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('74', '000123');
+
+  await fs.promises.rm(env.paths.finalizadas, { recursive: true, force: true });
+
+  const gerenciaveis = await CapturaService.listLotesComImagens();
+  assert.deepEqual(gerenciaveis.data.lotes, []);
+
+  const historico = await CapturaService.listAllLotes();
+  assert.equal(historico.data.lotes.length, 1);
+  assert.equal(historico.data.lotes[0].numero, '74');
+});
+
+test('a folder dropped in by hand shows up and gets its JSON created', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  // Nenhum JSON ainda: so a estrutura de pastas, colocada na mao.
+  const manual = path.join(env.paths.finalizadas, 'LOTE 80', '000555');
+  await fs.promises.mkdir(manual, { recursive: true });
+  await fs.promises.writeFile(path.join(manual, 'foto.jpg'), JPG_BYTES);
+
+  const gerenciaveis = await CapturaService.listLotesComImagens();
+  assert.deepEqual(gerenciaveis.data.lotes.map(l => l.numero), ['80']);
+
+  // A sincronizacao relaciona a pasta com um JSON, criando-o quando falta.
+  const jsonPath = path.join(env.paths.jsons, 'Lote_80.json');
+  assert.equal(await fs.promises.stat(jsonPath).then(() => true, () => false), true);
+
+  const detalhes = await CapturaService.getLoteDetails('80', { somenteComImagens: true });
+  assert.deepEqual(detalhes.data.itens.map(i => i.gtin), ['000555']);
+  assert.equal(detalhes.data.itens[0].quantidadeFotos, 1);
+});
+
+test('a lote present only under Entrega stays visible to capture', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('81', '000123');
+
+  // Entregue: os arquivos sairam de Finalizadas e estao no staging de Entrega.
+  await fs.promises.rm(path.join(env.paths.finalizadas, 'LOTE 81'), { recursive: true, force: true });
+  await fs.promises.mkdir(path.join(env.config.paths.entrega, 'LOTE 81', 'COD-1'), { recursive: true });
+
+  const gerenciaveis = await CapturaService.listLotesComImagens();
+  assert.deepEqual(gerenciaveis.data.lotes.map(l => l.numero), ['81']);
 });

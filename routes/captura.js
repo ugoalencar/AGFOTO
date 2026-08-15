@@ -36,7 +36,11 @@ router.get('/temp', async (req, res) => {
  * Lista todos os lotes
  */
 const listLotesHandler = async (req, res) => {
-  const result = await CapturaService.listAllLotes();
+  // Captura e QA gerenciam imagem, entao so veem lote que existe em disco.
+  // ?historico=1 devolve tudo que ha no JSON (usado por quem so le dados).
+  const result = req.query.historico === '1'
+    ? await CapturaService.listAllLotes()
+    : await CapturaService.listLotesComImagens();
 
   if (result.ok) {
     res.json({
@@ -105,7 +109,10 @@ const getLoteHandler = async (req, res) => {
     });
   }
 
-  const result = await CapturaService.getLoteDetails(numero);
+  // Mesma regra da listagem: por padrao so os GTINs que tem foto em disco.
+  const result = await CapturaService.getLoteDetails(numero, {
+    somenteComImagens: req.query.historico !== '1'
+  });
 
   if (result.ok) {
     res.json({

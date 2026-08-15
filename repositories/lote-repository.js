@@ -1,4 +1,5 @@
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { Lote } from '../domain/lote.js';
 import { readJsonSafe, writeJsonAtomic, updateJsonSafe } from '../server/json-persistence.js';
@@ -7,6 +8,39 @@ import { config } from '../server/config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
+
+// Extensoes que contam como "tem imagem" ao decidir o que a Captura e o QA mostram.
+const EXTENSOES_IMAGEM = ['.jpg', '.jpeg', '.png', '.webp', '.cr2', '.cr3', '.nef', '.arw', '.dng'];
+
+function ehImagem(nome) {
+  return EXTENSOES_IMAGEM.includes(path.extname(nome).toLowerCase());
+}
+
+async function listarDiretorios(dirPath) {
+  try {
+    const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+    return entries.filter(entry => entry.isDirectory()).map(entry => entry.name);
+  } catch {
+    return [];
+  }
+}
+
+// Conta as imagens da pasta e de qualquer subpasta dela (AP/AT/RT/IS).
+async function contarImagens(dirPath) {
+  let entries;
+  try {
+    entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return 0;
+  }
+
+  let total = 0;
+  for (const entry of entries) {
+    if (entry.isFile() && ehImagem(entry.name)) total++;
+    else if (entry.isDirectory()) total += await contarImagens(path.join(dirPath, entry.name));
+  }
+  return total;
+}
 
 /**
  * Repository para gerenciar Lotes (persistência em JSON)
@@ -203,6 +237,66 @@ export class LoteRepository {
    * Lista todos os lotes existentes
    * Sincroniza com Finalizadas primeiro, depois carrega JSONs
    */
+  /**
+   * Numeros de lote que existem fisicamente em disco.
+   *
+   * Imagem so mora em Finalizadas e Entrega. Um lote que perdeu as pastas (por
+   * exemplo, limpo depois de entregue) some da Captura e do QA - o historico dele
+   * continua no JSON e continua saindo nos relatorios.
+   *
+   * Aqui basta a pasta do lote existir, mesmo vazia: loadOrCreate cria a pasta ao
+   * abrir o lote, e e ela que deixa um lote novo aparecer na Captura antes da
+   * primeira foto. O corte por imagem e no nivel do GTIN (listGtinsWithImages).
+   */
+  static async listLoteNumbersOnDisk() {
+    const numeros = new Set();
+
+    for (const raiz of [config.paths.finalizadas, config.paths.entrega]) {
+      for (const nome of await listarDiretorios(raiz)) {
+        if (nome.startsWith('LOTE ')) {
+          const numero = nome.replace(/^LOTE /, '').trim();
+          if (numero) numeros.add(numero);
+        }
+      }
+    }
+
+    return numeros;
+  }
+
+  /**
+   * GTINs de um lote que tem imagem em disco, e quantas (contando AP/AT/RT/IS).
+   *
+   * A contagem sai do disco de proposito: o quantidadeFotos do JSON e historico
+   * acumulado e nao cai quando o usuario apaga arquivo, entao serve para
+   * relatorio, nao para a tela que gerencia imagem.
+   */
+  static async listGtinsWithImages(numero) {
+    const contagem = new Map();
+    const loteDir = path.join(config.paths.finalizadas, `LOTE ${numero}`);
+
+    for (const gtin of await listarDiretorios(loteDir)) {
+      const total = await contarImagens(path.join(loteDir, gtin));
+      if (total > 0) contagem.set(gtin, total);
+    }
+
+    return contagem;
+  }
+
+  /**
+   * Lotes que a Captura e o QA podem ver: os que tem pasta em disco.
+   *
+   * A sincronizacao roda antes, entao uma pasta colocada na mao vira JSON e passa
+   * a aparecer. Sem JSON correspondente o lote e ignorado.
+   */
+  static async listWithImages() {
+    const [todos, naDisco] = await Promise.all([
+      this.listAll(),
+      this.listLoteNumbersOnDisk()
+    ]);
+
+    return todos.filter(lote => naDisco.has(lote.numero));
+  }
+
   static async listAll() {
     try {
       await createSecureDirectory(config.paths.jsons, config.paths.root);

@@ -58,17 +58,28 @@ export class CapturaService {
   /**
    * Obtém detalhes de um lote com sua lista de GTINs
    */
-  static async getLoteDetails(numero) {
+  /**
+   * @param {boolean} somenteComImagens Captura e QA so enxergam GTIN que tem foto
+   *   em disco; os relatorios continuam vendo o historico inteiro.
+   */
+  static async getLoteDetails(numero, { somenteComImagens = false } = {}) {
     try {
       const lote = await LoteRepository.load(numero);
-      const gtins = lote.getAllGtins().map(gtin => ({
-        gtin,
-        codigo: lote.itens[gtin].codigo,
-        descricao: lote.itens[gtin].descricao,
-        status: lote.itens[gtin].status,
-        dataFotografia: lote.itens[gtin].dataFotografia,
-        quantidadeFotos: lote.itens[gtin].quantidadeFotos
-      }));
+      const comImagens = somenteComImagens
+        ? await LoteRepository.listGtinsWithImages(lote.numero)
+        : null;
+
+      const gtins = lote.getAllGtins()
+        .filter(gtin => !comImagens || comImagens.has(gtin))
+        .map(gtin => ({
+          gtin,
+          codigo: lote.itens[gtin].codigo,
+          descricao: lote.itens[gtin].descricao,
+          status: lote.itens[gtin].status,
+          dataFotografia: lote.itens[gtin].dataFotografia,
+          // Gerenciando imagem, a contagem que vale e a do disco.
+          quantidadeFotos: comImagens ? comImagens.get(gtin) : lote.itens[gtin].quantidadeFotos
+        }));
 
       return {
         ok: true,
@@ -399,6 +410,30 @@ export class CapturaService {
       });
 
       return { ok: true, data: { filename: photo.filename, location: photo.location } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Lista os lotes que a Captura e o QA podem gerenciar: os que tem imagem em
+   * disco. Relatorios usam listAllLotes(), que devolve o historico inteiro.
+   */
+  static async listLotesComImagens() {
+    try {
+      const lotes = await LoteRepository.listWithImages();
+      return {
+        ok: true,
+        data: {
+          lotes: lotes.map(lote => ({
+            numero: lote.numero,
+            criadoEm: lote.criadoEm,
+            atualizadoEm: lote.atualizadoEm,
+            itens: lote.getAllGtins().length,
+            totalFotos: lote.getTotalPhotos()
+          }))
+        }
+      };
     } catch (err) {
       return { ok: false, error: err.message };
     }
