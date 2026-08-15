@@ -53,18 +53,25 @@ const listLotesHandler = async (req, res) => {
   }
 };
 
-router.get('/', listLotesHandler);
-router.get('/lotes', listLotesHandler);
-
 /**
  * GET /api/lotes/finalizados/lista
  * Lista apenas lotes com imagens finalizadas
+ * MUST come before /:numero route
  */
 router.get('/finalizados/lista', (req, res) => {
   try {
     const finalDir = config.paths.finalizadas;
-    const dirs = fs.readdirSync(finalDir).filter(f => f.startsWith('LOTE '));
-    const lotes = dirs.map(d => d.replace('LOTE ', ''));
+    const allEntries = fs.readdirSync(finalDir, { withFileTypes: true });
+    const dirs = allEntries
+      .filter(entry => entry.isDirectory())
+      .map(entry => entry.name)
+      .filter(name => name.startsWith('LOTE '));
+    const lotes = dirs.map(d => d.replace(/^LOTE /, ''));
+
+    console.log('[DEBUG] finalDir:', finalDir);
+    console.log('[DEBUG] allEntries:', allEntries.map(e => e.name));
+    console.log('[DEBUG] dirs:', dirs);
+    console.log('[DEBUG] lotes:', lotes);
 
     res.json({
       ok: true,
@@ -79,6 +86,9 @@ router.get('/finalizados/lista', (req, res) => {
     });
   }
 });
+
+router.get('/', listLotesHandler);
+router.get('/lotes', listLotesHandler);
 
 /**
  * GET /api/lotes/:numero
