@@ -467,3 +467,78 @@ test('QA routes reject invalid lote and GTIN before commands run', async t => {
   assert.equal(invalidLote.status, 400);
   assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
 });
+
+test('QA photo listing reports AP and AT classification from the folder the file sits in', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '60', '000123', 'a.jpg');
+  await savePhoto(env, '60', '000123', 'b.jpg');
+  await savePhoto(env, '60', '000123', 'c.jpg');
+
+  await DeliveryService.classifyPhotoAP('60', '000123', 'a.jpg');
+  await DeliveryService.classifyPhotoAT('60', '000123', 'b.jpg');
+
+  const result = await DeliveryService.loadQaPhotos('60', '000123');
+  assert.equal(result.ok, true);
+
+  const porNome = Object.fromEntries(result.data.photos.map(p => [p.filename, p]));
+  assert.equal(porNome['a.jpg'].classification, 'AP');
+  assert.equal(porNome['a.jpg'].location, 'AP');
+  assert.equal(porNome['b.jpg'].classification, 'AT');
+  assert.equal(porNome['b.jpg'].location, 'AT');
+  assert.equal(porNome['c.jpg'].classification, null);
+  assert.equal(porNome['c.jpg'].location, 'root');
+
+  assert.equal(result.data.count, 3);
+  assert.equal(result.data.classificadas, 2);
+  // A tela precisa do tamanho para o rodape do preview.
+  assert.ok(porNome['c.jpg'].size > 0);
+  assert.match(porNome['a.jpg'].url, /\/AP\/a\.jpg$/);
+});
+
+test('QA listing follows a photo that is unclassified back to the root', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '61', '000123', 'a.jpg');
+
+  await DeliveryService.classifyPhotoAP('61', '000123', 'a.jpg');
+  const marcada = await DeliveryService.loadQaPhotos('61', '000123');
+  assert.equal(marcada.data.photos[0].classification, 'AP');
+
+  await DeliveryService.unclassifyPhoto('61', '000123', 'a.jpg', 'AP');
+  const desmarcada = await DeliveryService.loadQaPhotos('61', '000123');
+  assert.equal(desmarcada.data.photos[0].classification, null);
+  assert.equal(desmarcada.data.classificadas, 0);
+});
+
+test('completing QA as atualizacao counts only AT photos and refuses when there are none', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '62', '000123', 'a.jpg');
+  await savePhoto(env, '62', '000123', 'b.jpg');
+
+  // Sem nenhuma AT a entrega de atualizacao nao tem o que levar.
+  const semAt = await DeliveryService.completeQa('62', '000123', DeliveryType.ATUALIZACAO);
+  assert.equal(semAt.ok, false);
+  assert.match(semAt.error, /No AT photos/i);
+
+  await DeliveryService.classifyPhotoAT('62', '000123', 'b.jpg');
+  const comAt = await DeliveryService.completeQa('62', '000123', DeliveryType.ATUALIZACAO);
+  assert.equal(comAt.ok, true);
+  assert.equal(comAt.data.deliveryType, DeliveryType.ATUALIZACAO);
+  assert.equal(comAt.data.quantidadeFotosElegiveis, 1);
+});
+
+test('completing QA as normal refuses when every photo was classified away from the root', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await savePhoto(env, '63', '000123', 'a.jpg');
+  await DeliveryService.classifyPhotoAP('63', '000123', 'a.jpg');
+
+  const result = await DeliveryService.completeQa('63', '000123', DeliveryType.NORMAL);
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /No root photos/i);
+  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_63.json'), 'utf8'));
+  assert.equal(loteJson.itens['000123'].status, 'pendente_qa');
+});

@@ -318,13 +318,25 @@
           </div>
         </div>
 
-        <div style="padding:10px 14px;border-top:1px solid var(--ag-line);display:flex;gap:8px">
-          <button class="ag-btn is-ok" @click="onCompleteQa" :disabled="!qaPhotoGtin || qaPhotos.length === 0 || qaEmCurso">
+        <div class="qa-rodape">
+          <label class="qa-tipo">
+            <span>Entrega</span>
+            <select class="ag-field" v-model="qaDeliveryType" :disabled="qaEmCurso">
+              <option value="normal">Normal - {{ qaFotosNormais }} foto(s) sem marcacao</option>
+              <option value="atualizacao">Atualizacao - {{ qaFotosAt }} foto(s) AT</option>
+            </select>
+          </label>
+
+          <button class="ag-btn is-ok" @click="onCompleteQa"
+                  :disabled="!qaPhotoGtin || qaEmCurso || qaFotosElegiveis === 0"
+                  :title="qaMotivoBloqueio">
             Concluir QA
           </button>
           <button class="ag-btn is-warning" @click="onSendToRework" :disabled="!qaPhotoGtin || qaEmCurso">
             Mandar para retrabalho
           </button>
+
+          <span v-if="qaMotivoBloqueio" class="qa-aviso">{{ qaMotivoBloqueio }}</span>
         </div>
       </section>
     </main>
@@ -479,6 +491,7 @@ export default {
     const qaAvailableLotes = ref([]);
     const qaAvailableGtins = ref([]);
     const qaEmCurso = ref(false);
+    const qaDeliveryType = ref('normal');
     const reportStatus = ref('');
     const reportItems = ref([]);
     const reportStats = ref(null);
@@ -514,6 +527,21 @@ export default {
     });
 
     const qaClassificadas = computed(() => qaPhotos.value.filter(photo => photo.classification).length);
+
+    // A entrega normal leva as fotos da raiz; a de atualizacao leva so as AT.
+    // As AP ficam de fora das duas - e o proposito da marcacao.
+    const qaFotosNormais = computed(() => qaPhotos.value.filter(photo => !photo.classification).length);
+    const qaFotosAt = computed(() => qaPhotos.value.filter(photo => photo.classification === 'AT').length);
+    const qaFotosElegiveis = computed(() => (
+      qaDeliveryType.value === 'atualizacao' ? qaFotosAt.value : qaFotosNormais.value
+    ));
+
+    const qaMotivoBloqueio = computed(() => {
+      if (!qaPhotoGtin.value || qaFotosElegiveis.value > 0) return '';
+      return qaDeliveryType.value === 'atualizacao'
+        ? 'Marque ao menos uma foto como AT para concluir a entrega de atualizacao.'
+        : 'Todas as fotos estao marcadas: a entrega normal ficaria sem nenhuma.';
+    });
 
     // Methods
     const showStatus = (message, type = 'success') => {
@@ -997,12 +1025,13 @@ export default {
           data: {
             lote: qaPhotoLote.value,
             gtin: qaPhotoGtin.value,
-            deliveryType: 'normal',
+            deliveryType: qaDeliveryType.value,
             operationId: makeOperationId('qa-concluir')
           }
         });
         if (response.ok) {
-          showStatus('✓ QA concluido - pronto para entrega', 'success');
+          const tipo = qaDeliveryType.value === 'atualizacao' ? 'atualizacao' : 'normal';
+          showStatus(`✓ QA concluido - pronto para entrega ${tipo} (${response.data.quantidadeFotosElegiveis} fotos)`, 'success');
           qaPhotos.value = [];
           qaPhotoGtin.value = '';
           // O GTIN sai da fila de pendentes, entao a lista precisa refletir isso.
@@ -1332,6 +1361,11 @@ export default {
       qaAvailableGtins,
       qaEmCurso,
       qaClassificadas,
+      qaDeliveryType,
+      qaFotosNormais,
+      qaFotosAt,
+      qaFotosElegiveis,
+      qaMotivoBloqueio,
       onSelectQaGtin,
       onQaDeletePhoto,
       onSendToRework,

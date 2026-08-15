@@ -57,6 +57,10 @@ export class DeliveryService {
         }
       }
 
+      // Ordena por nome, nao por pasta: sem isso a foto pula de lugar na grade
+      // assim que e marcada, e quem revisa perde a posicao.
+      photos.sort((a, b) => a.filename.localeCompare(b.filename));
+
       return {
         ok: true,
         data: {

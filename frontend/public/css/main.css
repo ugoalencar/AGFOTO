@@ -1618,6 +1618,45 @@ select {
   cursor: not-allowed;
 }
 
+.qa-rodape {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-top: 1px solid var(--ag-line);
+}
+
+.qa-tipo {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.qa-tipo > span {
+  padding: 0 10px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  background: var(--ag-panel-2);
+  border: 1px solid var(--ag-line);
+  border-right: 0;
+  border-radius: var(--ag-radius) 0 0 var(--ag-radius);
+  color: var(--ag-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.qa-tipo .ag-field {
+  border-radius: 0 var(--ag-radius) var(--ag-radius) 0;
+}
+
+.qa-aviso {
+  color: var(--ag-yellow);
+  font-size: 12px;
+  flex: 1 1 100%;
+}
+
 .qa-botao.ap:hover:not(:disabled) { background: var(--ag-yellow); color: #000; }
 .qa-botao.at:hover:not(:disabled) { background: var(--ag-orange); color: #000; }
 .qa-botao.ap.ativo { background: var(--ag-yellow); color: #000; }
