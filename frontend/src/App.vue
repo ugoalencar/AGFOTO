@@ -55,20 +55,6 @@
         </div>
       </div>
 
-      <div>
-        <label class="ag-label">GTINs do Lote</label>
-        <ul class="clinerules" v-if="loteItems.length > 0">
-          <li v-for="item in loteItems" :key="item.gtin"
-              class="clinerule" :class="{ active: selectedGtin === item.gtin }"
-              @click="inputGtin = item.gtin; onGtinSearch()">
-            {{ item.gtin }} ({{ item.quantidadeFotos }} fotos)
-          </li>
-        </ul>
-        <div v-else style="padding:0.75rem;color:var(--ag-muted);font-size:0.875rem">
-          Nenhum GTIN no lote
-        </div>
-      </div>
-
       <div v-if="selectedGtin">
         <label class="ag-label">Status</label>
         <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span>
@@ -120,7 +106,16 @@
     </div>
   </section>
 
-  <!-- Seção de GTINs removida - agora listada em "Entrada" acima -->
+  <section class="ag-card">
+    <header class="ag-card-header">
+      <h2 class="ag-card-title">GTINs do lote</h2>
+      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ loteItems.length }} itens</span>
+    </header>
+    <ul class="capture-lote-list">
+      <li v-for="item in loteItems" :key="item.gtin" @click="inputGtin = item.gtin; onGtinSearch()">
+        <span>{{ item.gtin }}</span>
+        <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
+      </li>
         <span>{{ item.gtin }}</span>
         <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
       </li>
