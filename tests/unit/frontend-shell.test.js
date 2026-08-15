@@ -54,8 +54,16 @@ test('Planilhas is available from Entregar without legacy Phase 1 routes', async
   const css = await readFile(path.join(publicDir, 'css', 'main.css'), 'utf8');
 
   assert.match(app, /activePage === 'entregar'[\s\S]*?Planilha do cliente/);
-  assert.match(app, /:disabled="!qaSelectedLote \|\| !excelFile"/);
-  assert.match(app, /const loteParaImportar = selectedLote\.value \|\| qaSelectedLote\.value;/);
+  assert.match(app, /:disabled="!qaSelectedLote \|\| !planilhaSelecionada \|\| planilhaEmCurso"/);
+  assert.match(app, /const loteParaImportar = qaSelectedLote\.value \|\| selectedLote\.value;/);
+
+  // A importacao tem que falar com o servidor: ja existiu aqui um botao que so
+  // mostrava "importado (mock)" e nao aplicava nada.
+  assert.match(app, /'\/api\/planilhas\/importar'/);
+  assert.match(app, /'\/api\/planilhas\/confirmar'/);
+  assert.match(app, /'\/api\/planilhas\/aplicar-codigos'/);
+  assert.doesNotMatch(app, /mock\)/i);
+
   assert.doesNotMatch(app, /activePage === 'planilhas'/);
   assert.doesNotMatch(app, /activePage === 'veiculos'/);
   assert.equal(publicApp, app);

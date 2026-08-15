@@ -26,7 +26,7 @@
         <div class="ag-wordmark"><b>AG</b> Foto</div>
         <div class="ag-chip">Produtos</div>
         <div class="ag-context">
-          <span v-if="selectedLote" class="ag-chip">Lote {{ selectedLote }}</span>
+          <span v-if="selectedLote" class="ag-chip">{{ rotuloLote(selectedLote) }}</span>
           <span class="ag-chip">Entrega local/mock</span>
         </div>
       </header>
@@ -128,7 +128,7 @@
           <span class="capture-campo-label">Lote</span>
           <select class="ag-field" v-model="selectedLote" @change="onLoteSelected">
             <option value="">Selecione</option>
-            <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ lote }}</option>
+            <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ rotuloLote(lote) }}</option>
           </select>
         </div>
         <div class="capture-campo">
@@ -243,22 +243,127 @@
         <header class="ag-card-header"><h2 class="ag-card-title">Lote</h2></header>
         <div class="ag-card-body">
           <label class="ag-label">Selecionar lote</label>
-          <input class="ag-field" v-model="qaSelectedLote" type="text" placeholder="Numero do lote">
-          <button class="ag-btn is-primary" style="width:100%;margin-top:10px" @click="onLoadQaProducts" :disabled="!qaSelectedLote">Carregar produtos</button>
-          <p style="color:var(--ag-muted);font-size:12px;margin-top:14px">Entrega local/mock com staging, manifesto e verificacao antes de marcar entregue.</p>
+          <select class="ag-field" v-model="qaSelectedLote" @change="onLoadQaProducts">
+            <option value="">Selecione um lote</option>
+            <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ rotuloLote(lote) }}</option>
+          </select>
+
+          <div style="margin-top:14px;padding:10px 12px;background:var(--ag-panel);border:1px solid var(--ag-line);border-radius:var(--ag-radius);font-size:12px;color:var(--ag-muted)">
+            <div style="margin-bottom:6px">Destino de cada produto:</div>
+            <code style="font-family:var(--ag-mono);color:var(--ag-text)">
+              Entrega/{{ rotuloLote(qaSelectedLote || 'xxx') }}/&lt;codigo&gt;
+            </code>
+            <div style="margin-top:8px">A pasta usa o <b>codigo</b> do produto, nao o GTIN.</div>
+          </div>
+
+          <div v-if="entregaSemCodigo.length > 0" class="entrega-alerta">
+            {{ entregaSemCodigo.length }} produto(s) ainda estao com o GTIN no lugar do codigo.
+            Importe a planilha do cliente abaixo para corrigir antes de entregar.
+          </div>
+
           <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
             <label class="ag-label">Planilha do cliente</label>
-            <input class="ag-field" type="file" accept=".xlsx" @change="onExcelFileSelected">
-            <button class="ag-btn is-warning" style="width:100%;margin-top:10px" @click="onImportExcel" :disabled="!qaSelectedLote || !excelFile">
-              Unificar planilha
-            </button>
-            <div v-if="excelFile" style="font-family:var(--ag-mono);font-size:11px;color:var(--ag-muted);margin-top:8px">
-              {{ excelFile.name }} · {{ excelItems.length }} itens · {{ excelConflicts.length }} conflitos
+            <select class="ag-field" v-model="planilhaSelecionada">
+              <option value="">{{ planilhas.length ? 'Selecione a planilha' : 'Nenhuma planilha em dados/xlsx' }}</option>
+              <option v-for="arq in planilhas" :key="arq.nome" :value="arq.nome">{{ arq.nome }}</option>
+            </select>
+            <div style="font-size:11px;color:var(--ag-muted);margin-top:6px">
+              Coloque o .xlsx em <code style="font-family:var(--ag-mono)">dados/xlsx</code> e recarregue a lista.
+            </div>
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="ag-btn" @click="onCarregarPlanilhas" :disabled="planilhaEmCurso">Recarregar</button>
+              <button class="ag-btn is-warning" style="flex:1" @click="onImportExcel"
+                      :disabled="!qaSelectedLote || !planilhaSelecionada || planilhaEmCurso">
+                {{ planilhaEmCurso ? 'Importando...' : 'Importar e aplicar' }}
+              </button>
+            </div>
+            <div v-if="excelConflicts.length > 0" class="entrega-alerta">
+              {{ excelConflicts.length }} conflito(s) entre a planilha e o catalogo. Nada foi aplicado.
+              <div v-for="(c, i) in excelConflicts.slice(0, 5)" :key="i" style="font-family:var(--ag-mono);font-size:11px;margin-top:4px">
+                {{ c.ean }} · {{ c.field }}: "{{ c.existingValue }}" -> "{{ c.newValue }}"
+              </div>
             </div>
           </div>
         </div>
       </section>
-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Produtos prontos para entrega</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaProducts.length }} itens</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>GTIN</th><th>Codigo</th><th>Fotos</th><th>Acao</th></tr></thead><tbody><tr v-for="product in qaProducts" :key="`${product.gtin}:${product.codigo}`"><td>{{ product.gtin }}</td><td>{{ product.codigo }}</td><td>{{ product.quantidadeFotos }}</td><td><button class="ag-btn is-warning" @click="onPrepareDelivery(product)" :disabled="deliveryProductKey === `${product.gtin}:${product.codigo}`">{{ deliveryProductKey === `${product.gtin}:${product.codigo}` ? 'Entregando' : 'Entregar' }}</button></td></tr></tbody></table></div></section>
+
+      <section class="ag-card">
+        <header class="ag-card-header">
+          <h2 class="ag-card-title">Prontos para entrega</h2>
+          <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">
+            {{ entregaSelecionados.length }} de {{ qaProducts.length }} selecionados
+          </span>
+        </header>
+
+        <div v-if="!qaSelectedLote" class="grid-empty">Selecione um lote</div>
+        <div v-else-if="qaProducts.length === 0" class="grid-empty">
+          Nenhum produto pronto para entrega neste lote. Conclua o QA primeiro.
+        </div>
+
+        <div v-else class="ag-table-wrap">
+          <table class="ag-table">
+            <thead>
+              <tr>
+                <th style="width:34px">
+                  <input type="checkbox" :checked="entregaTodosSelecionados" @change="onToggleTodosEntrega">
+                </th>
+                <th>GTIN</th>
+                <th>Codigo (pasta)</th>
+                <th>Descricao</th>
+                <th>Fotos</th>
+                <th>Situacao</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="product in qaProducts" :key="product.gtin"
+                  :class="{ 'linha-selecionada': entregaSelecionados.includes(product.gtin) }">
+                <td>
+                  <input type="checkbox" :value="product.gtin" v-model="entregaSelecionados"
+                         :disabled="entregaEmCurso">
+                </td>
+                <td>{{ product.gtin }}</td>
+                <td>
+                  <span :class="{ 'codigo-pendente': product.codigo === product.gtin }">
+                    {{ product.codigo || '(sem codigo)' }}
+                  </span>
+                </td>
+                <td>{{ product.descricao }}</td>
+                <td>{{ product.quantidadeFotos }}</td>
+                <td>
+                  <span class="badge-status" :class="entregaResultados[product.gtin]?.classe || ''">
+                    {{ entregaResultados[product.gtin]?.texto || 'aguardando' }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div v-if="qaProducts.length > 0" class="qa-rodape">
+          <button class="ag-btn is-ok" @click="onEntregarSelecionados"
+                  :disabled="entregaSelecionados.length === 0 || entregaEmCurso">
+            {{ entregaEmCurso ? `Entregando ${entregaProgresso}...` : `Entregar selecionados (${entregaSelecionados.length})` }}
+          </button>
+          <span style="color:var(--ag-muted);font-size:12px">
+            Cada produto passa por staging, manifesto e verificacao antes de virar entregue.
+          </span>
+        </div>
+
+        <!-- O produto entregue sai da lista de prontos; sem isso o resultado
+             sumiria da tela junto com ele. -->
+        <div v-if="entregaResumo.length > 0" class="entrega-resumo">
+          <div class="entrega-resumo-titulo">Ultima entrega</div>
+          <div v-for="item in entregaResumo" :key="item.gtin" class="entrega-resumo-linha">
+            <span :class="item.ok ? 'entrega-ok' : 'entrega-erro'">{{ item.ok ? '✓' : '✗' }}</span>
+            <span style="font-family:var(--ag-mono)">{{ item.gtin }}</span>
+            <span style="color:var(--ag-muted)">→</span>
+            <span style="font-family:var(--ag-mono)">{{ rotuloLote(qaSelectedLote) }}/{{ item.codigo }}</span>
+            <span style="margin-left:auto;color:var(--ag-muted)">
+              {{ item.ok ? `${item.arquivos} arquivo(s)` : item.error }}
+            </span>
+          </div>
+        </div>
+      </section>
     </main>
     <main v-if="activePage === 'qa'" class="ag-view qa-view">
       <section class="ag-card">
@@ -267,7 +372,7 @@
           <label class="ag-label">Lote</label>
           <select class="ag-field" v-model="qaPhotoLote" @change="onQaLoteChange">
             <option value="">Selecione um lote</option>
-            <option v-for="lote in qaAvailableLotes" :key="lote" :value="lote">{{ lote }}</option>
+            <option v-for="lote in qaAvailableLotes" :key="lote" :value="lote">{{ rotuloLote(lote) }}</option>
           </select>
 
           <label class="ag-label" style="margin-top:12px">GTIN ({{ qaAvailableGtins.length }})</label>
@@ -344,7 +449,7 @@
     </main>
     <main v-if="activePage === 'relatorios'" class="ag-view report-view">
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Filtros e totais</h2></header><div class="ag-card-body"><label class="ag-label">Status</label><select class="ag-field" v-model="reportStatus"><option value="">Todos</option><option value="pendente_qa">Pendente QA</option><option value="pronto_para_entrega">Pronto para Entrega</option><option value="entregue">Entregue</option><option value="erro_entrega">Erro na Entrega</option><option value="retrabalho">Retrabalho</option></select><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadReport">Gerar relatorio</button><div v-if="reportStats" class="kpi-grid" style="margin-top:14px"><div class="kpi-card"><strong>{{ reportStats.totalItens ?? reportStats.totalItems ?? 0 }}</strong><span>Itens</span></div><div class="kpi-card"><strong>{{ reportStats.entregues ?? reportStats.entregue ?? 0 }}</strong><span>Entregues</span></div><div class="kpi-card"><strong>{{ reportStats.prontos ?? reportStats.pronto_para_entrega ?? 0 }}</strong><span>Prontos</span></div><div class="kpi-card"><strong>{{ reportStats.retrabalho ?? 0 }}</strong><span>Retrabalho</span></div></div></div></section>
-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Detalhamento</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ reportItems.length }} linhas</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Lote</th><th>GTIN</th><th>Codigo</th><th>Descricao</th><th>Fotos</th><th>Status</th></tr></thead><tbody><tr v-for="item in reportItems" :key="`${item.lote}:${item.gtin}`"><td>{{ item.lote }}</td><td>{{ item.gtin }}</td><td>{{ item.codigo }}</td><td>{{ item.descricao }}</td><td>{{ item.quantidadeFotos }}</td><td><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td></tr></tbody></table></div></section>
+      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Detalhamento</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ reportItems.length }} linhas</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Lote</th><th>GTIN</th><th>Codigo</th><th>Descricao</th><th>Fotos</th><th>Status</th></tr></thead><tbody><tr v-for="item in reportItems" :key="`${item.lote}:${item.gtin}`"><td>{{ rotuloLote(item.lote) }}</td><td>{{ item.gtin }}</td><td>{{ item.codigo }}</td><td>{{ item.descricao }}</td><td>{{ item.quantidadeFotos }}</td><td><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td></tr></tbody></table></div></section>
     </main>
     <!-- Veículos Page -->
     <main v-if="activePage === 'legacy-veiculos'" style="padding: 2rem; overflow-y: auto;">
@@ -494,6 +599,14 @@ export default {
     const qaAvailableGtins = ref([]);
     const qaEmCurso = ref(false);
     const qaDeliveryType = ref('normal');
+    const entregaSelecionados = ref([]);
+    const entregaResultados = ref({});
+    const entregaEmCurso = ref(false);
+    const entregaProgresso = ref('');
+    const entregaResumo = ref([]);
+    const planilhas = ref([]);
+    const planilhaSelecionada = ref('');
+    const planilhaEmCurso = ref(false);
     const reportStatus = ref('');
     const reportItems = ref([]);
     const reportStats = ref(null);
@@ -529,6 +642,19 @@ export default {
       };
       return labels[currentStatus.value] || currentStatus.value;
     });
+
+    // Lote sempre exibido como "LOTE xxx"; o valor enviado a API segue so o numero.
+    const rotuloLote = numero => (numero ? `LOTE ${numero}` : '');
+
+    const entregaTodosSelecionados = computed(() => (
+      qaProducts.value.length > 0 && entregaSelecionados.value.length === qaProducts.value.length
+    ));
+
+    // Codigo igual ao GTIN significa que a planilha do cliente ainda nao foi
+    // aplicada: a pasta de entrega sairia com o GTIN.
+    const entregaSemCodigo = computed(() => (
+      qaProducts.value.filter(p => !p.codigo || p.codigo === p.gtin)
+    ));
 
     const qaClassificadas = computed(() => qaPhotos.value.filter(photo => photo.classification).length);
 
@@ -873,29 +999,95 @@ export default {
       }
     };
 
+    const onCarregarPlanilhas = async () => {
+      try {
+        const response = await this.$api.request('/api/planilhas/arquivos');
+        planilhas.value = response.ok ? (response.data.arquivos || []) : [];
+      } catch {
+        planilhas.value = [];
+      }
+    };
+
+    // Importa a planilha do cliente e aplica os codigos ao lote. Sao tres passos
+    // no servidor: ler o arquivo, confirmar (grava no catalogo integrado) e
+    // aplicar ao lote - so depois disso a pasta de entrega deixa de usar o GTIN.
     const onImportExcel = async () => {
-      const loteParaImportar = selectedLote.value || qaSelectedLote.value;
-      if (!loteParaImportar || !excelFile.value) return;
+      const loteParaImportar = qaSelectedLote.value || selectedLote.value;
+      if (!loteParaImportar || !planilhaSelecionada.value || planilhaEmCurso.value) return;
+
+      planilhaEmCurso.value = true;
+      excelConflicts.value = [];
 
       try {
-        showStatus('Importando...', 'success');
-        // Send file to server for parsing
-        // In production, use FormData with multer
-        showStatus(`✓ Excel importado (mock)`, 'success');
+        const importar = await this.$api.request('/api/planilhas/importar', {
+          method: 'POST',
+          data: {
+            lote: loteParaImportar,
+            filePath: planilhaSelecionada.value,
+            operationId: makeOperationId('planilha-importar')
+          }
+        });
+        if (!importar.ok) {
+          showStatus(`✗ ${importar.error}`, 'error');
+          return;
+        }
+
+        excelItems.value = importar.data.preview || [];
+        if (importar.data.conflicts?.length) {
+          excelConflicts.value = importar.data.conflicts;
+          showStatus(`✗ ${importar.data.conflicts.length} conflito(s): nada foi aplicado`, 'error');
+          return;
+        }
+
+        const confirmar = await this.$api.request('/api/planilhas/confirmar', {
+          method: 'POST',
+          data: { importId: importar.data.importId, operationId: makeOperationId('planilha-confirmar') }
+        });
+        if (!confirmar.ok) {
+          showStatus(`✗ ${confirmar.error}`, 'error');
+          return;
+        }
+
+        const aplicar = await this.$api.request('/api/planilhas/aplicar-codigos', {
+          method: 'POST',
+          data: { lote: loteParaImportar, operationId: makeOperationId('planilha-aplicar') }
+        });
+        if (!aplicar.ok) {
+          showStatus(`✗ ${aplicar.error}`, 'error');
+          return;
+        }
+
+        const semCodigo = aplicar.data.semCorrespondencia.length;
+        showStatus(
+          `✓ ${importar.data.total} itens importados · ${aplicar.data.atualizados.length} codigo(s) aplicados`
+            + (semCodigo ? ` · ${semCodigo} sem correspondencia` : ''),
+          'success'
+        );
+        await onLoadQaProducts();
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        planilhaEmCurso.value = false;
       }
     };
 
     // Product QA methods
-    const onLoadQaProducts = async () => {
-      if (!qaSelectedLote.value) return;
+    const onLoadQaProducts = async ({ preservarResultados = false } = {}) => {
+      if (!preservarResultados) {
+        entregaSelecionados.value = [];
+        entregaResultados.value = {};
+        entregaResumo.value = [];
+      }
+
+      if (!qaSelectedLote.value) {
+        qaProducts.value = [];
+        return;
+      }
 
       try {
-        const response = await this.$api.request(`/api/qa/produtos/${qaSelectedLote.value}`);
+        const response = await this.$api.request(`/api/qa/produtos/${encodeURIComponent(qaSelectedLote.value)}`);
         if (response.ok) {
           qaProducts.value = response.data.ready || [];
-          showStatus(`✓ ${qaProducts.value.length} produtos carregados`, 'success');
         } else {
           showStatus(`✗ ${response.error}`, 'error');
         }
@@ -1085,6 +1277,102 @@ export default {
       }
     };
 
+    // Entrega um produto: preparar (staging + manifesto) e executar (envio +
+    // verificacao). Devolve o resultado em vez de so avisar na tela, para o lote
+    // inteiro poder ser processado em sequencia.
+    const entregarProduto = async product => {
+      try {
+        const prepareResponse = await this.$api.request('/api/entregas/preparar', {
+          method: 'POST',
+          data: {
+            lote: qaSelectedLote.value,
+            gtin: product.gtin,
+            codigo: product.codigo,
+            deliveryType: 'normal',
+            operationId: makeOperationId('delivery-prepare')
+          }
+        });
+        if (!prepareResponse.ok) return { ok: false, error: prepareResponse.error };
+
+        const executeResponse = await this.$api.request('/api/entregas/executar', {
+          method: 'POST',
+          data: {
+            lote: qaSelectedLote.value,
+            gtin: product.gtin,
+            codigo: product.codigo,
+            deliveryType: 'normal',
+            attemptId: prepareResponse.data.attemptId,
+            operationId: makeOperationId('delivery-execute')
+          }
+        });
+        if (!executeResponse.ok) return { ok: false, error: executeResponse.error };
+
+        return { ok: true, arquivos: prepareResponse.data.manifest.fileCount };
+      } catch (err) {
+        return { ok: false, error: err.message };
+      }
+    };
+
+    const onToggleTodosEntrega = () => {
+      entregaSelecionados.value = entregaTodosSelecionados.value
+        ? []
+        : qaProducts.value.map(product => product.gtin);
+    };
+
+    const onEntregarSelecionados = async () => {
+      if (entregaSelecionados.value.length === 0 || entregaEmCurso.value) return;
+
+      const alvos = qaProducts.value.filter(p => entregaSelecionados.value.includes(p.gtin));
+      entregaEmCurso.value = true;
+      entregaResultados.value = {};
+      entregaResumo.value = [];
+
+      let entregues = 0;
+      let falhas = 0;
+
+      try {
+        for (let i = 0; i < alvos.length; i++) {
+          const product = alvos[i];
+          entregaProgresso.value = `${i + 1}/${alvos.length}`;
+          entregaResultados.value = {
+            ...entregaResultados.value,
+            [product.gtin]: { texto: 'entregando', classe: 'entregando' }
+          };
+
+          const resultado = await entregarProduto(product);
+          entregaResultados.value = {
+            ...entregaResultados.value,
+            [product.gtin]: resultado.ok
+              ? { texto: `entregue (${resultado.arquivos} arq.)`, classe: 'entregue' }
+              : { texto: resultado.error, classe: 'erro_entrega' }
+          };
+          entregaResumo.value = [...entregaResumo.value, {
+            gtin: product.gtin,
+            codigo: product.codigo,
+            ok: resultado.ok,
+            arquivos: resultado.arquivos,
+            error: resultado.error
+          }];
+
+          if (resultado.ok) entregues++;
+          else falhas++;
+        }
+
+        showStatus(
+          falhas === 0
+            ? `✓ ${entregues} produto(s) entregues`
+            : `${entregues} entregue(s), ${falhas} com erro`,
+          falhas === 0 ? 'success' : 'error'
+        );
+
+        entregaSelecionados.value = [];
+        await onLoadQaProducts({ preservarResultados: true });
+      } finally {
+        entregaEmCurso.value = false;
+        entregaProgresso.value = '';
+      }
+    };
+
     const onPrepareDelivery = async (product) => {
       const productKey = `${product.gtin}:${product.codigo}`;
       if (deliveryProductKey.value) return;
@@ -1204,6 +1492,7 @@ export default {
       await loadAvailableLotes();
       await loadTempImages();
       await loadQaLotes();
+      await onCarregarPlanilhas();
 
       // Refresh temp images every 2 seconds
       refreshInterval = setInterval(loadTempImages, 2000);
@@ -1401,6 +1690,20 @@ export default {
       qaEmCurso,
       qaClassificadas,
       qaDeliveryType,
+      entregaSelecionados,
+      entregaResultados,
+      entregaEmCurso,
+      entregaProgresso,
+      entregaResumo,
+      entregaTodosSelecionados,
+      entregaSemCodigo,
+      onToggleTodosEntrega,
+      onEntregarSelecionados,
+      planilhas,
+      planilhaSelecionada,
+      planilhaEmCurso,
+      onCarregarPlanilhas,
+      rotuloLote,
       qaFotosNormais,
       qaFotosAt,
       qaFotosElegiveis,

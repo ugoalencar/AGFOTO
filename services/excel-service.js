@@ -257,6 +257,99 @@ export class ExcelService {
     }
   }
 
+  /**
+   * Planilhas disponiveis para importar.
+   *
+   * O importador so aceita arquivo de dentro de dados/xlsx (ver
+   * resolveLocalWorkbook), entao a tela lista o que esta la em vez de pedir um
+   * caminho digitado.
+   */
+  static async listAvailableWorkbooks() {
+    try {
+      const entries = await fs.promises.readdir(config.paths.xlsx, { withFileTypes: true });
+      const arquivos = [];
+      for (const entry of entries) {
+        if (!entry.isFile()) continue;
+        if (path.extname(entry.name).toLowerCase() !== '.xlsx') continue;
+        // Planilhas internas do sistema nao sao planilha de cliente.
+        if (['controle-lotes.xlsx', 'lookup-integrado.xlsx'].includes(entry.name.toLowerCase())) continue;
+
+        const stats = await fs.promises.stat(path.join(config.paths.xlsx, entry.name));
+        arquivos.push({
+          nome: entry.name,
+          tamanho: stats.size,
+          modificadoEm: stats.mtime.toISOString()
+        });
+      }
+      return { ok: true, data: { arquivos, pasta: config.paths.xlsx } };
+    } catch (error) {
+      return { ok: false, error: `Cannot list workbooks: ${error.message}` };
+    }
+  }
+
+  /**
+   * Copia codigo e descricao do catalogo integrado para os produtos do lote.
+   *
+   * Sem isso o codigo do produto continua sendo o proprio GTIN (o valor que a
+   * sincronizacao de pastas usa como provisorio), e a entrega cria a pasta de
+   * staging com o GTIN em vez do codigo do cliente.
+   */
+  static async applyLookupToLote(lote) {
+    try {
+      if (!Lote.isValid(lote)) return { ok: false, error: 'Invalid lote' };
+
+      const lookupPath = path.join(config.paths.xlsx, 'lookup-integrado.xlsx');
+      const workbook = new ExcelJS.Workbook();
+      try {
+        await workbook.xlsx.readFile(lookupPath);
+      } catch {
+        return { ok: false, error: 'Catalogo integrado ainda nao existe: importe uma planilha antes' };
+      }
+
+      const worksheet = workbook.getWorksheet('Lookup') || workbook.worksheets[0];
+      const catalogo = new Map();
+      for (const row of worksheet?.getRows(2, Math.max(0, worksheet.rowCount - 1)) || []) {
+        if (toCellString(row.getCell(1).value) !== String(lote)) continue;
+        catalogo.set(toCellString(row.getCell(2).value), {
+          codigo: toCellString(row.getCell(3).value) || '',
+          descricao: toCellString(row.getCell(4).value) || ''
+        });
+      }
+
+      const loteObj = await LoteRepository.load(lote);
+      const atualizados = [];
+      const semCorrespondencia = [];
+
+      for (const [gtin, produto] of Object.entries(loteObj.itens)) {
+        const encontrado = catalogo.get(gtin);
+        if (!encontrado || !encontrado.codigo) {
+          semCorrespondencia.push(gtin);
+          continue;
+        }
+        if (produto.codigo === encontrado.codigo && produto.descricao === encontrado.descricao) continue;
+
+        const anterior = produto.codigo;
+        produto.codigo = encontrado.codigo;
+        if (encontrado.descricao) produto.descricao = encontrado.descricao;
+        produto.addHistoricoEvent('codigo_aplicado', {
+          de: anterior,
+          para: encontrado.codigo,
+          origem: 'lookup-integrado'
+        });
+        atualizados.push({ gtin, codigo: encontrado.codigo, descricao: produto.descricao });
+      }
+
+      if (atualizados.length > 0) {
+        await LoteRepository.save(loteObj);
+        await this.updateControlFromLote(lote).catch(() => {});
+      }
+
+      return { ok: true, data: { lote, atualizados, semCorrespondencia } };
+    } catch (error) {
+      return { ok: false, error: `Cannot apply lookup: ${error.message}` };
+    }
+  }
+
   static async importItems(lote, items, source = 'upload') {
     try {
       const loteObj = await LoteRepository.load(lote);

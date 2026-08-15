@@ -5,6 +5,24 @@ import { sendError, sendOk } from '../server/response.js';
 
 const router = Router();
 
+router.get('/arquivos', async (_req, res) => {
+  try {
+    const result = await ExcelService.listAvailableWorkbooks();
+    return result.ok ? sendOk(res, result.data) : sendError(res, 400, result.error);
+  } catch (error) {
+    return sendError(res, 400, error);
+  }
+});
+
+router.post('/aplicar-codigos', async (req, res) => {
+  try {
+    const result = await ExcelService.applyLookupToLote(req.body?.lote);
+    return result.ok ? sendOk(res, result.data) : sendError(res, 400, result.error);
+  } catch (error) {
+    return sendError(res, 400, error);
+  }
+});
+
 router.post('/importar', async (req, res) => {
   try {
     const result = await ExcelService.importWorkbook(req.body || {});

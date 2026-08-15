@@ -1679,7 +1679,67 @@ select {
   flex: 1 1 100%;
 }
 
+/* ============================================================
+   Entregar
+   ============================================================ */
+.entrega-alerta {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--ag-yellow);
+  border-left-width: 4px;
+  border-radius: var(--ag-radius);
+  background: rgba(255, 194, 14, 0.08);
+  color: var(--ag-yellow);
+  font-size: 12px;
+}
+
+.linha-selecionada {
+  background: rgba(255, 106, 19, 0.12);
+}
+
+/* Codigo ainda igual ao GTIN: a pasta de entrega sairia errada. */
+.codigo-pendente {
+  color: var(--ag-yellow);
+  border-bottom: 1px dashed var(--ag-yellow);
+}
+
+.badge-status.entregando {
+  background: var(--ag-orange);
+  color: #000;
+}
+
+.badge-status.entregue {
+  background: var(--ag-ok);
+  color: #fff;
+}
+
 .qa-botao.ap:hover:not(:disabled) { background: var(--ag-yellow); color: #000; }
 .qa-botao.at:hover:not(:disabled) { background: var(--ag-orange); color: #000; }
 .qa-botao.ap.ativo { background: var(--ag-yellow); color: #000; }
 .qa-botao.at.ativo { background: var(--ag-orange); color: #000; }
+
+.entrega-resumo {
+  padding: 10px 14px;
+  border-top: 1px solid var(--ag-line);
+}
+
+.entrega-resumo-titulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ag-muted);
+  margin-bottom: 6px;
+}
+
+.entrega-resumo-linha {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  border-bottom: 1px solid var(--ag-line);
+}
+
+.entrega-resumo-linha:last-child { border-bottom: 0; }
+.entrega-ok { color: var(--ag-ok); font-weight: 700; }
+.entrega-erro { color: var(--ag-red); font-weight: 700; }
