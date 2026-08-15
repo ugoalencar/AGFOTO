@@ -30,9 +30,18 @@ test('product QA rail routes render direct views without hub tabs', async () => 
   const publicApp = await readFile(path.join(publicDir, 'App.vue'), 'utf8');
 
   for (const page of ['entregar', 'qa', 'relatorios']) {
-    assert.match(app, new RegExp(`@click="activePage = '${page}'"`));
+    // O botao pode navegar direto ou por um handler (QA e Entregar passam por
+    // irPara para sincronizar as planilhas antes de mostrar a tela).
+    assert.match(
+      app,
+      new RegExp(`@click="(?:activePage = '${page}'|irPara\\('${page}'\\))"`),
+      `rail sem navegacao para ${page}`
+    );
     assert.match(app, new RegExp(`v-if="activePage === '${page}'"`));
   }
+
+  // Entrar em QA ou Entregar tem que varrer a pasta de planilhas sozinho.
+  assert.match(app, /'\/api\/planilhas\/sincronizar'/);
 
   assert.doesNotMatch(app, /qaHubTab/);
   assert.doesNotMatch(app, /QA Hub Page/);

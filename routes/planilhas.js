@@ -14,6 +14,20 @@ router.get('/arquivos', async (_req, res) => {
   }
 });
 
+/**
+ * POST /api/planilhas/sincronizar
+ * Varre a pasta de planilhas e preenche os codigos que estiverem faltando.
+ * A tela chama sozinha ao abrir QA e Entregar.
+ */
+router.post('/sincronizar', async (_req, res) => {
+  try {
+    const result = await ExcelService.syncWorkbooksToLotes();
+    return result.ok ? sendOk(res, result.data) : sendError(res, 400, result.error);
+  } catch (error) {
+    return sendError(res, 400, error);
+  }
+});
+
 router.post('/aplicar-codigos', async (req, res) => {
   try {
     const result = await ExcelService.applyLookupToLote(req.body?.lote);

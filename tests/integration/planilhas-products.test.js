@@ -7,6 +7,7 @@ import { createTestEnv } from '../helpers/test-env.js';
 import { applyConfigOverrides } from '../../server/config.js';
 import { createApp } from '../../server/app.js';
 import ExcelService from '../../services/excel-service.js';
+import LoteRepository from '../../repositories/lote-repository.js';
 
 async function makeWorkbook(filePath, rows) {
   const workbook = new ExcelJS.Workbook();
@@ -273,4 +274,118 @@ test('spreadsheet import routes stage then confirm an import', async t => {
   const confirmed = await request(app, '/api/planilhas/confirmar', { importId: imported.body.data.importId }, 'confirm-route');
   assert.equal(confirmed.status, 200);
   assert.equal(confirmed.body.data.inserted, 1);
+});
+
+test('sincronizacao varre a pasta e preenche codigo e descricao que faltam', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  await fs.promises.mkdir(path.join(env.paths.finalizadas, 'LOTE 70', '7896498524004'), { recursive: true });
+  const lote = await LoteRepository.loadOrCreate('70');
+  // Como a sincronizacao de pastas cria o item, o codigo comeca sendo o GTIN.
+  lote.getOrCreateItem('7896498524004', '7896498524004', '7896498524004');
+  await LoteRepository.save(lote);
+
+  await makeWorkbook(path.join(env.paths.xlsx, 'remessa.xlsx'), [
+    ['EAN', 'Código', 'Descrição SAP'],
+    ['7896498524004', '1056695', 'ALGODAO ESPEC POLIMENTO 100G']
+  ]);
+
+  const result = await ExcelService.syncWorkbooksToLotes();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.aplicados.length, 1);
+  assert.deepEqual(result.data.conflitos, []);
+
+  const salvo = await LoteRepository.load('70');
+  assert.equal(salvo.itens['7896498524004'].codigo, '1056695');
+  assert.equal(salvo.itens['7896498524004'].descricao, 'ALGODAO ESPEC POLIMENTO 100G');
+});
+
+test('sincronizacao nao sobrescreve codigo ja definido e reporta a divergencia', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  await fs.promises.mkdir(path.join(env.paths.finalizadas, 'LOTE 71', '7896498524004'), { recursive: true });
+  const lote = await LoteRepository.loadOrCreate('71');
+  lote.getOrCreateItem('7896498524004', 'CODIGO-JA-DEFINIDO', 'Descricao existente');
+  await LoteRepository.save(lote);
+
+  await makeWorkbook(path.join(env.paths.xlsx, 'remessa.xlsx'), [
+    ['EAN', 'Código', 'Descrição SAP'],
+    ['7896498524004', '1056695', 'Outra descricao']
+  ]);
+
+  const result = await ExcelService.syncWorkbooksToLotes();
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.aplicados, []);
+  assert.equal(result.data.conflitos.length, 1);
+  assert.match(result.data.conflitos[0].motivo, /ja tem codigo/i);
+
+  const salvo = await LoteRepository.load('71');
+  assert.equal(salvo.itens['7896498524004'].codigo, 'CODIGO-JA-DEFINIDO', 'o codigo do produto foi sobrescrito');
+  assert.equal(salvo.itens['7896498524004'].descricao, 'Descricao existente');
+});
+
+test('sincronizacao e idempotente: rodar de novo nao muda mais nada', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  await fs.promises.mkdir(path.join(env.paths.finalizadas, 'LOTE 72', '7896498524004'), { recursive: true });
+  const lote = await LoteRepository.loadOrCreate('72');
+  lote.getOrCreateItem('7896498524004', '7896498524004', '7896498524004');
+  await LoteRepository.save(lote);
+
+  await makeWorkbook(path.join(env.paths.xlsx, 'remessa.xlsx'), [
+    ['EAN', 'Código', 'Descrição SAP'],
+    ['7896498524004', '1056695', 'Produto']
+  ]);
+
+  const primeira = await ExcelService.syncWorkbooksToLotes();
+  const segunda = await ExcelService.syncWorkbooksToLotes();
+
+  assert.equal(primeira.data.aplicados.length, 1);
+  assert.deepEqual(segunda.data.aplicados, [], 'a segunda passada nao pode reaplicar');
+  assert.deepEqual(segunda.data.conflitos, []);
+});
+
+test('sincronizacao acusa quando duas planilhas discordam do mesmo EAN', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  await fs.promises.mkdir(path.join(env.paths.finalizadas, 'LOTE 73', '7896498524004'), { recursive: true });
+  const lote = await LoteRepository.loadOrCreate('73');
+  lote.getOrCreateItem('7896498524004', '7896498524004', '7896498524004');
+  await LoteRepository.save(lote);
+
+  await makeWorkbook(path.join(env.paths.xlsx, 'a.xlsx'), [
+    ['EAN', 'Código', 'Descrição SAP'],
+    ['7896498524004', '1111', 'Produto A']
+  ]);
+  await makeWorkbook(path.join(env.paths.xlsx, 'b.xlsx'), [
+    ['EAN', 'Código', 'Descrição SAP'],
+    ['7896498524004', '2222', 'Produto B']
+  ]);
+
+  const result = await ExcelService.syncWorkbooksToLotes();
+
+  assert.equal(result.data.conflitos.length, 1);
+  assert.match(result.data.conflitos[0].motivo, /divergente entre planilhas/i);
+});
+
+test('sincronizacao sem planilha nenhuma nao mexe em nada', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  await fs.promises.mkdir(path.join(env.paths.finalizadas, 'LOTE 74', '7896498524004'), { recursive: true });
+  const lote = await LoteRepository.loadOrCreate('74');
+  lote.getOrCreateItem('7896498524004', '7896498524004', '7896498524004');
+  await LoteRepository.save(lote);
+
+  const result = await ExcelService.syncWorkbooksToLotes();
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.planilhas, 0);
+  assert.deepEqual(result.data.aplicados, []);
 });

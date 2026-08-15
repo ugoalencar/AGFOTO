@@ -17,6 +17,10 @@ import { assertInsideRoot } from '../server/secure-filesystem.js';
 import { Lote } from '../domain/lote.js';
 
 const pendingImports = new Map();
+
+// Leitura de planilha reaproveitada enquanto o arquivo nao muda (chave inclui
+// mtime e tamanho), porque a sincronizacao roda a cada abertura de aba.
+const workbookParseCache = new Map();
 let lookupWriteQueue = Promise.resolve();
 
 function makeImportId(lote, filePath) {
@@ -353,6 +357,144 @@ export class ExcelService {
     } catch (error) {
       return { ok: false, error: `Cannot apply lookup: ${error.message}` };
     }
+  }
+
+  /**
+   * Varre a pasta de planilhas e preenche codigo/descricao dos produtos.
+   *
+   * Roda sozinha ao abrir QA e Entregar: o usuario so joga o .xlsx na pasta.
+   * Por isso ela e conservadora - preenche o que esta faltando e nunca
+   * sobrescreve um codigo ja definido. Codigo diferente do que a planilha diz e
+   * tratado como conflito: nao aplica e devolve na lista, para aparecer na tela
+   * em vez de mudar dado por conta propria.
+   *
+   * Produto novo so recebe codigo se a planilha tiver o EAN dele; o que nao
+   * casar com nenhuma planilha fica como esta.
+   */
+  static async syncWorkbooksToLotes() {
+    try {
+      const disponiveis = await this.listAvailableWorkbooks();
+      if (!disponiveis.ok) return disponiveis;
+
+      const planilhas = disponiveis.data.arquivos;
+      if (planilhas.length === 0) {
+        return { ok: true, data: { planilhas: 0, aplicados: [], conflitos: [], lotes: [] } };
+      }
+
+      // Um EAN pode estar em mais de uma planilha; a primeira que trouxer codigo
+      // vale, e divergencia entre planilhas entra como conflito.
+      const catalogo = new Map();
+      const conflitos = [];
+
+      for (const planilha of planilhas) {
+        const caminho = path.join(config.paths.xlsx, planilha.nome);
+        const itens = await this.parseWorkbookCached(caminho, planilha);
+        if (!itens.ok) {
+          conflitos.push({ planilha: planilha.nome, motivo: itens.error });
+          continue;
+        }
+
+        for (const item of itens.data) {
+          if (!item.ean || !item.codigo) continue;
+          const existente = catalogo.get(item.ean);
+          if (existente && existente.codigo !== item.codigo) {
+            conflitos.push({
+              ean: item.ean,
+              motivo: `codigo divergente entre planilhas: "${existente.codigo}" (${existente.planilha}) e "${item.codigo}" (${planilha.nome})`
+            });
+            continue;
+          }
+          if (!existente) {
+            catalogo.set(item.ean, {
+              codigo: item.codigo,
+              descricao: item.descricao,
+              planilha: planilha.nome
+            });
+          }
+        }
+      }
+
+      const numeros = await LoteRepository.listLoteNumbersOnDisk();
+      const aplicados = [];
+      const lotesTocados = [];
+
+      for (const numero of numeros) {
+        let loteObj;
+        try {
+          loteObj = await LoteRepository.load(numero);
+        } catch {
+          continue; // lote sem JSON ainda
+        }
+
+        let mudou = false;
+        for (const [gtin, produto] of Object.entries(loteObj.itens)) {
+          const doCatalogo = catalogo.get(gtin);
+          if (!doCatalogo) continue;
+
+          // Codigo proprio ja definido e diferente: nao mexe, reporta.
+          const temCodigoProprio = produto.codigo && produto.codigo !== gtin;
+          if (temCodigoProprio) {
+            if (produto.codigo !== doCatalogo.codigo) {
+              conflitos.push({
+                lote: numero,
+                ean: gtin,
+                motivo: `produto ja tem codigo "${produto.codigo}", planilha diz "${doCatalogo.codigo}"`
+              });
+            }
+            continue;
+          }
+
+          produto.codigo = doCatalogo.codigo;
+          if (doCatalogo.descricao) produto.descricao = doCatalogo.descricao;
+          produto.addHistoricoEvent('codigo_aplicado', {
+            para: doCatalogo.codigo,
+            origem: doCatalogo.planilha
+          });
+          aplicados.push({ lote: numero, gtin, codigo: doCatalogo.codigo, planilha: doCatalogo.planilha });
+          mudou = true;
+        }
+
+        if (mudou) {
+          await LoteRepository.save(loteObj);
+          lotesTocados.push(numero);
+          await this.updateControlFromLote(numero).catch(() => {});
+        }
+      }
+
+      if (aplicados.length > 0) {
+        await auditLogger.log('PLANILHAS_SINCRONIZADAS', {
+          planilhas: planilhas.length,
+          aplicados: aplicados.length,
+          conflitos: conflitos.length
+        });
+      }
+
+      return {
+        ok: true,
+        data: { planilhas: planilhas.length, aplicados, conflitos, lotes: lotesTocados }
+      };
+    } catch (error) {
+      return { ok: false, error: `Cannot sync workbooks: ${error.message}` };
+    }
+  }
+
+  /**
+   * Le uma planilha reaproveitando o resultado enquanto o arquivo nao muda.
+   * A sincronizacao roda a cada abertura de aba; sem isso as mesmas planilhas
+   * seriam lidas do disco toda vez.
+   */
+  static async parseWorkbookCached(caminho, { modificadoEm, tamanho }) {
+    const chave = `${caminho}:${modificadoEm}:${tamanho}`;
+    const emCache = workbookParseCache.get(chave);
+    if (emCache) return emCache;
+
+    // O lote nao influencia a leitura das linhas; e so o rotulo do ExcelItem.
+    const resultado = await this.parseWorkbook(caminho, 'sync');
+    workbookParseCache.set(chave, resultado);
+    if (workbookParseCache.size > 20) {
+      workbookParseCache.delete(workbookParseCache.keys().next().value);
+    }
+    return resultado;
   }
 
   static async importItems(lote, items, source = 'upload') {

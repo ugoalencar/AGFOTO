@@ -6,11 +6,11 @@
         <span>CAP</span>
         <small>Captura</small>
       </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="activePage = 'entregar'">
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="irPara('entregar')">
         <span>ENT</span>
         <small>Entregar</small>
       </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="activePage = 'qa'">
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="irPara('qa')">
         <span>QA</span>
         <small>QA</small>
       </button>
@@ -258,7 +258,17 @@
 
           <div v-if="entregaSemCodigo.length > 0" class="entrega-alerta">
             {{ entregaSemCodigo.length }} produto(s) ainda estao com o GTIN no lugar do codigo.
-            Importe a planilha do cliente abaixo para corrigir antes de entregar.
+            Nenhuma planilha da pasta tem o EAN deles.
+          </div>
+
+          <!-- A sincronizacao nunca sobrescreve codigo ja definido; o que
+               divergiu aparece aqui em vez de ser aplicado. -->
+          <div v-if="planilhasConflitos.length > 0" class="entrega-alerta">
+            {{ planilhasConflitos.length }} divergencia(s) entre planilha e produto - nada foi alterado:
+            <div v-for="(c, i) in planilhasConflitos.slice(0, 5)" :key="i"
+                 style="font-family:var(--ag-mono);font-size:11px;margin-top:4px">
+              {{ c.ean || c.planilha }}: {{ c.motivo }}
+            </div>
           </div>
 
           <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
@@ -607,6 +617,7 @@ export default {
     const planilhas = ref([]);
     const planilhaSelecionada = ref('');
     const planilhaEmCurso = ref(false);
+    const planilhasConflitos = ref([]);
     const reportStatus = ref('');
     const reportItems = ref([]);
     const reportStats = ref(null);
@@ -996,6 +1007,35 @@ export default {
         reader.readAsArrayBuffer(file);
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    // QA e Entregar dependem do codigo do produto, entao a pasta de planilhas e
+    // varrida ao entrar em qualquer uma das duas: o usuario so larga o .xlsx la.
+    const sincronizarPlanilhas = async () => {
+      try {
+        const response = await this.$api.request('/api/planilhas/sincronizar', {
+          method: 'POST',
+          data: { operationId: makeOperationId('planilha-sync') }
+        });
+        if (!response.ok) return;
+
+        planilhasConflitos.value = response.data.conflitos || [];
+        if (response.data.aplicados.length > 0) {
+          showStatus(`✓ ${response.data.aplicados.length} codigo(s) preenchidos pela planilha`, 'success');
+          if (qaSelectedLote.value) await onLoadQaProducts();
+          if (selectedLote.value) await loadLote();
+        }
+      } catch {
+        // sincronizacao e best-effort: nao pode atrapalhar a navegacao
+      }
+    };
+
+    const irPara = async pagina => {
+      activePage.value = pagina;
+      if (pagina === 'qa' || pagina === 'entregar') {
+        await onCarregarPlanilhas();
+        await sincronizarPlanilhas();
       }
     };
 
@@ -1703,6 +1743,9 @@ export default {
       planilhaSelecionada,
       planilhaEmCurso,
       onCarregarPlanilhas,
+      sincronizarPlanilhas,
+      planilhasConflitos,
+      irPara,
       rotuloLote,
       qaFotosNormais,
       qaFotosAt,
