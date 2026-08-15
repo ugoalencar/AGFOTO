@@ -154,6 +154,42 @@ main {
   font-weight: bold;
 }
 
+/* QA GTIN List */
+.clinerules {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.5rem;
+}
+
+.clinerule {
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--ag-border);
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s;
+  background: var(--ag-panel);
+  color: var(--ag-text);
+}
+
+.clinerule:hover {
+  background: var(--ag-orange);
+  color: #000;
+  border-color: var(--ag-orange);
+  transform: translateX(2px);
+}
+
+.clinerule.active {
+  background: var(--ag-red);
+  color: #fff;
+  border-color: var(--ag-red);
+  font-weight: bold;
+}
+
 /* Stages */
 .stages-container {
   flex: 1;

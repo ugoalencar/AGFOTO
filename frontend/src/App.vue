@@ -223,10 +223,16 @@
           </select>
 
           <label class="ag-label" style="margin-top:12px">GTIN</label>
-          <select class="ag-field" v-model="qaPhotoGtin" :disabled="qaAvailableGtins.length === 0">
-            <option value="">{{ qaAvailableGtins.length > 0 ? 'Selecione um GTIN' : 'Sem GTINs pendentes' }}</option>
-            <option v-for="gtin in qaAvailableGtins" :key="gtin" :value="gtin">{{ gtin }}</option>
-          </select>
+          <ul class="clinerules" v-if="qaAvailableGtins.length > 0">
+            <li v-for="gtin in qaAvailableGtins" :key="gtin"
+                class="clinerule" :class="{ active: qaPhotoGtin === gtin }"
+                @click="qaPhotoGtin = gtin">
+              {{ gtin }}
+            </li>
+          </ul>
+          <div v-else style="padding:0.75rem;color:var(--ag-muted);font-size:0.875rem">
+            Sem GTINs pendentes de QA
+          </div>
 
           <button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadQaPhotos" :disabled="!qaPhotoLote || !qaPhotoGtin">Carregar fotos</button>
         </div>
