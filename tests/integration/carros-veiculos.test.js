@@ -300,3 +300,108 @@ test('navegar e recusado quando a LAN esta ligada', async t => {
   assert.equal(result.ok, false);
   assert.match(result.error, /LAN/i);
 });
+
+// --- Duas etapas: organizar aqui, editar fora, voltar para QA e entrega -----
+
+test('placa nasce organizada e o QA a torna pronta para entrega', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+
+  const recemImportada = await VehicleService.listarPorData(DIA);
+  assert.equal(recemImportada.data.placas[0].status, 'organizado');
+
+  const aprovada = await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+  assert.equal(aprovada.ok, true, aprovada.error);
+  assert.equal(aprovada.data.status, 'pronto_para_entrega');
+
+  const depois = await VehicleService.listarPorData(DIA);
+  assert.equal(depois.data.placas[0].status, 'pronto_para_entrega');
+  assert.ok(depois.data.placas[0].aprovadoEm);
+});
+
+test('entrega e recusada enquanto a placa nao passou pelo QA', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+
+  const semQa = await VehicleService.entregarPlaca(DIA, 'ABC1234');
+
+  assert.equal(semQa.ok, false);
+  assert.match(semQa.error, /QA/i);
+
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+  const comQa = await VehicleService.entregarPlaca(DIA, 'ABC1234');
+  assert.equal(comQa.ok, true, comQa.error);
+  assert.equal(comQa.data.status, 'entregue');
+});
+
+test('reabrir devolve a placa para organizada e bloqueia a entrega de novo', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+
+  const reaberta = await VehicleService.reabrirPlaca(DIA, 'ABC1234');
+  assert.equal(reaberta.data.status, 'organizado');
+
+  const entrega = await VehicleService.entregarPlaca(DIA, 'ABC1234');
+  assert.equal(entrega.ok, false);
+});
+
+test('aprovar recusa placa sem foto nenhuma', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await VehicleService.criarPlaca(DIA, 'ABC1234');
+
+  const result = await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /sem fotos/i);
+});
+
+test('relatorio soma placas e fotos por situacao, entre dias', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  const fotos = await montarOrigem(env, ['p1.jpg', 'a.jpg', 'p2.jpg', 'b.jpg']);
+  fotos[0].placa = 'ABC1234';
+  fotos[2].placa = 'XYZ9K87';
+  await VehicleService.importarParaData(DIA, fotos);
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+  await VehicleService.entregarPlaca(DIA, 'ABC1234');
+
+  const geral = await VehicleService.relatorio();
+
+  assert.equal(geral.ok, true, geral.error);
+  assert.equal(geral.data.resumo.placas, 2);
+  assert.equal(geral.data.resumo.fotos, 4);
+  assert.equal(geral.data.resumo.entregues, 1);
+  assert.equal(geral.data.resumo.organizadas, 1);
+
+  const soEntregues = await VehicleService.relatorio({ status: 'entregue' });
+  assert.deepEqual(soEntregues.data.itens.map(i => i.placa), ['ABC1234']);
+  assert.ok(soEntregues.data.itens[0].entregueEm);
+});
+
+test('a situacao sobrevive a releitura do disco', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+
+  // O disco diz quais placas existem; o JSON do dia diz em que ponto elas estao.
+  const json = path.join(env.paths.jsons, `Carros_${DIA}.json`);
+  assert.equal(await fs.promises.stat(json).then(() => true, () => false), true);
+
+  const relido = await VehicleService.listarPorData(DIA);
+  assert.equal(relido.data.placas[0].status, 'pronto_para_entrega');
+});

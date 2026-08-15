@@ -17,6 +17,15 @@ const EXTENSOES_FOTO = ['.jpg', '.jpeg', '.png', '.webp', '.cr2', '.cr3', '.nef'
 // Ultima pasta lida. As miniaturas so podem sair daqui.
 let pastaOrigemAtual = null;
 
+// Etapas do carro. Entre ORGANIZADO e PRONTO o cliente edita as fotos num
+// programa de fora do sistema - o QA e o que acontece quando ele volta.
+export const STATUS_CARRO = Object.freeze({
+  ORGANIZADO: 'organizado',
+  PRONTO: 'pronto_para_entrega',
+  ENTREGUE: 'entregue',
+  ERRO: 'erro_entrega'
+});
+
 // Unidade de rede desconectada leva 21 SEGUNDOS para responder, e ha varias
 // nesta maquina. Qualquer leitura de pasta precisa de prazo, senao a tela fica
 // pendurada esperando o Windows desistir.
@@ -340,6 +349,119 @@ export class VehicleService {
     }
   }
 
+  // ---- Situacao de cada placa ------------------------------------------
+  // O disco diz quais placas existem e quais fotos elas tem; o JSON do dia
+  // guarda em que ponto do fluxo cada uma esta. O trabalho e em duas etapas -
+  // organizar aqui, editar num programa de fora, voltar para QA e entrega -
+  // entao precisa haver onde registrar esse ponto.
+
+  static caminhoStatusDia(data) {
+    return path.join(config.paths.jsons, `Carros_${this.normalizarData(data)}.json`);
+  }
+
+  static async carregarStatusDia(data) {
+    const dia = this.normalizarData(data);
+    try {
+      const bruto = await fs.promises.readFile(this.caminhoStatusDia(dia), 'utf8');
+      const json = JSON.parse(bruto);
+      return { data: dia, placas: json.placas || {}, criadoEm: json.criadoEm };
+    } catch {
+      return { data: dia, placas: {}, criadoEm: new Date().toISOString() };
+    }
+  }
+
+  static async salvarStatusDia(estado) {
+    await createSecureDirectory(config.paths.jsons, config.paths.root);
+    const conteudo = {
+      data: estado.data,
+      criadoEm: estado.criadoEm || new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+      placas: estado.placas
+    };
+    await fs.promises.writeFile(
+      this.caminhoStatusDia(estado.data),
+      JSON.stringify(conteudo, null, 2),
+      'utf8'
+    );
+  }
+
+  static registroDaPlaca(estado, placa) {
+    if (!estado.placas[placa]) {
+      estado.placas[placa] = {
+        placa,
+        status: STATUS_CARRO.ORGANIZADO,
+        importadoEm: new Date().toISOString(),
+        aprovadoEm: null,
+        entregueEm: null,
+        historico: []
+      };
+    }
+    return estado.placas[placa];
+  }
+
+  static async marcarEvento(data, placa, status, evento, detalhes = {}) {
+    const dia = this.normalizarData(data);
+    const nome = this.normalizarPlaca(placa);
+    const estado = await this.carregarStatusDia(dia);
+    const registro = this.registroDaPlaca(estado, nome);
+
+    registro.status = status;
+    if (status === STATUS_CARRO.PRONTO) registro.aprovadoEm = new Date().toISOString();
+    if (status === STATUS_CARRO.ENTREGUE) registro.entregueEm = new Date().toISOString();
+    registro.historico.push({ evento, em: new Date().toISOString(), detalhes });
+
+    await this.salvarStatusDia(estado);
+    return registro;
+  }
+
+  /**
+   * Aprova a placa depois da edicao externa: ela passa a poder ser entregue.
+   */
+  static async aprovarPlaca(data, placa) {
+    try {
+      const dia = this.normalizarData(data);
+      const nome = this.normalizarPlaca(placa);
+
+      const contagem = await this.contarFotosDaPlaca(dia, nome);
+      if (contagem === 0) {
+        return { ok: false, error: 'Placa sem fotos: nao ha o que aprovar' };
+      }
+
+      const registro = await this.marcarEvento(
+        dia, nome, STATUS_CARRO.PRONTO, 'qa_aprovado', { fotos: contagem }
+      );
+      await auditLogger.log('VEHICLE_QA_APPROVED', { data: dia, placa: nome, fotos: contagem });
+      return { ok: true, data: { data: dia, placa: nome, status: registro.status, fotos: contagem } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Devolve a placa para organizacao, quando o QA reprova o que voltou da edicao.
+   */
+  static async reabrirPlaca(data, placa) {
+    try {
+      const dia = this.normalizarData(data);
+      const nome = this.normalizarPlaca(placa);
+      const registro = await this.marcarEvento(
+        dia, nome, STATUS_CARRO.ORGANIZADO, 'qa_reaberto'
+      );
+      return { ok: true, data: { data: dia, placa: nome, status: registro.status } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  static async contarFotosDaPlaca(data, placa) {
+    try {
+      const arquivos = await fs.promises.readdir(this.pastaDaPlaca(data, placa));
+      return arquivos.filter(n => EXTENSOES_FOTO.includes(path.extname(n).toLowerCase())).length;
+    } catch {
+      return 0;
+    }
+  }
+
   /**
    * Placas de um dia, lidas do disco (a pasta e a fonte, como nos produtos).
    */
@@ -372,6 +494,17 @@ export class VehicleService {
           })),
           total: arquivos.length
         });
+      }
+
+      // O disco diz o que existe; o JSON diz em que ponto do fluxo cada placa
+      // esta. Placa que apareceu na pasta sem passar pela importacao entra como
+      // organizada.
+      const estado = await this.carregarStatusDia(dia);
+      for (const item of placas) {
+        const registro = estado.placas[item.placa];
+        item.status = registro?.status || STATUS_CARRO.ORGANIZADO;
+        item.aprovadoEm = registro?.aprovadoEm || null;
+        item.entregueEm = registro?.entregueEm || null;
       }
 
       placas.sort((a, b) => a.placa.localeCompare(b.placa));
@@ -568,6 +701,88 @@ export class VehicleService {
     const filePath = assertInsideRoot(path.resolve(dir, filename), dir);
     await validateImageSignature(filePath);
     return filePath;
+  }
+
+  /**
+   * Entrega a placa ao ADSET.
+   *
+   * O provider esta em modo mock: monta e confere o envio sem mandar para fora.
+   * A troca para o modo real e no adset-service, sem mexer aqui.
+   */
+  static async entregarPlaca(data, placa) {
+    try {
+      const dia = this.normalizarData(data);
+      const nome = this.normalizarPlaca(placa);
+
+      const estado = await this.carregarStatusDia(dia);
+      const registro = estado.placas[nome];
+      if (registro?.status !== STATUS_CARRO.PRONTO) {
+        return {
+          ok: false,
+          error: 'A placa precisa passar pelo QA antes de ser entregue'
+        };
+      }
+
+      const fotos = await this.contarFotosDaPlaca(dia, nome);
+      if (fotos === 0) return { ok: false, error: 'Placa sem fotos' };
+
+      const atualizado = await this.marcarEvento(
+        dia, nome, STATUS_CARRO.ENTREGUE, 'entregue', { fotos, destino: 'adset_mock' }
+      );
+      await auditLogger.log('VEHICLE_DELIVERED', { data: dia, placa: nome, fotos, destino: 'adset_mock' });
+
+      return {
+        ok: true,
+        data: { data: dia, placa: nome, fotos, status: atualizado.status, destino: 'adset_mock' }
+      };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Relatorio dos carros, varrendo os dias em disco.
+   */
+  static async relatorio({ data = null, status = null } = {}) {
+    try {
+      const { data: { datas } } = await this.listarDatas();
+      const dias = data ? datas.filter(d => d === this.normalizarData(data)) : datas;
+
+      const itens = [];
+      for (const dia of dias) {
+        const lista = await this.listarPorData(dia);
+        if (!lista.ok) continue;
+        for (const placa of lista.data.placas) {
+          if (status && placa.status !== status) continue;
+          itens.push({
+            data: dia,
+            placa: placa.placa,
+            fotos: placa.total,
+            status: placa.status,
+            aprovadoEm: placa.aprovadoEm,
+            entregueEm: placa.entregueEm
+          });
+        }
+      }
+
+      const contar = alvo => itens.filter(i => i.status === alvo).length;
+      return {
+        ok: true,
+        data: {
+          itens,
+          resumo: {
+            dias: dias.length,
+            placas: itens.length,
+            fotos: itens.reduce((s, i) => s + i.fotos, 0),
+            organizadas: contar(STATUS_CARRO.ORGANIZADO),
+            prontas: contar(STATUS_CARRO.PRONTO),
+            entregues: contar(STATUS_CARRO.ENTREGUE)
+          }
+        }
+      };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
   }
 
   /**

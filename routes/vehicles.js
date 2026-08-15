@@ -115,6 +115,54 @@ router.post('/placa', express.json(), async (req, res, next) => {
 });
 
 /**
+ * GET /api/carros/relatorio?data=&status=
+ */
+router.get('/relatorio', async (req, res, next) => {
+  try {
+    responder(res, await VehicleService.relatorio({
+      data: req.query.data || null,
+      status: req.query.status || null
+    }));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/aprovar   Body: { data, placa }
+ * QA aprova a placa depois da edicao externa.
+ */
+router.post('/aprovar', express.json(), async (req, res, next) => {
+  try {
+    responder(res, await VehicleService.aprovarPlaca(req.body?.data, req.body?.placa));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/reabrir   Body: { data, placa }
+ */
+router.post('/reabrir', express.json(), async (req, res, next) => {
+  try {
+    responder(res, await VehicleService.reabrirPlaca(req.body?.data, req.body?.placa));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/entregar   Body: { data, placa }
+ */
+router.post('/entregar', express.json(), async (req, res, next) => {
+  try {
+    responder(res, await VehicleService.entregarPlaca(req.body?.data, req.body?.placa));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/carros/reordenar
  * Body: { data, placa, ordem: [nomes na ordem desejada] }
  */

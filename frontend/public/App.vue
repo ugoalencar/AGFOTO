@@ -1,37 +1,62 @@
 <template>
   <div class="app-shell">
-    <nav class="ag-rail" aria-label="Produtos">
+    <nav class="ag-rail" :aria-label="plataforma === 'carros' ? 'Carros' : 'Produtos'">
       <img src="/favicon.svg" alt="AG Foto" class="ag-rail-mark">
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'captura' }" @click="activePage = 'captura'">
-        <span>CAP</span>
-        <small>Captura</small>
-      </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="irPara('entregar')">
-        <span>ENT</span>
-        <small>Entregar</small>
-      </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="irPara('qa')">
-        <span>QA</span>
-        <small>QA</small>
-      </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'">
-        <span>REL</span>
-        <small>Relat.</small>
-      </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros' }" @click="activePage = 'carros'">
-        <span>CAR</span>
-        <small>Carros</small>
-      </button>
-      <div class="ag-rail-foot">Fase 1<br>Produtos</div>
+
+      <!-- Produtos e Carros sao plataformas separadas, cada uma com suas
+           secoes, rodando no mesmo servidor. -->
+      <template v-if="plataforma === 'produtos'">
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'captura' }" @click="activePage = 'captura'">
+          <span>CAP</span>
+          <small>Captura</small>
+        </button>
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="irPara('entregar')">
+          <span>ENT</span>
+          <small>Entregar</small>
+        </button>
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="irPara('qa')">
+          <span>QA</span>
+          <small>QA</small>
+        </button>
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'">
+          <span>REL</span>
+          <small>Relat.</small>
+        </button>
+      </template>
+
+      <template v-else>
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros' }" @click="irParaCarros('carros')">
+          <span>IMP</span>
+          <small>Importar</small>
+        </button>
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros-qa' }" @click="irParaCarros('carros-qa')">
+          <span>QA</span>
+          <small>QA</small>
+        </button>
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros-entrega' }" @click="irParaCarros('carros-entrega')">
+          <span>ENT</span>
+          <small>Entrega</small>
+        </button>
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros-relatorios' }" @click="irParaCarros('carros-relatorios')">
+          <span>REL</span>
+          <small>Relat.</small>
+        </button>
+      </template>
+
+      <div class="ag-rail-foot">{{ plataforma === 'carros' ? 'Carros' : 'Fase 1' }}<br>{{ plataforma === 'carros' ? 'ADSET' : 'Produtos' }}</div>
     </nav>
 
     <div class="ag-main">
       <header class="ag-topbar">
         <div class="ag-wordmark"><b>AG</b> Foto</div>
-        <div class="ag-chip">Produtos</div>
+        <div class="ag-plataformas">
+          <button :class="{ ativa: plataforma === 'produtos' }" @click="trocarPlataforma('produtos')">Produtos</button>
+          <button :class="{ ativa: plataforma === 'carros' }" @click="trocarPlataforma('carros')">Carros</button>
+        </div>
         <div class="ag-context">
-          <span v-if="selectedLote" class="ag-chip">{{ rotuloLote(selectedLote) }}</span>
-          <span class="ag-chip">Entrega local/mock</span>
+          <span v-if="plataforma === 'produtos' && selectedLote" class="ag-chip">{{ rotuloLote(selectedLote) }}</span>
+          <span v-if="plataforma === 'carros' && carrosData" class="ag-chip">{{ carrosData }}</span>
+          <span class="ag-chip">{{ plataforma === 'carros' ? 'ADSET mock' : 'Entrega local/mock' }}</span>
         </div>
       </header>
 
@@ -593,55 +618,11 @@
             Nenhuma placa neste dia. Aponte a pasta das fotos e carregue.
           </div>
 
-          <div v-else-if="!placaAtual" class="grid-empty">
-            Escolha uma placa na lista ao lado para ordenar as fotos.
+          <div v-else class="grid-empty">
+            {{ carrosPlacas.length }} placa(s) gravadas. Va para QA quando as fotos
+            voltarem da edicao.
           </div>
 
-          <!-- Palco de QA: uma placa por vez, fotos grandes e em ordem. -->
-          <div v-else class="palco-carro">
-            <div class="palco-cabecalho">
-              <span class="placa-nome">{{ placaAtual.placa }}</span>
-              <span class="placa-contagem">{{ placaAtual.total }} foto(s)</span>
-              <button class="ag-btn placa-acao" @click="onRenomearPlaca(placaAtual.placa)">
-                Corrigir placa
-              </button>
-            </div>
-
-            <div v-if="placaAtual.total === 0" class="grid-empty">
-              Placa vazia. Arraste fotos de outra placa para ca.
-            </div>
-
-            <div v-else class="palco-fotos">
-              <div v-for="(foto, i) in placaAtual.fotos" :key="foto.name"
-                   class="palco-foto"
-                   :class="{ 'alvo-foto': carrosFotoAlvo === foto.name, capa: i === 0 }"
-                   draggable="true"
-                   @dragstart="onArrastarFoto(placaAtual.placa, foto.name)"
-                   @dragover.prevent.stop="carrosFotoAlvo = foto.name"
-                   @dragleave="carrosFotoAlvo = ''"
-                   @drop.prevent.stop="onSoltarNaFoto(placaAtual.placa, i)">
-                <div class="palco-foto-topo">
-                  <span class="palco-pos">{{ i + 1 }}</span>
-                  <span v-if="i === 0" class="palco-capa">capa</span>
-                  <button class="btn-deletar" @click.stop="onExcluirFotoCarro(placaAtual.placa, foto.name)"
-                          title="Excluir">&times;</button>
-                </div>
-
-                <img :src="foto.url" :alt="foto.name"
-                     @click="openModal({ name: foto.name, url: foto.url }, 'carros')">
-
-                <!-- Setas alem do arrastar: para acertar uma posicao especifica
-                     o clique erra menos que o arrasto. -->
-                <div class="palco-foto-acoes">
-                  <button class="ag-btn" :disabled="i === 0"
-                          @click.stop="onMoverPosicao(i, i - 1)" title="Mover para tras">&lsaquo;</button>
-                  <span class="palco-foto-nome">{{ foto.name }}</span>
-                  <button class="ag-btn" :disabled="i === placaAtual.fotos.length - 1"
-                          @click.stop="onMoverPosicao(i, i + 1)" title="Mover para frente">&rsaquo;</button>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </section>
     </main>
@@ -722,6 +703,193 @@
       </div>
     </main>
 
+    <!-- ============ CARROS: QA depois da edicao externa ============ -->
+    <main v-if="activePage === 'carros-qa'" class="ag-view two-column-view">
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Placas do dia</h2></header>
+        <div class="ag-card-body">
+          <label class="ag-label">Dia</label>
+          <input class="ag-field" v-model="carrosData" type="text" placeholder="DD-MM-AAAA"
+                 @change="onCarregarDia">
+
+          <ul class="placa-lista" style="margin-top:12px" v-if="carrosPlacas.length > 0">
+            <li v-for="placa in carrosPlacas" :key="placa.placa"
+                :class="{ ativa: carrosPlacaSelecionada === placa.placa, alvo: carrosPlacaAlvo === placa.placa }"
+                @click="carrosPlacaSelecionada = placa.placa"
+                @dragover.prevent="carrosPlacaAlvo = placa.placa"
+                @dragleave="carrosPlacaAlvo = ''"
+                @drop.prevent="onSoltarNaPlaca(placa.placa)">
+              <span class="placa-lista-nome">{{ placa.placa }}</span>
+              <span class="badge-status" :class="placa.status">{{ rotuloStatusCarro(placa.status) }}</span>
+              <span class="placa-lista-total">{{ placa.total }}</span>
+            </li>
+          </ul>
+          <div v-else class="grid-empty">Nenhuma placa neste dia.</div>
+
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line);color:var(--ag-muted);font-size:12px">
+            <p style="margin:0 0 6px">As fotos sao editadas num programa de fora e
+            voltam para esta pasta.</p>
+            <p style="margin:0">Confira a ordem, marque a capa e aprove para liberar a entrega.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="ag-card">
+        <header class="ag-card-header">
+          <h2 class="ag-card-title">{{ placaAtual ? placaAtual.placa : 'QA dos carros' }}</h2>
+          <span v-if="placaAtual" style="margin-left:auto;color:var(--ag-muted);font-size:12px">
+            {{ placaAtual.total }} foto(s)
+          </span>
+        </header>
+
+        <div class="ag-card-body">
+          <div v-if="!placaAtual" class="grid-empty">Escolha uma placa para revisar.</div>
+
+          <div v-else-if="placaAtual.total === 0" class="grid-empty">
+            Placa vazia. Arraste fotos de outra placa para ca.
+          </div>
+
+          <div v-else class="palco-fotos">
+            <div v-for="(foto, i) in placaAtual.fotos" :key="foto.name"
+                 class="palco-foto"
+                 :class="{ 'alvo-foto': carrosFotoAlvo === foto.name, capa: i === 0 }"
+                 draggable="true"
+                 @dragstart="onArrastarFoto(placaAtual.placa, foto.name)"
+                 @dragover.prevent.stop="carrosFotoAlvo = foto.name"
+                 @dragleave="carrosFotoAlvo = ''"
+                 @drop.prevent.stop="onSoltarNaFoto(placaAtual.placa, i)">
+              <div class="palco-foto-topo">
+                <span class="palco-pos">{{ i + 1 }}</span>
+                <span v-if="i === 0" class="palco-capa">capa</span>
+                <button class="btn-deletar" @click.stop="onExcluirFotoCarro(placaAtual.placa, foto.name)"
+                        title="Excluir">&times;</button>
+              </div>
+              <img :src="foto.url" :alt="foto.name"
+                   @click="openModal({ name: foto.name, url: foto.url }, 'carros')">
+              <div class="palco-foto-acoes">
+                <button class="ag-btn" :disabled="i === 0"
+                        @click.stop="onMoverPosicao(i, i - 1)" title="Mover para tras">&lsaquo;</button>
+                <span class="palco-foto-nome">{{ foto.name }}</span>
+                <button class="ag-btn" :disabled="i === placaAtual.fotos.length - 1"
+                        @click.stop="onMoverPosicao(i, i + 1)" title="Mover para frente">&rsaquo;</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="placaAtual" class="qa-rodape">
+          <button class="ag-btn is-ok" @click="onAprovarPlaca"
+                  :disabled="placaAtual.total === 0 || placaAtual.status === 'entregue' || carrosEmCurso">
+            Aprovar para entrega
+          </button>
+          <button class="ag-btn is-warning" @click="onReabrirPlaca"
+                  :disabled="placaAtual.status === 'organizado' || carrosEmCurso">
+            Reabrir
+          </button>
+          <button class="ag-btn placa-acao" @click="onRenomearPlaca(placaAtual.placa)">Corrigir placa</button>
+          <span style="color:var(--ag-muted);font-size:12px">
+            Situacao: {{ rotuloStatusCarro(placaAtual.status) }}
+          </span>
+        </div>
+      </section>
+    </main>
+
+    <!-- ============ CARROS: entrega ao ADSET ============ -->
+    <main v-if="activePage === 'carros-entrega'" class="ag-view two-column-view">
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Dia</h2></header>
+        <div class="ag-card-body">
+          <label class="ag-label">Dia</label>
+          <input class="ag-field" v-model="carrosData" type="text" placeholder="DD-MM-AAAA"
+                 @change="onCarregarDia">
+          <div class="entrega-alerta" style="margin-top:14px">
+            O envio ao ADSET esta em modo mock: monta e confere a entrega, mas nao
+            manda para fora. Falta endpoint e credencial do ADSET.
+          </div>
+        </div>
+      </section>
+
+      <section class="ag-card">
+        <header class="ag-card-header">
+          <h2 class="ag-card-title">Prontas para entrega</h2>
+          <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">
+            {{ carrosProntas.length }} de {{ carrosPlacas.length }} placa(s)
+          </span>
+        </header>
+        <div class="ag-card-body">
+          <div v-if="carrosProntas.length === 0" class="grid-empty">
+            Nenhuma placa aprovada neste dia. Aprove no QA primeiro.
+          </div>
+          <div v-else class="ag-table-wrap">
+            <table class="ag-table">
+              <thead><tr><th>Placa</th><th>Fotos</th><th>Aprovada em</th><th>Acao</th></tr></thead>
+              <tbody>
+                <tr v-for="placa in carrosProntas" :key="placa.placa">
+                  <td style="font-family:var(--ag-mono)">{{ placa.placa }}</td>
+                  <td>{{ placa.total }}</td>
+                  <td>{{ formatarData(placa.aprovadoEm) }}</td>
+                  <td>
+                    <button class="ag-btn is-ok" @click="onEntregarPlaca(placa.placa)"
+                            :disabled="carrosEmCurso">Entregar</button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- ============ CARROS: relatorios ============ -->
+    <main v-if="activePage === 'carros-relatorios'" class="ag-view report-view">
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Filtros</h2></header>
+        <div class="ag-card-body">
+          <label class="ag-label">Dia</label>
+          <input class="ag-field" v-model="carrosRelData" type="text" placeholder="todos">
+
+          <label class="ag-label" style="margin-top:12px">Situacao</label>
+          <select class="ag-field" v-model="carrosRelStatus">
+            <option value="">Todas</option>
+            <option value="organizado">Organizado</option>
+            <option value="pronto_para_entrega">Pronto para entrega</option>
+            <option value="entregue">Entregue</option>
+          </select>
+
+          <button class="ag-btn is-primary" style="width:100%;margin-top:12px"
+                  @click="onCarregarRelatorioCarros">Gerar relatorio</button>
+
+          <div v-if="carrosResumo" class="kpi-grid" style="margin-top:14px">
+            <div class="kpi-card"><strong>{{ carrosResumo.dias }}</strong><span>Dias</span></div>
+            <div class="kpi-card"><strong>{{ carrosResumo.placas }}</strong><span>Placas</span></div>
+            <div class="kpi-card"><strong>{{ carrosResumo.fotos }}</strong><span>Fotos</span></div>
+            <div class="kpi-card"><strong>{{ carrosResumo.entregues }}</strong><span>Entregues</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="ag-card">
+        <header class="ag-card-header">
+          <h2 class="ag-card-title">Detalhamento</h2>
+          <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ carrosRelItens.length }} linhas</span>
+        </header>
+        <div class="ag-table-wrap">
+          <table class="ag-table">
+            <thead><tr><th>Dia</th><th>Placa</th><th>Fotos</th><th>Situacao</th><th>Entregue em</th></tr></thead>
+            <tbody>
+              <tr v-for="item in carrosRelItens" :key="`${item.data}:${item.placa}`">
+                <td>{{ item.data }}</td>
+                <td style="font-family:var(--ag-mono)">{{ item.placa }}</td>
+                <td>{{ item.fotos }}</td>
+                <td><span class="badge-status" :class="item.status">{{ rotuloStatusCarro(item.status) }}</span></td>
+                <td>{{ item.entregueEm ? formatarData(item.entregueEm) : '-' }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
     <!-- Preview em tela cheia (mesmo comportamento do sphoto) -->
     <div v-if="modalImage" class="preview-overlay" @click="closeModal">
       <div class="preview-topo" @click.stop>
@@ -770,7 +938,9 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 export default {
   name: 'App',
   setup() {
-    const activePage = ref('captura'); // 'captura', 'entregar', 'qa', 'relatorios'
+    const activePage = ref('captura');
+    // Duas plataformas no mesmo servidor: cada uma com suas proprias secoes.
+    const plataforma = ref('produtos'); // 'captura', 'entregar', 'qa', 'relatorios'
     const selectedLote = ref('');
     const selectedGtin = ref('');
     const inputGtin = ref('');
@@ -823,6 +993,11 @@ export default {
     const explorerErro = ref('');
     const carrosPastaDestino = ref('');
     const carrosPlacaSelecionada = ref('');
+    const carrosEmCurso = ref(false);
+    const carrosRelData = ref('');
+    const carrosRelStatus = ref('');
+    const carrosRelItens = ref([]);
+    const carrosResumo = ref(null);
     const carrosArrastando = ref(null);
     const carrosPasta = ref('');
     const carrosFotos = ref([]);
@@ -874,6 +1049,11 @@ export default {
     // Placa aberta no palco. Sem ela o palco fica vazio pedindo escolha.
     const placaAtual = computed(() => (
       carrosPlacas.value.find(p => p.placa === carrosPlacaSelecionada.value) || null
+    ));
+
+    // Entrega so lista o que o QA aprovou.
+    const carrosProntas = computed(() => (
+      carrosPlacas.value.filter(p => p.status === 'pronto_para_entrega')
     ));
 
     const carrosTotalFotos = computed(() => carrosPlacas.value.reduce((s, p) => s + p.total, 0));
@@ -1263,6 +1443,22 @@ export default {
       }
     };
 
+    const trocarPlataforma = async destino => {
+      plataforma.value = destino;
+      if (destino === 'carros') {
+        activePage.value = 'carros';
+        await onCarregarDia();
+      } else {
+        activePage.value = 'captura';
+      }
+    };
+
+    const irParaCarros = async pagina => {
+      activePage.value = pagina;
+      await onCarregarDia();
+      if (pagina === 'carros-relatorios') await onCarregarRelatorioCarros();
+    };
+
     const irPara = async pagina => {
       activePage.value = pagina;
       if (pagina === 'qa' || pagina === 'entregar') {
@@ -1324,6 +1520,74 @@ export default {
         showStatus(`✗ ${err.message}`, 'error');
       } finally {
         carrosLendo.value = false;
+      }
+    };
+
+    const rotuloStatusCarro = status => ({
+      organizado: 'Organizado',
+      pronto_para_entrega: 'Pronto',
+      entregue: 'Entregue',
+      erro_entrega: 'Erro'
+    }[status] || status || 'Organizado');
+
+    const acaoCarro = async (rota, dados, sucesso) => {
+      if (carrosEmCurso.value) return;
+      carrosEmCurso.value = true;
+      try {
+        const response = await this.$api.request(rota, {
+          method: 'POST',
+          data: { ...dados, operationId: makeOperationId('carros') }
+        });
+        if (!response.ok) {
+          showStatus(`\u2717 ${response.error}`, 'error');
+          return null;
+        }
+        showStatus(sucesso(response.data), 'success');
+        await onCarregarDia();
+        return response.data;
+      } catch (err) {
+        showStatus(`\u2717 ${err.message}`, 'error');
+        return null;
+      } finally {
+        carrosEmCurso.value = false;
+      }
+    };
+
+    const onAprovarPlaca = async () => {
+      if (!placaAtual.value) return;
+      await acaoCarro('/api/carros/aprovar',
+        { data: carrosData.value, placa: placaAtual.value.placa },
+        d => `\u2713 ${d.placa} aprovada (${d.fotos} fotos)`);
+    };
+
+    const onReabrirPlaca = async () => {
+      if (!placaAtual.value) return;
+      await acaoCarro('/api/carros/reabrir',
+        { data: carrosData.value, placa: placaAtual.value.placa },
+        d => `\u2713 ${d.placa} reaberta`);
+    };
+
+    const onEntregarPlaca = async placa => {
+      await acaoCarro('/api/carros/entregar',
+        { data: carrosData.value, placa },
+        d => `\u2713 ${d.placa} entregue (${d.fotos} fotos)`);
+    };
+
+    const onCarregarRelatorioCarros = async () => {
+      try {
+        const query = {};
+        if (carrosRelData.value) query.data = carrosRelData.value;
+        if (carrosRelStatus.value) query.status = carrosRelStatus.value;
+
+        const response = await this.$api.request('/api/carros/relatorio', { query });
+        if (!response.ok) {
+          showStatus(`\u2717 ${response.error}`, 'error');
+          return;
+        }
+        carrosRelItens.value = response.data.itens || [];
+        carrosResumo.value = response.data.resumo || null;
+      } catch (err) {
+        showStatus(`\u2717 ${err.message}`, 'error');
       }
     };
 
@@ -2127,6 +2391,9 @@ export default {
 
     return {
       activePage,
+      plataforma,
+      trocarPlataforma,
+      irParaCarros,
       selectedLote,
       selectedGtin,
       inputGtin,
@@ -2187,6 +2454,17 @@ export default {
       explorerErro,
       carrosPastaDestino,
       carrosPlacaSelecionada,
+      carrosEmCurso,
+      carrosProntas,
+      carrosRelData,
+      carrosRelStatus,
+      carrosRelItens,
+      carrosResumo,
+      rotuloStatusCarro,
+      onAprovarPlaca,
+      onReabrirPlaca,
+      onEntregarPlaca,
+      onCarregarRelatorioCarros,
       placaAtual,
       onMoverPosicao,
       onAbrirExplorador,

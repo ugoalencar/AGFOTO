@@ -1998,3 +1998,32 @@ select {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Alternador de plataforma: Produtos e Carros no mesmo servidor */
+.ag-plataformas {
+  display: flex;
+  gap: 2px;
+  border: 1px solid var(--ag-line);
+  border-radius: var(--ag-radius);
+  overflow: hidden;
+}
+
+.ag-plataformas button {
+  padding: 5px 14px;
+  border: 0;
+  background: var(--ag-panel-2);
+  color: var(--ag-muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.ag-plataformas button:hover { color: var(--ag-text); }
+
+.ag-plataformas button.ativa {
+  background: var(--ag-orange);
+  color: #000;
+}
+
+.badge-status.organizado { background: var(--ag-panel-3); color: var(--ag-text); }
+.badge-status.pronto_para_entrega { background: var(--ag-ok); color: #fff; }
