@@ -120,8 +120,12 @@ export class Vehicle {
    * Define OCR de placa
    */
   setPlateOcr(ocrResult) {
-    this.plateOcr = ocrResult;
-    this.manifest.ocrData = ocrResult.toJSON();
+    // Aceita tanto a instancia de PlateOcrResult quanto o objeto ja serializado:
+    // o servico de OCR entrega o resultado do grupo ja em JSON, e chamar
+    // toJSON() nele quebrava a importacao inteira.
+    const data = typeof ocrResult?.toJSON === 'function' ? ocrResult.toJSON() : ocrResult;
+    this.plateOcr = data;
+    this.manifest.ocrData = data;
   }
 
   /**
@@ -181,7 +185,8 @@ export class Vehicle {
       lote: this.lote,
       placa: this.placa,
       photos: this.photos.map(p => p.toJSON()),
-      plateOcr: this.plateOcr?.toJSON(),
+      // plateOcr ja e guardado em forma serializada por setPlateOcr.
+      plateOcr: typeof this.plateOcr?.toJSON === 'function' ? this.plateOcr.toJSON() : this.plateOcr,
       status: this.status,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,

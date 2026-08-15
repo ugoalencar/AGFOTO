@@ -4,7 +4,10 @@ import jsonPersistence from '../server/json-persistence.js';
 import { createSecureDirectory } from '../server/secure-filesystem.js';
 import { config } from '../server/config.js';
 
-const getVehiclesDir = () => path.join(config.dataPath, 'jsons');
+// config.dataPath nunca existiu: o caminho certo e config.paths.jsons. Como as
+// rotas de carros nunca foram montadas, esse path.join(undefined, ...) nunca
+// chegou a ser executado e o erro passou despercebido.
+const getVehiclesDir = () => config.paths.jsons;
 
 /**
  * Repositório de Veículos

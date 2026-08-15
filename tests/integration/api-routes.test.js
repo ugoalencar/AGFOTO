@@ -46,12 +46,12 @@ test('mutating routes reject missing operationId', async t => {
 test('phase 1 blocked mutating routes return 404 before operationId validation', async t => {
   const env = await createTestEnv(t);
   const app = createApp({ configOverrides: env.config });
+  // /api/carros e /api/adset sairam desta lista quando o modulo de veiculos
+  // comecou; ver o teste logo abaixo, que garante que eles respondem.
   const paths = [
     '/api/qa/executar',
     '/api/retrabalhos/executar',
-    '/api/relatorios/executar',
-    '/api/carros',
-    '/api/adset'
+    '/api/relatorios/executar'
   ];
 
   for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
@@ -67,6 +67,27 @@ test('phase 1 blocked mutating routes return 404 before operationId validation',
       }
     }
   }
+});
+
+test('rotas de carros e adset estao montadas e respondendo', async t => {
+  const env = await createTestEnv(t);
+  const app = createApp({ configOverrides: env.config });
+
+  // Lote inexistente devolve lista vazia, nao 404 de rota ausente.
+  const lista = await request(app, '/api/carros/LOTE-INEXISTENTE', { method: 'GET' });
+  assert.notEqual(lista.status, 404, 'GET /api/carros/:lote deveria estar montada');
+
+  const status = await request(app, '/api/adset/status', { method: 'GET' });
+  assert.equal(status.status, 200, 'GET /api/adset/status deveria responder');
+
+  // A importacao continua exigindo o envelope de operationId como as demais.
+  const semOperationId = await request(app, '/api/carros/importar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lote: '1', photos: [] })
+  });
+  assert.equal(semOperationId.status, 400);
+  assert.match(semOperationId.body.error, /operationId/i);
 });
 
 test('mutating routes require operationId before reporting malformed JSON', async t => {

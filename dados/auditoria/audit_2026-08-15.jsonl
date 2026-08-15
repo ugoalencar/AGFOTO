@@ -74,3 +74,4 @@
 {"id":"e0d08658-df12-44d7-8388-e297afdf8788","timestamp":"2026-08-15T17:00:27.751Z","requestId":null,"action":"SERVER_START","details":{"host":"127.0.0.1","port":3000},"hostname":"ugoalencar","userAgent":"system"}
 {"id":"27169bdf-e3ef-4f42-a161-4092ebc3f46a","timestamp":"2026-08-15T17:00:35.801Z","requestId":"ee46c573-805d-4416-b758-dab58b296912","action":"PLANILHAS_SINCRONIZADAS","details":{"planilhas":2,"aplicados":1,"conflitos":1},"hostname":"ugoalencar","userAgent":"system"}
 {"id":"41df7b37-63a5-48b8-bd3a-fe6978c8e069","timestamp":"2026-08-15T18:18:34.491Z","requestId":null,"action":"SERVER_START","details":{"host":"127.0.0.1","port":3000},"hostname":"ugoalencar","userAgent":"system"}
+{"id":"da4f6217-e968-4859-8d82-c68177ac22dc","timestamp":"2026-08-15T19:11:06.609Z","requestId":null,"action":"VEHICLE_IMPORT","details":{"lote":"CARROS-TESTE","vehiclesImported":2,"totalPhotos":5},"hostname":"ugoalencar","userAgent":"system"}

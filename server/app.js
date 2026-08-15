@@ -5,6 +5,8 @@ import { v4 as uuidv4 } from 'uuid';
 import capturaRoutes from '../routes/captura.js';
 import planilhasRoutes from '../routes/planilhas.js';
 import qaHubRoutes from '../routes/qa-hub.js';
+import vehicleRoutes from '../routes/vehicles.js';
+import adsetRoutes from '../routes/adset.js';
 import { auditLogger } from './audit-logger.js';
 import { applyConfigOverrides } from './config.js';
 import { createOperationStore } from './operation-store.js';
@@ -14,12 +16,12 @@ import { CameraService } from '../services/camera-service.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+// Carros e ADSET sairam desta lista ao comecar o modulo de veiculos; o que
+// sobra sao rotas que nunca existiram de verdade.
 const PHASE_ONE_BLOCKED_PATHS = new Set([
   '/api/qa/executar',
   '/api/retrabalhos/executar',
-  '/api/relatorios/executar',
-  '/api/carros',
-  '/api/adset'
+  '/api/relatorios/executar'
 ]);
 
 function blockPhaseOneRoutes(req, res, next) {
@@ -111,6 +113,8 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
   app.use('/api/entregas', qaHubRoutes);
   app.use('/api/retrabalhos', qaHubRoutes);
   app.use('/api/relatorios', qaHubRoutes);
+  app.use('/api/carros', vehicleRoutes);
+  app.use('/api/adset', adsetRoutes);
 
   app.use(express.static(path.join(rootDir, 'frontend', 'public')));
   app.use((req, res) => sendError(res, 404, `Not found: ${req.path}`));
