@@ -63,7 +63,7 @@
             <div v-for="img in tempImages" :key="img.name" class="miniatura" :class="classesMiniatura(img.name, 'temp')" @click="openModal(img, 'temp')">
               <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @error="onImageError">
               <button class="btn-deletar" @click.stop="onImageDelete(img)" title="Excluir">&times;</button>
-              <button class="btn-marcar" @click.stop="toggleMarcacao(img.name, 'temp')" title="Marcar">&check;</button>
+              <button class="btn-marcar" @click.stop="toggleMarcacao(img.name)" title="Marcar">&check;</button>
             </div>
           </div>
         </div>
@@ -74,31 +74,14 @@
           <h3 class="ag-card-title">Anterior</h3>
           <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
         </header>
+        <!-- Somente conferencia: os apontamentos das fotos ja salvas sao feitos no QA. -->
         <div class="ag-card-body">
-          <div class="legenda-cores">
-            <span class="legenda-cores-item"><span class="legenda-cores-cor coding"></span> _coding (pos-producao)</span>
-            <span class="legenda-cores-item"><span class="legenda-cores-cor rt"></span> RT - Rotulo</span>
-            <span class="legenda-cores-item"><span class="legenda-cores-cor is"></span> IS - Insumos</span>
-            <span class="legenda-cores-item"><span class="legenda-cores-cor ap"></span> AP - Apoio</span>
-          </div>
           <div v-if="!selectedGtin" class="grid-empty">Selecione um GTIN</div>
           <div v-else-if="previousImages.length === 0" class="grid-empty">Nenhuma imagem anterior</div>
           <div v-else class="grid-miniaturas">
             <div v-for="img in previousImages" :key="img.name" class="miniatura" :class="classesMiniatura(img.name, 'anterior')" @click="openModal(img, 'anterior')">
               <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @error="onImageError">
               <button class="btn-deletar" @click.stop="onDeletePrevious(img)" title="Excluir">&times;</button>
-              <button class="btn-marcar" @click.stop="toggleMarcacao(img.name, 'anterior')" title="Marcar">&check;</button>
-            </div>
-          </div>
-
-          <!-- Subpastas RT/IS/AP ja movidas -->
-          <div v-for="tag in ['RT','IS','AP']" :key="tag" v-show="subpastasAnterior[tag] && subpastasAnterior[tag].length">
-            <div class="subpasta-preview-titulo">{{ tag }} ({{ (subpastasAnterior[tag] || []).length }})</div>
-            <div class="subpasta-preview-grid">
-              <div v-for="img in (subpastasAnterior[tag] || [])" :key="img.name" class="subpasta-preview-item" :class="tag.toLowerCase()">
-                <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${tag}/${img.name}`" :title="img.name" @error="onImageError">
-                <button class="btn-voltar" @click="onVoltarDeSubpasta(img.name, tag)">Voltar</button>
-              </div>
             </div>
           </div>
         </div>
@@ -285,37 +268,65 @@
             <option v-for="lote in qaAvailableLotes" :key="lote" :value="lote">{{ lote }}</option>
           </select>
 
-          <label class="ag-label" style="margin-top:12px">GTIN</label>
+          <label class="ag-label" style="margin-top:12px">GTIN ({{ qaAvailableGtins.length }})</label>
           <ul class="clinerules" v-if="qaAvailableGtins.length > 0">
             <li v-for="gtin in qaAvailableGtins" :key="gtin"
                 class="clinerule" :class="{ active: qaPhotoGtin === gtin }"
-                @click="() => { qaPhotoGtin = gtin; onLoadQaPhotos(); }">
+                @click="onSelectQaGtin(gtin)">
               {{ gtin }}
             </li>
           </ul>
           <div v-else style="padding:0.75rem;color:var(--ag-muted);font-size:0.875rem">
-            Sem GTINs pendentes de QA
+            {{ qaPhotoLote ? 'Sem GTINs pendentes de QA' : 'Selecione um lote' }}
+          </div>
+
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line);color:var(--ag-muted);font-size:12px">
+            <p style="margin:0 0 6px"><b class="qa-tag-ap">AP</b> fica fora da entrega normal.</p>
+            <p style="margin:0 0 6px"><b class="qa-tag-at">AT</b> entra na entrega de atualizacao.</p>
+            <p style="margin:0">Clicar na marcacao ja aplicada desfaz. Tudo fica na auditoria.</p>
           </div>
         </div>
       </section>
+
       <section class="ag-card">
-        <header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header>
-        <div class="stage-grid">
-          <div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card" :class="{ 'photo-ap': photo.classification === 'AP', 'photo-at': photo.classification === 'AT' }">
-            <div style="height:120px;background:var(--ag-panel);margin-bottom:8px;border:2px solid var(--ag-line);position:relative;cursor:pointer;overflow:hidden" @click="openModal(photo)">
-              <img :src="photo.url || getImageUrl(photo)" style="width:100%;height:100%;object-fit:cover" @error="onImageError">
-              <div v-if="photo.classification" style="position:absolute;top:4px;right:4px;background:var(--ag-red);color:#fff;padding:2px 6px;font-size:11px;font-weight:bold;border-radius:3px">{{ photo.classification }}</div>
-            </div>
-            <div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div>
-            <div style="display:flex;gap:4px;margin-top:8px">
-              <button class="ag-btn" :class="{ 'is-primary': photo.classification === 'AP' }" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button>
-              <button class="ag-btn is-warning" :class="{ 'is-primary': photo.classification === 'AT' }" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button>
+        <header class="ag-card-header">
+          <h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2>
+          <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">
+            {{ qaPhotos.length }} imagens · {{ qaClassificadas }} marcadas
+          </span>
+        </header>
+
+        <div class="ag-card-body">
+          <div v-if="!qaPhotoGtin" class="grid-empty">Selecione um GTIN para revisar</div>
+          <div v-else-if="qaPhotos.length === 0" class="grid-empty">Nenhuma foto salva para este GTIN</div>
+          <div v-else class="grid-miniaturas">
+            <div v-for="photo in qaPhotos" :key="photo.filename"
+                 class="miniatura"
+                 :class="{ 'qa-ap': photo.classification === 'AP', 'qa-at': photo.classification === 'AT' }">
+              <img :src="photo.url" :alt="photo.filename" @click="openModal(photo, 'qa')" @error="onImageError">
+              <span v-if="photo.classification" class="qa-selo" :class="photo.classification.toLowerCase()">
+                {{ photo.classification }}
+              </span>
+              <button class="btn-deletar" @click.stop="onQaDeletePhoto(photo)" title="Excluir">&times;</button>
+              <div class="qa-acoes">
+                <button class="qa-botao ap" :class="{ ativo: photo.classification === 'AP' }"
+                        :disabled="qaEmCurso" @click.stop="onClassifyPhoto(photo, 'AP')">AP</button>
+                <button class="qa-botao at" :class="{ ativo: photo.classification === 'AT' }"
+                        :disabled="qaEmCurso" @click.stop="onClassifyPhoto(photo, 'AT')">AT</button>
+              </div>
             </div>
           </div>
         </div>
-        <div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div>
+
+        <div style="padding:10px 14px;border-top:1px solid var(--ag-line);display:flex;gap:8px">
+          <button class="ag-btn is-ok" @click="onCompleteQa" :disabled="!qaPhotoGtin || qaPhotos.length === 0 || qaEmCurso">
+            Concluir QA
+          </button>
+          <button class="ag-btn is-warning" @click="onSendToRework" :disabled="!qaPhotoGtin || qaEmCurso">
+            Mandar para retrabalho
+          </button>
+        </div>
       </section>
-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Marcacoes</h2></header><div class="ag-card-body" style="color:var(--ag-muted);font-size:13px"><p><b style="color:var(--ag-yellow)">AP</b> fica fora da entrega normal.</p><p><b style="color:var(--ag-orange)">AT</b> entra na entrega de atualizacao.</p><p>Desfazer e exclusao continuam registrados por auditoria.</p></div></section>
     </main>
     <main v-if="activePage === 'relatorios'" class="ag-view report-view">
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Filtros e totais</h2></header><div class="ag-card-body"><label class="ag-label">Status</label><select class="ag-field" v-model="reportStatus"><option value="">Todos</option><option value="pendente_qa">Pendente QA</option><option value="pronto_para_entrega">Pronto para Entrega</option><option value="entregue">Entregue</option><option value="erro_entrega">Erro na Entrega</option><option value="retrabalho">Retrabalho</option></select><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadReport">Gerar relatorio</button><div v-if="reportStats" class="kpi-grid" style="margin-top:14px"><div class="kpi-card"><strong>{{ reportStats.totalItens ?? reportStats.totalItems ?? 0 }}</strong><span>Itens</span></div><div class="kpi-card"><strong>{{ reportStats.entregues ?? reportStats.entregue ?? 0 }}</strong><span>Entregues</span></div><div class="kpi-card"><strong>{{ reportStats.prontos ?? reportStats.pronto_para_entrega ?? 0 }}</strong><span>Prontos</span></div><div class="kpi-card"><strong>{{ reportStats.retrabalho ?? 0 }}</strong><span>Retrabalho</span></div></div></div></section>
@@ -393,18 +404,35 @@
       </div>
     </main>
 
-    <!-- Modal de Imagem -->
-    <div v-if="modalImage" class="modal-overlay" @click="closeModal">
-      <div class="modal-content" @click.stop>
-        <div class="modal-header">
-          {{ modalImage.name }}
-          <button @click="closeModal" style="background: none; border: none; color: #fff; cursor: pointer; font-size: 1.5rem;">×</button>
+    <!-- Preview em tela cheia (mesmo comportamento do sphoto) -->
+    <div v-if="modalImage" class="preview-overlay" @click="closeModal">
+      <div class="preview-topo" @click.stop>
+        <button class="preview-fechar" @click="closeModal" title="Fechar (Esc)">&times;</button>
+        <div class="preview-setas" v-if="modalTotal > 1">
+          <button class="preview-seta" @click="navegarPreview(-1)" title="Anterior (seta esquerda)">&lsaquo;</button>
+          <span class="preview-contador">{{ modalIndice + 1 }} / {{ modalTotal }}</span>
+          <button class="preview-seta" @click="navegarPreview(1)" title="Proxima (seta direita)">&rsaquo;</button>
         </div>
-        <div class="modal-body">
-          <img :src="getImageUrl(modalImage)" :alt="modalImage.name" class="modal-image">
+      </div>
+
+      <div class="preview-corpo" @click.stop>
+        <img :src="modalUrl" :alt="modalImage.name" @load="onPreviewLoad">
+      </div>
+
+      <div class="preview-rodape" @click.stop>
+        <div class="preview-info">
+          <span>{{ modalImage.name }}</span>
+          <span class="preview-sep">|</span>
+          <span>{{ modalResolucao }}</span>
+          <span class="preview-sep">|</span>
+          <span>{{ formatarTamanho(modalImage.size) }}</span>
+          <span class="preview-sep">|</span>
+          <span>{{ formatarData(modalImage.modified) }}</span>
         </div>
-        <div class="modal-footer">
-          <button class="btn-action secondary" @click="closeModal">Fechar</button>
+        <div class="preview-acoes">
+          <button class="ag-btn is-warning" @click="onPreviewDelete">Deletar</button>
+          <a class="ag-btn" :href="modalUrl" :download="modalImage.name">Baixar</a>
+          <button class="ag-btn" @click="copiarUrlPreview">URL</button>
         </div>
       </div>
     </div>
@@ -432,6 +460,8 @@ export default {
     const loteItems = ref([]);
     const availableLotes = ref([]);
     const modalImage = ref(null);
+    const modalOrigem = ref('temp'); // 'temp' | 'anterior' | 'qa'
+    const modalResolucao = ref('...');
     const status = ref('');
     const statusType = ref('');
     const currentStatus = ref('');
@@ -448,6 +478,7 @@ export default {
     const qaPhotos = ref([]);
     const qaAvailableLotes = ref([]);
     const qaAvailableGtins = ref([]);
+    const qaEmCurso = ref(false);
     const reportStatus = ref('');
     const reportItems = ref([]);
     const reportStats = ref(null);
@@ -458,10 +489,8 @@ export default {
 
     // Miniaturas e marcacao (mesma mecanica do sphoto)
     const imagensMarcadasTemp = ref([]);
-    const imagensMarcadasAnterior = ref([]);
     const observacoes = ref('');
     const descricaoProduto = ref('...');
-    const subpastasAnterior = ref({});
     const marcacaoEmCurso = ref(false);
     const checkCoding = ref(false);
     const checkRT = ref(false);
@@ -483,6 +512,8 @@ export default {
       };
       return labels[currentStatus.value] || currentStatus.value;
     });
+
+    const qaClassificadas = computed(() => qaPhotos.value.filter(photo => photo.classification).length);
 
     // Methods
     const showStatus = (message, type = 'success') => {
@@ -562,7 +593,6 @@ export default {
             descricaoProduto.value = item.descricao || item.gtin;
           }
         }
-        await loadSubpastas();
       } catch (err) {
         console.error('Error loading previous images:', err);
       }
@@ -662,17 +692,124 @@ export default {
       if (!img) return '';
       const isFromTemp = tempImages.value.some(t => t.name === img.name);
       if (isFromTemp) {
-        return `/api/captura/imagem/temp/${img.name}`;
+        return `/api/captura/imagem/temp/${encodeURIComponent(img.name)}`;
       }
-      return `/api/captura/imagem/finalizadas/${selectedLote.value}/${selectedGtin.value}/${img.name}`;
+      return `/api/captura/imagem/finalizadas/${encodeURIComponent(selectedLote.value)}/${encodeURIComponent(selectedGtin.value)}/${encodeURIComponent(img.name)}`;
     };
 
-    const openModal = (img) => {
-      modalImage.value = img;
+    // ---- Preview em tela cheia -------------------------------------------------
+    // Navega dentro do palco de onde a foto foi aberta, como no sphoto.
+    const previewLista = computed(() => {
+      if (modalOrigem.value === 'temp') {
+        return tempImages.value.map(img => ({
+          name: img.name,
+          url: `/api/captura/imagem/temp/${encodeURIComponent(img.name)}`,
+          size: img.size,
+          modified: img.modified
+        }));
+      }
+      if (modalOrigem.value === 'anterior') {
+        return previousImages.value.map(img => ({
+          name: img.name,
+          url: getImageUrl(img),
+          size: img.size,
+          modified: img.modified
+        }));
+      }
+      return qaPhotos.value.map(photo => ({
+        name: photo.filename,
+        url: photo.url,
+        size: photo.size,
+        modified: photo.modified
+      }));
+    });
+
+    const modalIndice = computed(() => (
+      modalImage.value
+        ? previewLista.value.findIndex(img => img.name === modalImage.value.name)
+        : -1
+    ));
+    const modalTotal = computed(() => previewLista.value.length);
+    const modalUrl = computed(() => modalImage.value?.url || '');
+
+    const formatarTamanho = bytes => {
+      if (!bytes) return 'N/D';
+      const unidades = ['B', 'KB', 'MB', 'GB'];
+      let valor = bytes;
+      let i = 0;
+      while (valor >= 1024 && i < unidades.length - 1) {
+        valor /= 1024;
+        i++;
+      }
+      return `${valor.toFixed(i === 0 ? 0 : 1)} ${unidades[i]}`;
+    };
+
+    const formatarData = iso => {
+      if (!iso) return 'N/D';
+      const data = new Date(iso);
+      return Number.isNaN(data.getTime()) ? 'N/D' : data.toLocaleString('pt-BR');
+    };
+
+    const openModal = (img, origem = 'temp') => {
+      modalOrigem.value = origem;
+      const nome = img.name || img.filename;
+      // Pega a entrada da lista pra ter os metadados mesmo quando o clique veio de
+      // um objeto parcial.
+      modalImage.value = previewLista.value.find(item => item.name === nome)
+        || { name: nome, url: img.url || getImageUrl({ name: nome }), size: img.size, modified: img.modified };
+      modalResolucao.value = '...';
     };
 
     const closeModal = () => {
       modalImage.value = null;
+      modalResolucao.value = '...';
+    };
+
+    const navegarPreview = direcao => {
+      const lista = previewLista.value;
+      if (lista.length === 0) return;
+      const atual = modalIndice.value;
+      // Circular, igual ao sphoto.
+      const proximo = (atual + direcao + lista.length) % lista.length;
+      modalImage.value = lista[proximo];
+      modalResolucao.value = '...';
+    };
+
+    // O sphoto mostra "N/A" aqui porque o servidor nao manda a resolucao; a imagem
+    // ja carregada sabe as dimensoes, entao da pra preencher de graca.
+    const onPreviewLoad = evento => {
+      const { naturalWidth, naturalHeight } = evento.target;
+      modalResolucao.value = naturalWidth ? `${naturalWidth} x ${naturalHeight}` : 'N/D';
+    };
+
+    const copiarUrlPreview = async () => {
+      if (!modalImage.value) return;
+      const url = `${window.location.origin}${modalImage.value.url}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        showStatus('✓ URL copiada', 'success');
+      } catch {
+        showStatus('✗ Nao foi possivel copiar a URL', 'error');
+      }
+    };
+
+    // Excluir de dentro do preview: cada palco tem o seu caminho de exclusao.
+    const onPreviewDelete = async () => {
+      if (!modalImage.value) return;
+      const alvo = { name: modalImage.value.name };
+      const origem = modalOrigem.value;
+      closeModal();
+
+      if (origem === 'temp') return onImageDelete(alvo);
+      if (origem === 'anterior') return onDeletePrevious(alvo);
+      return onQaDeletePhoto({ filename: alvo.name });
+    };
+
+    const onPreviewKeydown = evento => {
+      if (!modalImage.value) return;
+      if (evento.key === 'ArrowLeft') navegarPreview(-1);
+      else if (evento.key === 'ArrowRight') navegarPreview(1);
+      else if (evento.key === 'Escape') closeModal();
     };
 
     const onExcelFileSelected = async (e) => {
@@ -738,10 +875,12 @@ export default {
       }
     };
 
-    const onQaLoteChange = async () => {
+    const onQaLoteChange = async ({ manterSelecao = false } = {}) => {
       qaAvailableGtins.value = [];
-      qaPhotoGtin.value = '';
-      qaPhotos.value = [];
+      if (!manterSelecao) {
+        qaPhotoGtin.value = '';
+        qaPhotos.value = [];
+      }
 
       if (!qaPhotoLote.value) return;
 
@@ -762,16 +901,19 @@ export default {
       }
     };
 
-    const onLoadQaPhotos = async () => {
-      if (!qaPhotoLote.value || !qaPhotoGtin.value) return;
+    const onLoadQaPhotos = async ({ silencioso = false } = {}) => {
+      if (!qaPhotoLote.value || !qaPhotoGtin.value) {
+        qaPhotos.value = [];
+        return;
+      }
 
       try {
         const response = await this.$api.request(
-          `/api/qa/fotos/${qaPhotoLote.value}/${qaPhotoGtin.value}`
+          `/api/qa/fotos/${encodeURIComponent(qaPhotoLote.value)}/${encodeURIComponent(qaPhotoGtin.value)}`
         );
         if (response.ok) {
           qaPhotos.value = response.data.photos || [];
-          showStatus(`✓ ${qaPhotos.value.length} fotos carregadas`, 'success');
+          if (!silencioso) showStatus(`✓ ${qaPhotos.value.length} fotos carregadas`, 'success');
         } else {
           showStatus(`✗ ${response.error}`, 'error');
         }
@@ -780,55 +922,125 @@ export default {
       }
     };
 
+    const onSelectQaGtin = async gtin => {
+      qaPhotoGtin.value = gtin;
+      await onLoadQaPhotos();
+    };
+
+    // Classificar move o arquivo para a subpasta AP/AT (e desclassificar traz de
+    // volta). O nome pode mudar em colisao, entao sempre recarregamos a lista em vez
+    // de confiar no estado local.
     const onClassifyPhoto = async (photo, classification) => {
+      if (qaEmCurso.value) return;
+      qaEmCurso.value = true;
+
+      const desfazer = photo.classification === classification;
+      const rota = desfazer ? '/api/qa/desclassificar' : '/api/qa/classificar';
+      const data = {
+        lote: qaPhotoLote.value,
+        gtin: qaPhotoGtin.value,
+        filename: photo.filename,
+        operationId: makeOperationId(desfazer ? 'qa-desclassificar' : 'qa-classificar')
+      };
+      if (desfazer) data.fromClassification = photo.classification;
+      else data.classification = classification;
+
       try {
-        const response = await this.$api.request(
-          '/api/qa/classificar',
-          {
-            method: 'POST',
-            data: {
-              lote: qaPhotoLote.value,
-              gtin: qaPhotoGtin.value,
-              filename: photo.filename,
-              classification
-            }
-          }
-        );
+        const response = await this.$api.request(rota, { method: 'POST', data });
         if (response.ok) {
-          photo.classification = classification;
-          showStatus(`✓ Foto classificada como ${classification}`, 'success');
+          showStatus(desfazer ? `✓ Marcacao ${classification} desfeita` : `✓ Foto marcada como ${classification}`, 'success');
+          await onLoadQaPhotos({ silencioso: true });
         } else {
           showStatus(`✗ ${response.error}`, 'error');
         }
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        qaEmCurso.value = false;
+      }
+    };
+
+    const onQaDeletePhoto = async photo => {
+      if (!confirm(`Excluir ${photo.filename}?`)) return;
+      qaEmCurso.value = true;
+      try {
+        const response = await this.$api.request('/api/qa/excluir', {
+          method: 'POST',
+          data: {
+            lote: qaPhotoLote.value,
+            gtin: qaPhotoGtin.value,
+            filename: photo.filename,
+            location: photo.location || 'root',
+            operationId: makeOperationId('qa-excluir')
+          }
+        });
+        if (response.ok) {
+          showStatus('✓ Foto excluida', 'success');
+          await onLoadQaPhotos({ silencioso: true });
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        qaEmCurso.value = false;
       }
     };
 
     const onCompleteQa = async () => {
       if (!qaPhotoLote.value || !qaPhotoGtin.value) return;
+      qaEmCurso.value = true;
 
       try {
-        const response = await this.$api.request(
-          '/api/qa/concluir',
-          {
-            method: 'POST',
-            data: {
-              lote: qaPhotoLote.value,
-              gtin: qaPhotoGtin.value,
-              deliveryType: 'normal'
-            }
+        const response = await this.$api.request('/api/qa/concluir', {
+          method: 'POST',
+          data: {
+            lote: qaPhotoLote.value,
+            gtin: qaPhotoGtin.value,
+            deliveryType: 'normal',
+            operationId: makeOperationId('qa-concluir')
           }
-        );
+        });
         if (response.ok) {
-          showStatus(`✓ QA concluído - Pronto para entrega`, 'success');
+          showStatus('✓ QA concluido - pronto para entrega', 'success');
           qaPhotos.value = [];
           qaPhotoGtin.value = '';
+          // O GTIN sai da fila de pendentes, entao a lista precisa refletir isso.
+          await onQaLoteChange({ manterSelecao: false });
         } else {
           showStatus(`✗ ${response.error}`, 'error');
         }
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        qaEmCurso.value = false;
+      }
+    };
+
+    const onSendToRework = async () => {
+      if (!qaPhotoLote.value || !qaPhotoGtin.value) return;
+      if (!confirm(`Mandar ${qaPhotoGtin.value} para retrabalho?`)) return;
+      qaEmCurso.value = true;
+
+      try {
+        const response = await this.$api.request('/api/retrabalhos', {
+          method: 'POST',
+          data: {
+            lote: qaPhotoLote.value,
+            gtin: qaPhotoGtin.value,
+            operationId: makeOperationId('qa-retrabalho')
+          }
+        });
+        if (response.ok) {
+          showStatus('✓ GTIN devolvido para retrabalho', 'success');
+          await onLoadQaPhotos({ silencioso: true });
+        } else {
+          showStatus(`✗ ${response.error}`, 'error');
+        }
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        qaEmCurso.value = false;
       }
     };
 
@@ -954,10 +1166,13 @@ export default {
 
       // Refresh temp images every 2 seconds
       refreshInterval = setInterval(loadTempImages, 2000);
+
+      // Setas e Esc navegam o preview, como no sphoto.
+      document.addEventListener('keydown', onPreviewKeydown);
     });
 
-    const toggleMarcacao = (nome, tipo) => {
-      const lista = tipo === 'anterior' ? imagensMarcadasAnterior.value : imagensMarcadasTemp.value;
+    const toggleMarcacao = nome => {
+      const lista = imagensMarcadasTemp.value;
       const indice = lista.indexOf(nome);
       if (indice >= 0) {
         lista.splice(indice, 1);
@@ -973,151 +1188,55 @@ export default {
       return semExt.endsWith(sufixo);
     };
 
-    const classesMiniatura = (nome, tipo) => {
-      const marcadas = tipo === 'anterior' ? imagensMarcadasAnterior.value : imagensMarcadasTemp.value;
-      return {
-        marcada: marcadas.includes(nome),
-        'tem-coding': temSufixo(nome, '_coding'),
-        'tem-rt': temSufixo(nome, '_RT'),
-        'tem-is': temSufixo(nome, '_IS'),
-        'tem-ap': temSufixo(nome, '_AP')
-      };
-    };
+    // So o palco Atual e marcavel na captura; o Anterior aparece so para conferencia.
+    const classesMiniatura = (nome, tipo) => ({
+      marcada: tipo === 'temp' && imagensMarcadasTemp.value.includes(nome),
+      'tem-coding': temSufixo(nome, '_coding'),
+      'tem-rt': temSufixo(nome, '_RT'),
+      'tem-is': temSufixo(nome, '_IS'),
+      'tem-ap': temSufixo(nome, '_AP')
+    });
 
-    const loadSubpastas = async () => {
-      if (!selectedLote.value || !selectedGtin.value) {
-        subpastasAnterior.value = {};
-        return;
-      }
-      try {
-        const response = await this.$api.request('/api/captura/imagens/subpastas', {
-          query: { lote: selectedLote.value, gtin: selectedGtin.value }
-        });
-        subpastasAnterior.value = response.ok ? (response.data.subpastas || {}) : {};
-      } catch {
-        subpastasAnterior.value = {};
-      }
-    };
-
-    // _coding e marcacao de nome nos dois palcos: renomeia o arquivo onde ele esta.
-    const aplicarSufixo = async sufixo => {
-      if (imagensMarcadasTemp.value.length === 0 && imagensMarcadasAnterior.value.length === 0) {
-        checkCoding.value = false;
-        showStatus('Marque ao menos uma imagem antes', 'error');
+    // Marcacao na captura age so no palco Atual (TEMP): renomeia o arquivo, e o
+    // salvar depois le a tag. O que ja esta salvo e assunto do QA.
+    const marcarTemp = async (sufixo, rotulo) => {
+      if (imagensMarcadasTemp.value.length === 0) {
+        showStatus('Marque ao menos uma imagem do palco Atual', 'error');
         return;
       }
 
       marcacaoEmCurso.value = true;
       try {
-        if (imagensMarcadasTemp.value.length > 0) {
-          await this.$api.request('/api/captura/marcar', {
-            method: 'POST',
-            data: {
-              location: 'temp',
-              filenames: [...imagensMarcadasTemp.value],
-              suffix: sufixo,
-              operationId: makeOperationId('marcar-temp')
-            }
-          });
-        }
-        if (imagensMarcadasAnterior.value.length > 0) {
-          await this.$api.request('/api/captura/marcar', {
-            method: 'POST',
-            data: {
-              location: 'finalizadas',
-              lote: selectedLote.value,
-              gtin: selectedGtin.value,
-              filenames: [...imagensMarcadasAnterior.value],
-              suffix: sufixo,
-              operationId: makeOperationId('marcar-final')
-            }
-          });
-        }
-        imagensMarcadasTemp.value = [];
-        imagensMarcadasAnterior.value = [];
-        await loadTempImages();
-        await loadPreviousImages();
-        showStatus(`✓ Imagens atualizadas com ${sufixo}`, 'success');
-      } catch (err) {
-        showStatus(`✗ ${err.message}`, 'error');
-      } finally {
-        checkCoding.value = false;
-        marcacaoEmCurso.value = false;
-      }
-    };
-
-    // RT/IS/AP: no palco Atual vira sufixo no nome (salvar cria a subpasta depois);
-    // no palco Anterior move a foto de fato para a subpasta.
-    const aplicarSubpasta = async pasta => {
-      const resetCheck = () => {
-        if (pasta === 'RT') checkRT.value = false;
-        if (pasta === 'IS') checkIS.value = false;
-        if (pasta === 'AP') checkAP.value = false;
-      };
-
-      if (imagensMarcadasTemp.value.length === 0 && imagensMarcadasAnterior.value.length === 0) {
-        resetCheck();
-        showStatus('Marque ao menos uma imagem antes', 'error');
-        return;
-      }
-
-      marcacaoEmCurso.value = true;
-      try {
-        if (imagensMarcadasTemp.value.length > 0) {
-          await this.$api.request('/api/captura/marcar', {
-            method: 'POST',
-            data: {
-              location: 'temp',
-              filenames: [...imagensMarcadasTemp.value],
-              suffix: `_${pasta}`,
-              operationId: makeOperationId('subpasta-temp')
-            }
-          });
-        }
-        if (imagensMarcadasAnterior.value.length > 0) {
-          await this.$api.request('/api/captura/tag-subpasta', {
-            method: 'POST',
-            data: {
-              lote: selectedLote.value,
-              gtin: selectedGtin.value,
-              filenames: [...imagensMarcadasAnterior.value],
-              pasta,
-              operationId: makeOperationId('subpasta-final')
-            }
-          });
-        }
-        imagensMarcadasTemp.value = [];
-        imagensMarcadasAnterior.value = [];
-        await loadTempImages();
-        await loadPreviousImages();
-        await loadSubpastas();
-        showStatus(`✓ Imagens marcadas para ${pasta}`, 'success');
-      } catch (err) {
-        showStatus(`✗ ${err.message}`, 'error');
-      } finally {
-        resetCheck();
-        marcacaoEmCurso.value = false;
-      }
-    };
-
-    const onVoltarDeSubpasta = async (nome, tag) => {
-      try {
-        await this.$api.request('/api/captura/tag-subpasta', {
+        await this.$api.request('/api/captura/marcar', {
           method: 'POST',
           data: {
-            lote: selectedLote.value,
-            gtin: selectedGtin.value,
-            filenames: [nome],
-            pasta: tag,
-            operationId: makeOperationId('subpasta-voltar')
+            location: 'temp',
+            filenames: [...imagensMarcadasTemp.value],
+            suffix: sufixo,
+            operationId: makeOperationId('marcar-temp')
           }
         });
-        await loadPreviousImages();
-        await loadSubpastas();
-        showStatus('✓ Imagem devolvida para a raiz', 'success');
+        imagensMarcadasTemp.value = [];
+        await loadTempImages();
+        showStatus(`✓ Imagens marcadas com ${rotulo}`, 'success');
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        marcacaoEmCurso.value = false;
       }
+    };
+
+    const aplicarSufixo = async sufixo => {
+      await marcarTemp(sufixo, sufixo);
+      checkCoding.value = false;
+    };
+
+    // RT/IS/AP na captura viram sufixo no nome; salvar transforma em subpasta.
+    const aplicarSubpasta = async pasta => {
+      await marcarTemp(`_${pasta}`, pasta);
+      if (pasta === 'RT') checkRT.value = false;
+      if (pasta === 'IS') checkIS.value = false;
+      if (pasta === 'AP') checkAP.value = false;
     };
 
     const onDeletePrevious = async img => {
@@ -1160,9 +1279,7 @@ export default {
       inputGtin.value = '';
       descricaoProduto.value = '...';
       previousImages.value = [];
-      subpastasAnterior.value = {};
       observacoes.value = '';
-      imagensMarcadasAnterior.value = [];
       showStatus('✓ GTIN finalizado - pendente de QA', 'success');
     };
 
@@ -1170,6 +1287,7 @@ export default {
       if (refreshInterval) {
         clearInterval(refreshInterval);
       }
+      document.removeEventListener('keydown', onPreviewKeydown);
     });
 
     return {
@@ -1187,10 +1305,8 @@ export default {
       currentStatus,
       currentStatusLabel,
       imagensMarcadasTemp,
-      imagensMarcadasAnterior,
       observacoes,
       descricaoProduto,
-      subpastasAnterior,
       marcacaoEmCurso,
       checkCoding,
       checkRT,
@@ -1200,7 +1316,6 @@ export default {
       classesMiniatura,
       aplicarSufixo,
       aplicarSubpasta,
-      onVoltarDeSubpasta,
       onDeletePrevious,
       selecionarGtinDaLista,
       onFinalizar,
@@ -1215,6 +1330,22 @@ export default {
       qaPhotos,
       qaAvailableLotes,
       qaAvailableGtins,
+      qaEmCurso,
+      qaClassificadas,
+      onSelectQaGtin,
+      onQaDeletePhoto,
+      onSendToRework,
+      modalOrigem,
+      modalResolucao,
+      modalIndice,
+      modalTotal,
+      modalUrl,
+      navegarPreview,
+      onPreviewLoad,
+      onPreviewDelete,
+      copiarUrlPreview,
+      formatarTamanho,
+      formatarData,
       reportStatus,
       reportItems,
       reportStats,

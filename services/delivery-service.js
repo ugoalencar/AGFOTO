@@ -21,14 +21,41 @@ export class DeliveryService {
    */
   static async loadQaPhotos(lote, gtin) {
     try {
-      const images = await FileRepository.listFinalizadasImages(lote, gtin);
+      // A classificacao de uma foto e a pasta onde ela esta: raiz = sem marcacao,
+      // AP e AT sao as subpastas. Sem ler as tres o QA nao consegue mostrar o que
+      // ja foi marcado nem permitir desfazer.
+      const locais = [
+        { subfolder: null, classification: null },
+        { subfolder: 'AP', classification: 'AP' },
+        { subfolder: 'AT', classification: 'AT' }
+      ];
 
-      const photos = images.map(img => ({
-        filename: img.name,
-        path: img.path,
-        classification: null, // 'AP', 'AT', ou null
-        size: 0
-      }));
+      const photos = [];
+      for (const { subfolder, classification } of locais) {
+        const images = await FileRepository.listFinalizadasImages(lote, gtin, subfolder);
+        for (const img of images) {
+          let size = 0;
+          let modified = null;
+          try {
+            const stats = await fs.promises.stat(img.path);
+            size = stats.size;
+            modified = stats.mtime.toISOString();
+          } catch {
+            // arquivo sumiu entre listar e medir - segue sem os metadados
+          }
+
+          photos.push({
+            filename: img.name,
+            classification,
+            location: subfolder || 'root',
+            url: subfolder
+              ? `/api/captura/imagem/finalizadas/${encodeURIComponent(lote)}/${encodeURIComponent(gtin)}/${subfolder}/${encodeURIComponent(img.name)}`
+              : `/api/captura/imagem/finalizadas/${encodeURIComponent(lote)}/${encodeURIComponent(gtin)}/${encodeURIComponent(img.name)}`,
+            size,
+            modified
+          });
+        }
+      }
 
       return {
         ok: true,
@@ -36,7 +63,8 @@ export class DeliveryService {
           lote,
           gtin,
           photos,
-          count: photos.length
+          count: photos.length,
+          classificadas: photos.filter(p => p.classification).length
         }
       };
     } catch (err) {

@@ -1447,3 +1447,178 @@ select {
     grid-template-columns: 1fr;
   }
 }
+
+/* ============================================================
+   Preview em tela cheia (equivalente ao modal do sphoto)
+   ============================================================ */
+.preview-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0, 0, 0, 0.94);
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.preview-topo {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+}
+
+.preview-fechar {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 30px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 6px;
+}
+
+.preview-fechar:hover { color: var(--ag-orange); }
+
+.preview-setas {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.preview-seta {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #fff;
+  width: 38px;
+  height: 32px;
+  font-size: 22px;
+  line-height: 1;
+  border-radius: var(--ag-radius);
+  cursor: pointer;
+}
+
+.preview-seta:hover {
+  background: var(--ag-orange);
+  border-color: var(--ag-orange);
+  color: #000;
+}
+
+.preview-contador {
+  color: var(--ag-muted);
+  font-family: var(--ag-mono);
+  font-size: 12px;
+  min-width: 62px;
+  text-align: center;
+}
+
+.preview-corpo {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 0 16px;
+}
+
+.preview-corpo img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.preview-rodape {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.preview-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--ag-muted);
+  font-family: var(--ag-mono);
+  font-size: 12px;
+}
+
+.preview-sep { opacity: 0.4; }
+
+.preview-acoes {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+/* O "Baixar" e um <a>, entao precisa parecer botao. */
+.preview-acoes a.ag-btn {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+/* ============================================================
+   QA - marcacoes AP/AT sobre a mesma miniatura da captura
+   ============================================================ */
+.qa-tag-ap { color: var(--ag-yellow); }
+.qa-tag-at { color: var(--ag-orange); }
+
+.miniatura.qa-ap {
+  border-color: var(--ag-yellow);
+  box-shadow: 0 0 0 2px var(--ag-yellow);
+}
+
+.miniatura.qa-at {
+  border-color: var(--ag-orange);
+  box-shadow: 0 0 0 2px var(--ag-orange);
+}
+
+.qa-selo {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #000;
+  z-index: 10;
+}
+
+.qa-selo.ap { background: var(--ag-yellow); }
+.qa-selo.at { background: var(--ag-orange); }
+
+/* Barra de acoes fixa no rodape da miniatura - no QA marcar e a acao principal,
+   entao ela nao fica escondida atras do hover. */
+.qa-acoes {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  gap: 1px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.qa-botao {
+  flex: 1;
+  border: 0;
+  padding: 6px 0;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.qa-botao:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.qa-botao.ap:hover:not(:disabled) { background: var(--ag-yellow); color: #000; }
+.qa-botao.at:hover:not(:disabled) { background: var(--ag-orange); color: #000; }
+.qa-botao.ap.ativo { background: var(--ag-yellow); color: #000; }
+.qa-botao.at.ativo { background: var(--ag-orange); color: #000; }

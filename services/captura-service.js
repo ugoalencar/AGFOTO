@@ -1,3 +1,4 @@
+import fs from 'fs';
 import LoteRepository from '../repositories/lote-repository.js';
 import { FileRepository } from '../repositories/file-repository.js';
 import { Produto } from '../domain/lote.js';
@@ -279,17 +280,29 @@ export class CapturaService {
         subfolder
       );
 
+      // Tamanho e data alimentam o rodape do preview.
+      const detailed = [];
+      for (const img of images) {
+        let size = 0;
+        let modified = null;
+        try {
+          const stats = await fs.promises.stat(img.path);
+          size = stats.size;
+          modified = stats.mtime.toISOString();
+        } catch {
+          // arquivo removido entre listar e medir - segue sem metadados
+        }
+        detailed.push({ name: img.name, path: img.path, size, modified });
+      }
+
       return {
         ok: true,
         data: {
           lote: loteNumero,
           gtin,
           subfolder: subfolder || 'raiz',
-          images: images.map(img => ({
-            name: img.name,
-            path: img.path
-          })),
-          count: images.length
+          images: detailed,
+          count: detailed.length
         }
       };
     } catch (err) {
