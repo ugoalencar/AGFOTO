@@ -61,40 +61,55 @@
     </div>
   </section>
 
-  <section id="capture-stage" class="ag-card capture-stage">
-    <div class="stage-head">
-      <h3 class="stage-title">Palco atual</h3>
-      <span class="ag-chip">TEMP monitorando</span>
-      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ tempImages.length }} imagens</span>
-    </div>
-    <div v-if="tempImages.length === 0" class="stage-grid stage-empty">Aguardando imagens da camera</div>
-    <div v-else class="stage-grid">
-      <div v-for="img in tempImages" :key="img.name" class="thumbnail" @click="openModal(img)">
-        <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @error="onImageError">
-        <div class="thumbnail-overlay">
-          <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
-          <button @click.stop="onImageDelete(img)" class="btn-thumbnail" title="Excluir">x</button>
+  <div style="display:grid;grid-template-columns:2fr 1fr;gap:12px;grid-column:1/-1">
+    <section id="capture-stage" class="ag-card capture-stage">
+      <div class="stage-head">
+        <h3 class="stage-title">Palco atual</h3>
+        <span class="ag-chip">TEMP monitorando</span>
+        <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ tempImages.length }} imagens</span>
+      </div>
+      <div v-if="tempImages.length === 0" class="stage-grid stage-empty">Aguardando imagens da camera</div>
+      <div v-else class="stage-grid">
+        <div v-for="img in tempImages" :key="img.name" class="thumbnail" @click="openModal(img)">
+          <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @error="onImageError">
+          <div class="thumbnail-overlay">
+            <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
+            <button @click.stop="onImageDelete(img)" class="btn-thumbnail" title="Excluir">x</button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="stage-head">
-      <h3 class="stage-title">Palco anterior</h3>
-      <span class="ag-chip">{{ selectedGtin || 'sem GTIN' }}</span>
-      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
-    </div>
-    <div v-if="!selectedGtin || previousImages.length === 0" class="stage-grid stage-empty">
-      {{ selectedGtin ? 'Nenhuma imagem anterior' : 'Selecione um GTIN' }}
-    </div>
-    <div v-else id="previous-grid" class="stage-grid">
-      <div v-for="img in previousImages" :key="img.name" class="thumbnail" @click="openModal(img)">
-        <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @error="onImageError">
-        <div class="thumbnail-overlay">
-          <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
+      <div class="stage-head">
+        <h3 class="stage-title">Palco anterior</h3>
+        <span class="ag-chip">{{ selectedGtin || 'sem GTIN' }}</span>
+        <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
+      </div>
+      <div v-if="!selectedGtin || previousImages.length === 0" class="stage-grid stage-empty">
+        {{ selectedGtin ? 'Nenhuma imagem anterior' : 'Selecione um GTIN' }}
+      </div>
+      <div v-else id="previous-grid" class="stage-grid">
+        <div v-for="img in previousImages" :key="img.name" class="thumbnail" @click="openModal(img)">
+          <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @error="onImageError">
+          <div class="thumbnail-overlay">
+            <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <section class="ag-card">
+      <header class="ag-card-header">
+        <h2 class="ag-card-title">GTINs do lote</h2>
+        <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ loteItems.length }} itens</span>
+      </header>
+      <ul class="capture-lote-list">
+        <li v-for="item in loteItems" :key="item.gtin" @click="inputGtin = item.gtin; onGtinSearch()">
+          <span>{{ item.gtin }}</span>
+          <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
+        </li>
+      </ul>
+    </section>
+  </div>
 
   <section class="ag-card" style="grid-column:1/-1">
     <div class="capture-actions" style="display:flex;gap:8px">
@@ -105,19 +120,6 @@
         Limpar TEMP
       </button>
     </div>
-  </section>
-
-  <section class="ag-card">
-    <header class="ag-card-header">
-      <h2 class="ag-card-title">GTINs do lote</h2>
-      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ loteItems.length }} itens</span>
-    </header>
-    <ul class="capture-lote-list">
-      <li v-for="item in loteItems" :key="item.gtin" @click="inputGtin = item.gtin; onGtinSearch()">
-        <span>{{ item.gtin }}</span>
-        <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
-      </li>
-    </ul>
   </section>
 </main>
 
