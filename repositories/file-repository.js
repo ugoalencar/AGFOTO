@@ -28,6 +28,9 @@ export const SUBPASTAS_VALIDAS = [...SUBPASTAS_TAG, 'AT'];
 // Nome ja no padrao GTIN_dd_MM_yyyy_HH_mm_ss_indice[_sufixo].ext
 const PADRAO_NOME_NORMALIZADO = /^\d+_\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}_\d+(_[a-zA-Z0-9]+)*$/;
 
+// Extensoes que a captura renomeia na TEMP (JPG da camera e RAW).
+const EXTENSOES_IMAGEM = ['.jpg', '.jpeg', '.png', '.webp', '.cr2', '.cr3', '.nef', '.arw', '.dng'];
+
 function normalizeFinalizadaPathComponents(loteNumero, gtin) {
   const normalizedLote = Lote.normalize(loteNumero);
   if (!Lote.isValid(normalizedLote)) throw new Error(`Invalid lote number: ${loteNumero}`);
@@ -134,6 +137,69 @@ export class FileRepository {
     } catch (err) {
       throw new Error(`Cannot list temp images: ${err.message}`);
     }
+  }
+
+  /**
+   * Renomeia o que chega na TEMP para GTIN_dd_MM_yyyy_HH_mm_ss_indice.ext,
+   * usando o GTIN selecionado no momento - igual ao sphoto.
+   *
+   * Roda a cada listagem: a foto aparece no palco Atual ja com o nome final, e
+   * nao com o nome cru da camera. Arquivos que ja seguem o padrao nao sao
+   * tocados (de qualquer GTIN, inclusive com sufixo como _coding), e o indice
+   * continua de onde parou para nao repetir. O timestamp vem do mtime, que e a
+   * hora em que a foto foi tirada.
+   */
+  static async renameTempWithGtin(gtin) {
+    if (!gtin || !Produto.isValid(gtin)) return { renamed: [] };
+    const normalizedGtin = Produto.normalize(gtin);
+
+    let entries;
+    try {
+      entries = await fs.promises.readdir(config.paths.imagesTemp, { withFileTypes: true });
+    } catch {
+      return { renamed: [] };
+    }
+
+    const arquivos = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      if (!EXTENSOES_IMAGEM.includes(path.extname(entry.name).toLowerCase())) continue;
+      const filePath = path.join(config.paths.imagesTemp, entry.name);
+      try {
+        const stats = await fs.promises.stat(filePath);
+        arquivos.push({ name: entry.name, path: filePath, mtime: stats.mtime });
+      } catch {
+        // sumiu no meio do caminho
+      }
+    }
+
+    // Continua a numeracao a partir do maior indice ja usado por este GTIN.
+    const prefixoGtin = new RegExp(`^${normalizedGtin}_\\d{2}_\\d{2}_\\d{4}_\\d{2}_\\d{2}_\\d{2}_(\\d+)`);
+    let proximoIndice = 0;
+    for (const arquivo of arquivos) {
+      const match = arquivo.name.match(prefixoGtin);
+      if (match) proximoIndice = Math.max(proximoIndice, parseInt(match[1], 10) + 1);
+    }
+
+    const renamed = [];
+    const pendentes = arquivos
+      .filter(arquivo => !PADRAO_NOME_NORMALIZADO.test(path.basename(arquivo.name, path.extname(arquivo.name))))
+      .sort((a, b) => a.mtime - b.mtime);
+
+    for (const arquivo of pendentes) {
+      const ext = path.extname(arquivo.name);
+      const novoNome = `${normalizedGtin}_${formatTimestamp(arquivo.mtime)}_${proximoIndice}${ext}`;
+      const destino = path.join(config.paths.imagesTemp, novoNome);
+      try {
+        await fs.promises.rename(arquivo.path, destino);
+        renamed.push({ from: arquivo.name, to: novoNome });
+        proximoIndice++;
+      } catch (err) {
+        console.warn(`[TEMP] Cannot rename ${arquivo.name}: ${err.message}`);
+      }
+    }
+
+    return { renamed };
   }
 
   /**
@@ -410,8 +476,24 @@ export class FileRepository {
         try {
           const ext = path.extname(file.name);
           const semExt = ext ? file.name.slice(0, -ext.length) : file.name;
-          const { pasta, extrasRestantes } = separateSubfolderTag(extractExtraSuffixes(semExt));
-          const targetName = `${gtin}_${timestamp}_${indice}${extrasRestantes}${ext}`;
+          const extras = extractExtraSuffixes(semExt);
+          const { pasta, extrasRestantes } = separateSubfolderTag(extras);
+          const semExtras = semExt.slice(0, semExt.length - extras.length);
+
+          // A TEMP ja renomeia com o GTIN selecionado. Quando o nome que esta la
+          // ja e o desse GTIN, ele e mantido: o arquivo que o fotografo viu no
+          // palco Atual e exatamente o que aparece em Finalizadas, com a hora
+          // real da foto. So o que chegou fora do padrao ganha nome novo aqui.
+          const jaNomeadoParaEsteGtin = PADRAO_NOME_NORMALIZADO.test(semExt)
+            && semExtras.startsWith(`${gtin}_`);
+
+          let targetName;
+          if (jaNomeadoParaEsteGtin) {
+            targetName = `${semExtras}${extrasRestantes}${ext}`;
+          } else {
+            targetName = `${gtin}_${timestamp}_${indice}${extrasRestantes}${ext}`;
+            indice++;
+          }
 
           const result = await this.moveToFinalizadas(file.path, loteNumero, gtin, targetName, pasta);
           moved.push({
@@ -419,7 +501,6 @@ export class FileRepository {
             dest: path.basename(result.destPath),
             subfolder: pasta || 'raiz'
           });
-          indice++;
           if (result.warning) warnings.push({ file: file.name, ...result.warning });
         } catch (err) {
           failed.push({

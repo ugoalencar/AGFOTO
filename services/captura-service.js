@@ -102,8 +102,18 @@ export class CapturaService {
   /**
    * Lista imagens atuais em TEMP
    */
-  static async getTempImages() {
+  static async getTempImages(gtin = null) {
     try {
+      // Com um GTIN selecionado, o que chega na TEMP ja aparece no palco com o
+      // nome final. Sem GTIN, lista como esta.
+      if (gtin) {
+        try {
+          await FileRepository.renameTempWithGtin(gtin);
+        } catch (err) {
+          console.warn(`[TEMP] rename skipped: ${err.message}`);
+        }
+      }
+
       const images = await FileRepository.listTempImages();
       return {
         ok: true,

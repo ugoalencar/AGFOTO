@@ -660,3 +660,105 @@ test('a lote present only under Entrega stays visible to capture', async t => {
   const gerenciaveis = await CapturaService.listLotesComImagens();
   assert.deepEqual(gerenciaveis.data.lotes.map(l => l.numero), ['81']);
 });
+
+// --- Regra: o que chega na TEMP recebe o nome do GTIN selecionado ---
+
+test('TEMP renames incoming camera files with the selected GTIN, using the photo time', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const temp = env.paths.imagesTemp;
+  await fs.promises.writeFile(path.join(temp, 'IMG_0001.jpg'), JPG_BYTES);
+  await fs.promises.writeFile(path.join(temp, 'IMG_0002.jpg'), JPG_BYTES);
+
+  // Ordem de chegada e dada pelo mtime, nao pelo nome.
+  const antiga = new Date('2026-08-10T09:00:00Z');
+  const recente = new Date('2026-08-10T09:05:00Z');
+  await fs.promises.utimes(path.join(temp, 'IMG_0002.jpg'), antiga, antiga);
+  await fs.promises.utimes(path.join(temp, 'IMG_0001.jpg'), recente, recente);
+
+  await FileRepository.renameTempWithGtin('000123');
+
+  const arquivos = (await fs.promises.readdir(temp)).sort();
+  assert.equal(arquivos.length, 2);
+  for (const nome of arquivos) {
+    assert.match(nome, /^000123_\d{2}_\d{2}_\d{4}_\d{2}_\d{2}_\d{2}_\d+\.jpg$/, nome);
+  }
+  // A foto mais antiga leva o indice 0.
+  assert.ok(arquivos[0].endsWith('_0.jpg'));
+  assert.match(arquivos[0], /^000123_10_08_2026_/);
+});
+
+test('TEMP leaves already-named files alone and keeps numbering from the highest index', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const temp = env.paths.imagesTemp;
+  const existente = '000123_10_08_2026_09_00_00_7.jpg';
+  const marcada = '000123_10_08_2026_09_00_00_8_coding.jpg';
+  await fs.promises.writeFile(path.join(temp, existente), JPG_BYTES);
+  await fs.promises.writeFile(path.join(temp, marcada), JPG_BYTES);
+  await fs.promises.writeFile(path.join(temp, 'IMG_NOVA.jpg'), JPG_BYTES);
+
+  await FileRepository.renameTempWithGtin('000123');
+
+  const arquivos = await fs.promises.readdir(temp);
+  assert.ok(arquivos.includes(existente), 'nome ja normalizado foi mexido');
+  assert.ok(arquivos.includes(marcada), 'sufixo _coding foi perdido');
+  // Continua depois do maior indice em uso, sem repetir.
+  assert.ok(arquivos.some(n => n.endsWith('_9.jpg')), `numeracao nao continuou: ${arquivos}`);
+  assert.equal(arquivos.length, 3);
+});
+
+test('TEMP listing without a GTIN does not rename anything', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_0001.jpg'), JPG_BYTES);
+
+  const result = await CapturaService.getTempImages();
+
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.data.images.map(i => i.name), ['IMG_0001.jpg']);
+});
+
+test('saving keeps the name the photographer saw in the current stage', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_0001.jpg'), JPG_BYTES);
+
+  // A tela lista com o GTIN selecionado, o que ja renomeia na TEMP.
+  const listagem = await CapturaService.getTempImages('000123');
+  const noPalco = listagem.data.images[0].name;
+  assert.match(noPalco, /^000123_/);
+
+  const salvo = await CapturaService.saveCapture('82', '000123');
+
+  assert.equal(salvo.ok, true);
+  assert.equal(salvo.data.detalhes.moved[0].dest, noPalco);
+  assert.deepEqual(await listarPasta(env, '82', '000123'), [noPalco]);
+});
+
+test('saving still renames a file that reached TEMP without a GTIN selected', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_0001.jpg'), JPG_BYTES);
+
+  const salvo = await CapturaService.saveCapture('83', '000123');
+
+  assert.equal(salvo.ok, true);
+  assert.ok(await acharCapturado(env, '83', '000123'), 'arquivo cru deveria ter sido renomeado no salvar');
+});
+
+test('a name belonging to another GTIN is renumbered for the GTIN being saved', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  // Sobra de outro produto: nao pode ser salva com o nome do GTIN antigo.
+  await fs.promises.writeFile(
+    path.join(env.paths.imagesTemp, '000999_10_08_2026_09_00_00_0.jpg'),
+    JPG_BYTES
+  );
+
+  const salvo = await CapturaService.saveCapture('84', '000123');
+
+  assert.equal(salvo.ok, true);
+  const dest = salvo.data.detalhes.moved[0].dest;
+  assert.match(dest, /^000123_/, `deveria assumir o GTIN salvo: ${dest}`);
+});

@@ -574,7 +574,8 @@ export default {
 
     const loadTempImages = async () => {
       try {
-        const response = await this.$api.getTempImages();
+        // Manda o GTIN selecionado para a foto ja entrar no palco com o nome dele.
+        const response = await this.$api.getTempImages(selectedGtin.value || null);
         if (response.ok) {
           tempImages.value = response.data.images || [];
         }

@@ -14,7 +14,8 @@ const router = Router();
  * Lista imagens atuais em images/temp/
  */
 router.get('/temp', async (req, res) => {
-  const result = await CapturaService.getTempImages();
+  // ?gtin= renomeia o que chegou usando o GTIN selecionado, antes de listar.
+  const result = await CapturaService.getTempImages(req.query.gtin || null);
 
   if (result.ok) {
     res.json({

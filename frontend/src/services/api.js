@@ -49,8 +49,8 @@ export class ApiClient {
   /**
    * GET /api/captura/temp
    */
-  async getTempImages() {
-    return this.request('/api/captura/temp');
+  async getTempImages(gtin = null) {
+    return this.request('/api/captura/temp', gtin ? { query: { gtin } } : {});
   }
 
   /**
