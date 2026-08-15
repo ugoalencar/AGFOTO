@@ -252,6 +252,24 @@ router.get('/imagem/temp/:filename', async (req, res) => {
   }
 });
 
+router.get('/imagem/finalizadas/:lote/:gtin/:filename', async (req, res) => {
+  try {
+    const service = req.app.locals.services.previewService || new PreviewService();
+    return res.sendFile(await service.resolveFinalizedImage(req.params.lote, req.params.gtin, req.params.filename));
+  } catch (error) {
+    return sendError(res, error.code === 'ENOENT' ? 404 : 400, error);
+  }
+});
+
+router.get('/imagem/finalizadas/:lote/:gtin/:subfolder/:filename', async (req, res) => {
+  try {
+    const service = req.app.locals.services.previewService || new PreviewService();
+    return res.sendFile(await service.resolveFinalizedImage(req.params.lote, req.params.gtin, req.params.filename, req.params.subfolder));
+  } catch (error) {
+    return sendError(res, error.code === 'ENOENT' ? 404 : 400, error);
+  }
+});
+
 router.get('/:numero/itens', getLoteHandler);
 router.get('/:numero', getLoteHandler);
 

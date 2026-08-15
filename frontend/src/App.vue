@@ -75,7 +75,7 @@
     <div v-if="tempImages.length === 0" class="stage-grid stage-empty">Aguardando imagens da camera</div>
     <div v-else class="stage-grid">
       <div v-for="img in tempImages" :key="img.name" class="thumbnail" @click="openModal(img)">
-        <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
+        <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @error="onImageError">
         <div class="thumbnail-overlay">
           <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
           <button @click.stop="onImageDelete(img)" class="btn-thumbnail" title="Excluir">x</button>
@@ -93,7 +93,7 @@
     </div>
     <div v-else class="stage-grid">
       <div v-for="img in previousImages" :key="img.name" class="thumbnail" @click="openModal(img)">
-        <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
+        <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @error="onImageError">
         <div class="thumbnail-overlay">
           <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
         </div>
@@ -299,7 +299,7 @@
           <button @click="closeModal" style="background: none; border: none; color: #fff; cursor: pointer; font-size: 1.5rem;">×</button>
         </div>
         <div class="modal-body">
-          <img :src="`blob:${modalImage.path}`" :alt="modalImage.name" class="modal-image">
+          <img :src="getImageUrl(modalImage)" :alt="modalImage.name" class="modal-image">
         </div>
         <div class="modal-footer">
           <button class="btn-action secondary" @click="closeModal">Fechar</button>
@@ -450,9 +450,6 @@ export default {
         selectedGtin.value = inputGtin.value;
         inputGtin.value = '';
         loadPreviousImages();
-        setTimeout(() => {
-          document.querySelector('input[type="text"]')?.focus();
-        }, 100);
       }
     };
 
@@ -518,6 +515,15 @@ export default {
     const onImageError = (e) => {
       e.target.parentElement.classList.add('error');
       e.target.parentElement.textContent = 'Erro';
+    };
+
+    const getImageUrl = (img) => {
+      if (!img) return '';
+      const isFromTemp = tempImages.value.some(t => t.name === img.name);
+      if (isFromTemp) {
+        return `/api/captura/imagem/temp/${img.name}`;
+      }
+      return `/api/captura/imagem/finalizadas/${selectedLote.value}/${selectedGtin.value}/${img.name}`;
     };
 
     const openModal = (img) => {
@@ -814,6 +820,7 @@ export default {
       onImageError,
       openModal,
       closeModal,
+      getImageUrl,
       onExcelFileSelected,
       onImportExcel,
       onLoadQaProducts,
