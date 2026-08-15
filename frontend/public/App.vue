@@ -408,9 +408,9 @@ export default {
 
     const loadAvailableLotes = async () => {
       try {
-        const response = await this.$api.request('/api/lotes/finalizados/lista');
+        const response = await this.$api.request('/api/lotes');
         if (response.ok) {
-          availableLotes.value = response.data.lotes || [];
+          availableLotes.value = (response.data.lotes || []).map(lote => lote.numero || lote);
           await loadQaLotes();
         }
       } catch (err) {
@@ -622,9 +622,9 @@ export default {
 
     const loadQaLotes = async () => {
       try {
-        const response = await this.$api.request('/api/lotes/finalizados/lista');
+        const response = await this.$api.request('/api/lotes');
         if (response.ok) {
-          qaAvailableLotes.value = response.data.lotes || [];
+          qaAvailableLotes.value = (response.data.lotes || []).map(lote => lote.numero || lote);
         }
       } catch (err) {
         qaAvailableLotes.value = [];
@@ -643,8 +643,12 @@ export default {
           `/api/lotes/${qaPhotoLote.value}/itens`
         );
         if (response.ok) {
-          qaAvailableGtins.value = (response.data.itens || []).map(item => item.gtin || item);
-          showStatus(`✓ ${qaAvailableGtins.value.length} GTINs carregados`, 'success');
+          // Filtra apenas GTINs que precisam de QA (pendente_qa ou retrabalho)
+          const pendingQa = (response.data.itens || []).filter(
+            item => item.status === 'pendente_qa' || item.status === 'retrabalho'
+          );
+          qaAvailableGtins.value = pendingQa.map(item => item.gtin || item);
+          showStatus(`✓ ${qaAvailableGtins.value.length} GTINs pendentes de QA`, 'success');
         }
       } catch (err) {
         showStatus(`✗ Erro ao carregar GTINs`, 'error');
