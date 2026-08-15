@@ -223,8 +223,8 @@
           </select>
 
           <label class="ag-label" style="margin-top:12px">GTIN</label>
-          <select class="ag-field" v-model="qaPhotoGtin" :disabled="!qaPhotoLote">
-            <option value="">Selecione um GTIN</option>
+          <select class="ag-field" v-model="qaPhotoGtin" :disabled="qaAvailableGtins.length === 0">
+            <option value="">{{ qaAvailableGtins.length > 0 ? 'Selecione um GTIN' : 'Sem GTINs pendentes' }}</option>
             <option v-for="gtin in qaAvailableGtins" :key="gtin" :value="gtin">{{ gtin }}</option>
           </select>
 
