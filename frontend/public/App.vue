@@ -226,15 +226,13 @@
           <ul class="clinerules" v-if="qaAvailableGtins.length > 0">
             <li v-for="gtin in qaAvailableGtins" :key="gtin"
                 class="clinerule" :class="{ active: qaPhotoGtin === gtin }"
-                @click="qaPhotoGtin = gtin">
+                @click="() => { qaPhotoGtin = gtin; onLoadQaPhotos(); }">
               {{ gtin }}
             </li>
           </ul>
           <div v-else style="padding:0.75rem;color:var(--ag-muted);font-size:0.875rem">
             Sem GTINs pendentes de QA
           </div>
-
-          <button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadQaPhotos" :disabled="!qaPhotoLote || !qaPhotoGtin">Carregar fotos</button>
         </div>
       </section>
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header><div class="stage-grid"><div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card"><div style="height:74px;display:grid;place-items:center;background:var(--ag-panel);margin-bottom:8px">Foto</div><div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div><div style="display:flex;gap:4px;margin-top:8px"><button class="ag-btn" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button><button class="ag-btn is-warning" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button></div></div></div><div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div></section>
