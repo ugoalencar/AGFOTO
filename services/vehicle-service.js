@@ -335,6 +335,114 @@ export class VehicleService {
   }
 
   /**
+   * Reordena as fotos de uma placa.
+   *
+   * A ordem esta no nome (PLACA_0, PLACA_1, ...), entao reordenar e renomear.
+   * Passa por nomes temporarios primeiro porque o destino de um arquivo e o
+   * nome atual de outro - renomeando direto, um sobrescreveria o outro.
+   */
+  static async reordenarFotos(data, placa, ordem) {
+    try {
+      const dia = this.normalizarData(data);
+      const nome = this.normalizarPlaca(placa);
+      const dir = this.pastaDaPlaca(dia, nome);
+
+      if (!Array.isArray(ordem) || ordem.length === 0) {
+        return { ok: false, error: 'Informe a nova ordem das fotos' };
+      }
+
+      const atuais = (await fs.promises.readdir(dir))
+        .filter(n => EXTENSOES_FOTO.includes(path.extname(n).toLowerCase()));
+
+      const pedidas = ordem.map(n => String(n));
+      if (pedidas.length !== atuais.length || pedidas.some(n => !atuais.includes(n))) {
+        return { ok: false, error: 'A ordem enviada nao corresponde as fotos da placa' };
+      }
+
+      const temporarios = [];
+      for (let i = 0; i < pedidas.length; i++) {
+        const temp = path.join(dir, `__ord_${i}${path.extname(pedidas[i])}`);
+        await fs.promises.rename(path.join(dir, pedidas[i]), temp);
+        temporarios.push(temp);
+      }
+
+      const finais = [];
+      for (let i = 0; i < temporarios.length; i++) {
+        const alvo = path.join(dir, `${nome}_${i}${path.extname(temporarios[i])}`);
+        await fs.promises.rename(temporarios[i], alvo);
+        finais.push(path.basename(alvo));
+      }
+
+      await auditLogger.log('VEHICLE_REORDER', { data: dia, placa: nome, fotos: finais.length });
+      return { ok: true, data: { data: dia, placa: nome, fotos: finais } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Exclui uma foto da placa. Nao renumera o que sobra: renumerar mudaria o
+   * nome de fotos que o usuario nao tocou, e a ordem relativa continua correta.
+   */
+  static async excluirFoto(data, placa, filename) {
+    try {
+      const dia = this.normalizarData(data);
+      const nome = this.normalizarPlaca(placa);
+      if (filename !== path.basename(filename)) throw new Error(`Path traversal attempt: ${filename}`);
+
+      const dir = this.pastaDaPlaca(dia, nome);
+      const alvo = assertInsideRoot(path.resolve(dir, filename), dir);
+      await fs.promises.unlink(alvo);
+
+      await auditLogger.log('VEHICLE_PHOTO_DELETED', { data: dia, placa: nome, arquivo: filename });
+      return { ok: true, data: { data: dia, placa: nome, arquivo: filename } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Corrige a placa: renomeia a pasta e os arquivos dentro dela.
+   *
+   * Se a placa de destino ja existir, as fotos sao juntadas nela - e o que
+   * acontece quando a mesma placa foi digitada de dois jeitos.
+   */
+  static async renomearPlaca(data, de, para) {
+    try {
+      const dia = this.normalizarData(data);
+      const origemPlaca = this.normalizarPlaca(de);
+      const destinoPlaca = this.normalizarPlaca(para);
+      if (origemPlaca === destinoPlaca) return { ok: false, error: 'A placa e a mesma' };
+
+      const dirOrigem = this.pastaDaPlaca(dia, origemPlaca);
+      const dirDestino = this.pastaDaPlaca(dia, destinoPlaca);
+      await fs.promises.stat(dirOrigem);
+      await fs.promises.mkdir(dirDestino, { recursive: true });
+
+      const arquivos = (await fs.promises.readdir(dirOrigem))
+        .filter(n => EXTENSOES_FOTO.includes(path.extname(n).toLowerCase()))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+      let indice = await this.proximoIndice(dirDestino, destinoPlaca);
+      for (const arquivo of arquivos) {
+        const alvo = path.join(dirDestino, `${destinoPlaca}_${indice}${path.extname(arquivo)}`);
+        await fs.promises.rename(path.join(dirOrigem, arquivo), alvo);
+        indice++;
+      }
+
+      // So remove a pasta antiga se ela ficou vazia de verdade.
+      await fs.promises.rmdir(dirOrigem).catch(() => {});
+
+      await auditLogger.log('VEHICLE_PLATE_RENAMED', {
+        data: dia, de: origemPlaca, para: destinoPlaca, fotos: arquivos.length
+      });
+      return { ok: true, data: { de: origemPlaca, para: destinoPlaca, fotos: arquivos.length } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
    * Caminho de uma foto ja importada, para servir a miniatura.
    */
   static async resolveVehiclePhoto(data, placa, filename) {

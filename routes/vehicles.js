@@ -103,6 +103,45 @@ router.post('/placa', express.json(), async (req, res, next) => {
 });
 
 /**
+ * POST /api/carros/reordenar
+ * Body: { data, placa, ordem: [nomes na ordem desejada] }
+ */
+router.post('/reordenar', express.json(), async (req, res, next) => {
+  try {
+    const { data, placa, ordem } = req.body || {};
+    responder(res, await VehicleService.reordenarFotos(data, placa, ordem));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/excluir-foto
+ * Body: { data, placa, arquivo }
+ */
+router.post('/excluir-foto', express.json(), async (req, res, next) => {
+  try {
+    const { data, placa, arquivo } = req.body || {};
+    responder(res, await VehicleService.excluirFoto(data, placa, arquivo));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/renomear-placa
+ * Body: { data, de, para }
+ */
+router.post('/renomear-placa', express.json(), async (req, res, next) => {
+  try {
+    const { data, de, para } = req.body || {};
+    responder(res, await VehicleService.renomearPlaca(data, de, para));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/carros/mover-foto
  * Move uma foto de uma placa para outra dentro do mesmo dia.
  *

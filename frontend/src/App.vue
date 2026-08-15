@@ -538,13 +538,24 @@
                 <span class="placa-nome">{{ placa.placa }}</span>
                 <span class="placa-contagem">{{ placa.total }} foto(s)</span>
                 <span v-if="placa.total === 0" class="placa-vazia">arraste fotos para ca</span>
+                <button class="ag-btn placa-acao" @click="onRenomearPlaca(placa.placa)">
+                  Corrigir placa
+                </button>
               </div>
               <div class="placa-fotos">
-                <div v-for="foto in placa.fotos" :key="foto.name"
-                     class="carro-foto arrastavel" draggable="true"
-                     @dragstart="onArrastarFoto(placa.placa, foto.name)">
+                <div v-for="(foto, i) in placa.fotos" :key="foto.name"
+                     class="carro-foto arrastavel"
+                     :class="{ 'alvo-foto': carrosFotoAlvo === foto.name }"
+                     draggable="true"
+                     @dragstart="onArrastarFoto(placa.placa, foto.name)"
+                     @dragover.prevent.stop="carrosFotoAlvo = foto.name"
+                     @dragleave="carrosFotoAlvo = ''"
+                     @drop.prevent.stop="onSoltarNaFoto(placa.placa, i)">
+                  <div class="carro-foto-seq">{{ i + 1 }}</div>
                   <img :src="foto.url" :alt="foto.name"
                        @click="openModal({ name: foto.name, url: foto.url }, 'carros')">
+                  <button class="btn-deletar" @click.stop="onExcluirFotoCarro(placa.placa, foto.name)"
+                          title="Excluir">&times;</button>
                   <div class="carro-foto-nome">{{ foto.name }}</div>
                 </div>
               </div>
@@ -721,6 +732,7 @@ export default {
     const carrosPlacas = ref([]);
     const carrosNovaPlaca = ref('');
     const carrosPlacaAlvo = ref('');
+    const carrosFotoAlvo = ref('');
     const carrosArrastando = ref(null);
     const carrosPasta = ref('');
     const carrosFotos = ref([]);
@@ -1236,18 +1248,104 @@ export default {
       }
     };
 
+    // Soltar sobre uma foto: mesma placa reordena, placa diferente move para
+    // aquela posicao. Soltar no bloco (fora das fotos) manda para o fim.
+    const onSoltarNaFoto = async (placaDestino, posicao) => {
+      const arrastada = carrosArrastando.value;
+      carrosFotoAlvo.value = '';
+      carrosPlacaAlvo.value = '';
+      if (!arrastada) return;
+
+      if (arrastada.placa !== placaDestino) {
+        carrosArrastando.value = null;
+        return moverFotoDeCarro(arrastada, placaDestino);
+      }
+
+      const placa = carrosPlacas.value.find(p => p.placa === placaDestino);
+      carrosArrastando.value = null;
+      if (!placa) return;
+
+      const nomes = placa.fotos.map(f => f.name);
+      const de = nomes.indexOf(arrastada.arquivo);
+      if (de < 0 || de === posicao) return;
+
+      nomes.splice(posicao, 0, ...nomes.splice(de, 1));
+
+      try {
+        const response = await this.$api.request('/api/carros/reordenar', {
+          method: 'POST',
+          data: {
+            data: carrosData.value,
+            placa: placaDestino,
+            ordem: nomes,
+            operationId: makeOperationId('carros-reordenar')
+          }
+        });
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+        showStatus('✓ Ordem atualizada', 'success');
+        await onCarregarDia();
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onExcluirFotoCarro = async (placa, arquivo) => {
+      if (!confirm(`Excluir ${arquivo}?`)) return;
+      try {
+        const response = await this.$api.request('/api/carros/excluir-foto', {
+          method: 'POST',
+          data: {
+            data: carrosData.value,
+            placa,
+            arquivo,
+            operationId: makeOperationId('carros-excluir')
+          }
+        });
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+        showStatus('✓ Foto excluida', 'success');
+        await onCarregarDia();
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onRenomearPlaca = async placaAtual => {
+      const nova = prompt(`Corrigir a placa ${placaAtual} para:`, placaAtual);
+      if (!nova || nova.trim().toUpperCase() === placaAtual) return;
+      try {
+        const response = await this.$api.request('/api/carros/renomear-placa', {
+          method: 'POST',
+          data: {
+            data: carrosData.value,
+            de: placaAtual,
+            para: nova,
+            operationId: makeOperationId('carros-renomear')
+          }
+        });
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+        showStatus(`✓ ${response.data.de} virou ${response.data.para}`, 'success');
+        await onCarregarDia();
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
     const onArrastarFoto = (placa, arquivo) => {
       carrosArrastando.value = { placa, arquivo };
     };
 
     // Soltar numa placa move o arquivo de pasta; a foto e renomeada para a placa
     // de destino, senao o nome diria uma placa e ela estaria dentro de outra.
-    const onSoltarNaPlaca = async placaDestino => {
-      const arrastada = carrosArrastando.value;
-      carrosPlacaAlvo.value = '';
-      carrosArrastando.value = null;
-      if (!arrastada || arrastada.placa === placaDestino) return;
-
+    const moverFotoDeCarro = async (arrastada, placaDestino) => {
       try {
         const response = await this.$api.request('/api/carros/mover-foto', {
           method: 'POST',
@@ -1268,6 +1366,15 @@ export default {
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
       }
+    };
+
+    const onSoltarNaPlaca = async placaDestino => {
+      const arrastada = carrosArrastando.value;
+      carrosPlacaAlvo.value = '';
+      carrosFotoAlvo.value = '';
+      carrosArrastando.value = null;
+      if (!arrastada || arrastada.placa === placaDestino) return;
+      return moverFotoDeCarro(arrastada, placaDestino);
     };
 
     const onCarregarPlanilhas = async () => {
@@ -1906,6 +2013,7 @@ export default {
       carrosPlacas,
       carrosNovaPlaca,
       carrosPlacaAlvo,
+      carrosFotoAlvo,
       carrosTotalFotos,
       carrosPasta,
       carrosFotos,
@@ -1918,6 +2026,9 @@ export default {
       onCriarPlaca,
       onArrastarFoto,
       onSoltarNaPlaca,
+      onSoltarNaFoto,
+      onExcluirFotoCarro,
+      onRenomearPlaca,
       onImportarCarros,
       sincronizarPlanilhas,
       planilhasConflitos,

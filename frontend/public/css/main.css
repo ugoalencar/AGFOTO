@@ -1717,3 +1717,18 @@ select {
 
 .carro-foto.arrastavel { cursor: grab; }
 .carro-foto.arrastavel:active { cursor: grabbing; }
+
+/* Foto sob o cursor durante o arrasto: marca onde ela vai entrar. */
+.carro-foto.alvo-foto {
+  border-color: var(--ag-orange);
+  box-shadow: 0 0 0 3px var(--ag-orange);
+}
+
+.carro-foto .btn-deletar { opacity: 0; }
+.carro-foto:hover .btn-deletar { opacity: 1; }
+
+.placa-acao {
+  margin-left: auto;
+  padding: 3px 10px;
+  font-size: 11px;
+}
