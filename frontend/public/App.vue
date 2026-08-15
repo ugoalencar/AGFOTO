@@ -522,6 +522,26 @@
             </div>
           </div>
 
+          <!-- Placas do dia: escolher qual vai para o palco, e receber fotos
+               arrastadas de outra placa. -->
+          <div v-if="carrosPlacas.length > 0" style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
+            <label class="ag-label">Placas do dia ({{ carrosPlacas.length }})</label>
+            <ul class="placa-lista">
+              <li v-for="placa in carrosPlacas" :key="placa.placa"
+                  :class="{ ativa: carrosPlacaSelecionada === placa.placa, alvo: carrosPlacaAlvo === placa.placa }"
+                  @click="carrosPlacaSelecionada = placa.placa"
+                  @dragover.prevent="carrosPlacaAlvo = placa.placa"
+                  @dragleave="carrosPlacaAlvo = ''"
+                  @drop.prevent="onSoltarNaPlaca(placa.placa)">
+                <span class="placa-lista-nome">{{ placa.placa }}</span>
+                <span class="placa-lista-total">{{ placa.total }}</span>
+              </li>
+            </ul>
+            <div style="font-size:11px;color:var(--ag-muted);margin-top:6px">
+              Arraste uma foto do palco para outra placa desta lista para move-la.
+            </div>
+          </div>
+
           <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
             <label class="ag-label">Criar placa</label>
             <div style="display:flex;gap:8px">
@@ -573,36 +593,51 @@
             Nenhuma placa neste dia. Aponte a pasta das fotos e carregue.
           </div>
 
-          <!-- QA: placas do dia, com arrastar foto entre elas -->
-          <div v-else>
-            <div v-for="placa in carrosPlacas" :key="placa.placa"
-                 class="placa-bloco" :class="{ alvo: carrosPlacaAlvo === placa.placa }"
-                 @dragover.prevent="carrosPlacaAlvo = placa.placa"
-                 @dragleave="carrosPlacaAlvo = ''"
-                 @drop.prevent="onSoltarNaPlaca(placa.placa)">
-              <div class="placa-cabecalho">
-                <span class="placa-nome">{{ placa.placa }}</span>
-                <span class="placa-contagem">{{ placa.total }} foto(s)</span>
-                <span v-if="placa.total === 0" class="placa-vazia">arraste fotos para ca</span>
-                <button class="ag-btn placa-acao" @click="onRenomearPlaca(placa.placa)">
-                  Corrigir placa
-                </button>
-              </div>
-              <div class="placa-fotos">
-                <div v-for="(foto, i) in placa.fotos" :key="foto.name"
-                     class="carro-foto arrastavel"
-                     :class="{ 'alvo-foto': carrosFotoAlvo === foto.name }"
-                     draggable="true"
-                     @dragstart="onArrastarFoto(placa.placa, foto.name)"
-                     @dragover.prevent.stop="carrosFotoAlvo = foto.name"
-                     @dragleave="carrosFotoAlvo = ''"
-                     @drop.prevent.stop="onSoltarNaFoto(placa.placa, i)">
-                  <div class="carro-foto-seq">{{ i + 1 }}</div>
-                  <img :src="foto.url" :alt="foto.name"
-                       @click="openModal({ name: foto.name, url: foto.url }, 'carros')">
-                  <button class="btn-deletar" @click.stop="onExcluirFotoCarro(placa.placa, foto.name)"
+          <div v-else-if="!placaAtual" class="grid-empty">
+            Escolha uma placa na lista ao lado para ordenar as fotos.
+          </div>
+
+          <!-- Palco de QA: uma placa por vez, fotos grandes e em ordem. -->
+          <div v-else class="palco-carro">
+            <div class="palco-cabecalho">
+              <span class="placa-nome">{{ placaAtual.placa }}</span>
+              <span class="placa-contagem">{{ placaAtual.total }} foto(s)</span>
+              <button class="ag-btn placa-acao" @click="onRenomearPlaca(placaAtual.placa)">
+                Corrigir placa
+              </button>
+            </div>
+
+            <div v-if="placaAtual.total === 0" class="grid-empty">
+              Placa vazia. Arraste fotos de outra placa para ca.
+            </div>
+
+            <div v-else class="palco-fotos">
+              <div v-for="(foto, i) in placaAtual.fotos" :key="foto.name"
+                   class="palco-foto"
+                   :class="{ 'alvo-foto': carrosFotoAlvo === foto.name, capa: i === 0 }"
+                   draggable="true"
+                   @dragstart="onArrastarFoto(placaAtual.placa, foto.name)"
+                   @dragover.prevent.stop="carrosFotoAlvo = foto.name"
+                   @dragleave="carrosFotoAlvo = ''"
+                   @drop.prevent.stop="onSoltarNaFoto(placaAtual.placa, i)">
+                <div class="palco-foto-topo">
+                  <span class="palco-pos">{{ i + 1 }}</span>
+                  <span v-if="i === 0" class="palco-capa">capa</span>
+                  <button class="btn-deletar" @click.stop="onExcluirFotoCarro(placaAtual.placa, foto.name)"
                           title="Excluir">&times;</button>
-                  <div class="carro-foto-nome">{{ foto.name }}</div>
+                </div>
+
+                <img :src="foto.url" :alt="foto.name"
+                     @click="openModal({ name: foto.name, url: foto.url }, 'carros')">
+
+                <!-- Setas alem do arrastar: para acertar uma posicao especifica
+                     o clique erra menos que o arrasto. -->
+                <div class="palco-foto-acoes">
+                  <button class="ag-btn" :disabled="i === 0"
+                          @click.stop="onMoverPosicao(i, i - 1)" title="Mover para tras">&lsaquo;</button>
+                  <span class="palco-foto-nome">{{ foto.name }}</span>
+                  <button class="ag-btn" :disabled="i === placaAtual.fotos.length - 1"
+                          @click.stop="onMoverPosicao(i, i + 1)" title="Mover para frente">&rsaquo;</button>
                 </div>
               </div>
             </div>
@@ -787,6 +822,7 @@ export default {
     const explorerFotos = ref(0);
     const explorerErro = ref('');
     const carrosPastaDestino = ref('');
+    const carrosPlacaSelecionada = ref('');
     const carrosArrastando = ref(null);
     const carrosPasta = ref('');
     const carrosFotos = ref([]);
@@ -833,6 +869,11 @@ export default {
     // aplicada: a pasta de entrega sairia com o GTIN.
     const entregaSemCodigo = computed(() => (
       qaProducts.value.filter(p => !p.codigo || p.codigo === p.gtin)
+    ));
+
+    // Placa aberta no palco. Sem ela o palco fica vazio pedindo escolha.
+    const placaAtual = computed(() => (
+      carrosPlacas.value.find(p => p.placa === carrosPlacaSelecionada.value) || null
     ));
 
     const carrosTotalFotos = computed(() => carrosPlacas.value.reduce((s, p) => s + p.total, 0));
@@ -1292,6 +1333,13 @@ export default {
         const response = await this.$api.request(`/api/carros/dia/${encodeURIComponent(carrosData.value)}`);
         carrosPlacas.value = response.ok ? (response.data.placas || []) : [];
         carrosPastaDestino.value = response.ok ? (response.data.pasta || '') : '';
+
+        // Mantem a placa aberta se ela ainda existe; senao abre a primeira,
+        // para o palco nunca ficar vazio a toa.
+        const aindaExiste = carrosPlacas.value.some(p => p.placa === carrosPlacaSelecionada.value);
+        if (!aindaExiste) {
+          carrosPlacaSelecionada.value = carrosPlacas.value[0]?.placa || '';
+        }
       } catch {
         carrosPlacas.value = [];
       }
@@ -1353,6 +1401,28 @@ export default {
 
     // Soltar sobre uma foto: mesma placa reordena, placa diferente move para
     // aquela posicao. Soltar no bloco (fora das fotos) manda para o fim.
+    // Grava a nova ordem. Usada tanto pelo arrasto quanto pelas setas.
+    const aplicarOrdem = async (placa, nomes) => {
+      try {
+        const response = await this.$api.request('/api/carros/reordenar', {
+          method: 'POST',
+          data: {
+            data: carrosData.value,
+            placa,
+            ordem: nomes,
+            operationId: makeOperationId('carros-reordenar')
+          }
+        });
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+        await onCarregarDia();
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
     const onSoltarNaFoto = async (placaDestino, posicao) => {
       const arrastada = carrosArrastando.value;
       carrosFotoAlvo.value = '';
@@ -1373,26 +1443,17 @@ export default {
       if (de < 0 || de === posicao) return;
 
       nomes.splice(posicao, 0, ...nomes.splice(de, 1));
+      await aplicarOrdem(placaDestino, nomes);
+    };
 
-      try {
-        const response = await this.$api.request('/api/carros/reordenar', {
-          method: 'POST',
-          data: {
-            data: carrosData.value,
-            placa: placaDestino,
-            ordem: nomes,
-            operationId: makeOperationId('carros-reordenar')
-          }
-        });
-        if (!response.ok) {
-          showStatus(`✗ ${response.error}`, 'error');
-          return;
-        }
-        showStatus('✓ Ordem atualizada', 'success');
-        await onCarregarDia();
-      } catch (err) {
-        showStatus(`✗ ${err.message}`, 'error');
-      }
+    // Reordena por clique, reaproveitando o mesmo caminho do arrasto.
+    const onMoverPosicao = async (de, para) => {
+      const placa = placaAtual.value;
+      if (!placa || para < 0 || para >= placa.fotos.length) return;
+
+      const nomes = placa.fotos.map(f => f.name);
+      nomes.splice(para, 0, ...nomes.splice(de, 1));
+      await aplicarOrdem(placa.placa, nomes);
     };
 
     const onExcluirFotoCarro = async (placa, arquivo) => {
@@ -2125,6 +2186,9 @@ export default {
       explorerFotos,
       explorerErro,
       carrosPastaDestino,
+      carrosPlacaSelecionada,
+      placaAtual,
+      onMoverPosicao,
       onAbrirExplorador,
       onExplorar,
       onExplorarPai,
