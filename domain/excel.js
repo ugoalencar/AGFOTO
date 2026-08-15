@@ -150,7 +150,10 @@ export const EXCEL_HEADERS = {
  */
 export function normalizeHeader(header) {
   if (!header) return null;
-  return String(header).trim().toUpperCase();
+  // Espaco e underscore sao ignorados: a mesma coluna aparece como
+  // "Descricao SAP" numa planilha e "DESCRICAO_SAP" noutra, e sem isso a
+  // descricao simplesmente nao era encontrada e vinha vazia na importacao.
+  return String(header).trim().toUpperCase().replace(/[\s_]+/g, '');
 }
 
 /**

@@ -126,6 +126,28 @@ test('normalizeHeader - case insensitive', () => {
   assert.strictEqual(normalizeHeader('CóDiGo'), 'CÓDIGO');
 });
 
+test('normalizeHeader - espaco e underscore sao equivalentes', () => {
+  // A mesma coluna vem como "Descricao SAP" numa planilha e "DESCRICAO_SAP"
+  // noutra; as duas tem que cair no mesmo lugar.
+  assert.strictEqual(normalizeHeader('Descrição SAP'), normalizeHeader('DESCRIÇÃO_SAP'));
+  assert.strictEqual(normalizeHeader('Código  Interno'), normalizeHeader('CODIGO_INTERNO'.replace('CODIGO', 'CÓDIGO')));
+});
+
+test('findColumnIndex encontra a descricao de uma planilha real', () => {
+  const headers = ['EAN', 'Código', 'Descrição SAP'];
+
+  assert.strictEqual(findColumnIndex(headers, EXCEL_HEADERS.ean), 0);
+  assert.strictEqual(findColumnIndex(headers, EXCEL_HEADERS.codigo), 1);
+  assert.strictEqual(findColumnIndex(headers, EXCEL_HEADERS.descricao), 2);
+});
+
+test('findColumnIndex nao confunde Codigo EAN com Codigo', () => {
+  const headers = ['Código EAN', 'Código'];
+
+  assert.strictEqual(findColumnIndex(headers, EXCEL_HEADERS.ean), 0);
+  assert.strictEqual(findColumnIndex(headers, EXCEL_HEADERS.codigo), 1);
+});
+
 test('normalizeHeader - null and empty', () => {
   assert.strictEqual(normalizeHeader(null), null);
   // Empty string is falsy, so returns null

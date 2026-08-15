@@ -36,7 +36,12 @@ async function resolveLocalWorkbook(filePath) {
   if (typeof filePath !== 'string' || /^https?:\/\//i.test(filePath) || /^file:/i.test(filePath)) {
     throw new Error('Workbook path must be a local path');
   }
-  const candidate = path.resolve(filePath);
+  // Caminho relativo (o caso normal: so o nome do arquivo escolhido na tela) e
+  // resolvido contra a pasta de planilhas, nao contra o diretorio do processo -
+  // senao "Remessa.xlsx" virava <cwd>/Remessa.xlsx e caia na guarda de traversal.
+  const candidate = path.isAbsolute(filePath)
+    ? path.resolve(filePath)
+    : path.resolve(config.paths.xlsx, filePath);
   assertInsideRoot(candidate, config.paths.xlsx);
   const [realRoot, realFile] = await Promise.all([
     fs.promises.realpath(config.paths.xlsx),
