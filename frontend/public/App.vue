@@ -60,10 +60,9 @@
         <div class="ag-card-body">
           <div v-if="tempImages.length === 0" class="grid-empty">Nenhuma imagem nesta sessao</div>
           <div v-else class="grid-miniaturas">
-            <div v-for="img in tempImages" :key="img.name" class="miniatura" :class="classesMiniatura(img.name, 'temp')" @click="openModal(img, 'temp')">
+            <div v-for="img in tempImages" :key="img.name" class="miniatura" @click="openModal(img, 'temp')">
               <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @error="onImageError">
               <button class="btn-deletar" @click.stop="onImageDelete(img)" title="Excluir">&times;</button>
-              <button class="btn-marcar" @click.stop="toggleMarcacao(img.name)" title="Marcar">&check;</button>
             </div>
           </div>
         </div>
@@ -79,7 +78,7 @@
           <div v-if="!selectedGtin" class="grid-empty">Selecione um GTIN</div>
           <div v-else-if="previousImages.length === 0" class="grid-empty">Nenhuma imagem anterior</div>
           <div v-else class="grid-miniaturas">
-            <div v-for="img in previousImages" :key="img.name" class="miniatura" :class="classesMiniatura(img.name, 'anterior')" @click="openModal(img, 'anterior')">
+            <div v-for="img in previousImages" :key="img.name" class="miniatura" @click="openModal(img, 'anterior')">
               <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @error="onImageError">
               <button class="btn-deletar" @click.stop="onDeletePrevious(img)" title="Excluir">&times;</button>
             </div>
@@ -87,22 +86,10 @@
         </div>
       </section>
 
-      <!-- Obs + checkboxes de marcacao -->
+      <!-- Observacao do GTIN. Apontamento de foto e do QA, nao da captura. -->
       <div class="capture-obs-bar">
         <span class="capture-obs-label">Obs</span>
         <textarea class="ag-field" v-model="observacoes" rows="1" placeholder="Observacoes sobre o GTIN"></textarea>
-        <label class="check-wrapper coding" :class="{ 'is-busy': marcacaoEmCurso }">
-          <input type="checkbox" v-model="checkCoding" @change="aplicarSufixo('_coding')"> _coding
-        </label>
-        <label class="check-wrapper rt" :class="{ 'is-busy': marcacaoEmCurso }">
-          <input type="checkbox" v-model="checkRT" @change="aplicarSubpasta('RT')"> RT
-        </label>
-        <label class="check-wrapper is" :class="{ 'is-busy': marcacaoEmCurso }">
-          <input type="checkbox" v-model="checkIS" @change="aplicarSubpasta('IS')"> IS
-        </label>
-        <label class="check-wrapper ap" :class="{ 'is-busy': marcacaoEmCurso }">
-          <input type="checkbox" v-model="checkAP" @change="aplicarSubpasta('AP')"> AP
-        </label>
       </div>
 
       <!-- Botoes de acao -->
@@ -627,16 +614,10 @@ export default {
     const vehicles = ref([]);
 
     // Miniaturas e marcacao (mesma mecanica do sphoto)
-    const imagensMarcadasTemp = ref([]);
     const observacoes = ref('');
     const descricaoProduto = ref('...');
-    const marcacaoEmCurso = ref(false);
     const salvandoCaptura = ref(false);
     const finalizandoCaptura = ref(false);
-    const checkCoding = ref(false);
-    const checkRT = ref(false);
-    const checkIS = ref(false);
-    const checkAP = ref(false);
 
     let refreshInterval = null;
 
@@ -814,7 +795,6 @@ export default {
           // O GTIN continua selecionado: as fotos que sairam da TEMP tem que aparecer
           // agora no palco Anterior, igual no sphoto.
           observacoes.value = '';
-          imagensMarcadasTemp.value = [];
           await loadTempImages();
           await loadLote();
           await loadPreviousImages();
@@ -1541,74 +1521,6 @@ export default {
       document.addEventListener('keydown', onPreviewKeydown);
     });
 
-    const toggleMarcacao = nome => {
-      const lista = imagensMarcadasTemp.value;
-      const indice = lista.indexOf(nome);
-      if (indice >= 0) {
-        lista.splice(indice, 1);
-      } else {
-        lista.push(nome);
-      }
-    };
-
-    // Sufixo ja gravado no nome do arquivo (sem a extensao) - vira contorno colorido.
-    const temSufixo = (nome, sufixo) => {
-      const idx = nome.lastIndexOf('.');
-      const semExt = idx >= 0 ? nome.slice(0, idx) : nome;
-      return semExt.endsWith(sufixo);
-    };
-
-    // So o palco Atual e marcavel na captura; o Anterior aparece so para conferencia.
-    const classesMiniatura = (nome, tipo) => ({
-      marcada: tipo === 'temp' && imagensMarcadasTemp.value.includes(nome),
-      'tem-coding': temSufixo(nome, '_coding'),
-      'tem-rt': temSufixo(nome, '_RT'),
-      'tem-is': temSufixo(nome, '_IS'),
-      'tem-ap': temSufixo(nome, '_AP')
-    });
-
-    // Marcacao na captura age so no palco Atual (TEMP): renomeia o arquivo, e o
-    // salvar depois le a tag. O que ja esta salvo e assunto do QA.
-    const marcarTemp = async (sufixo, rotulo) => {
-      if (imagensMarcadasTemp.value.length === 0) {
-        showStatus('Marque ao menos uma imagem do palco Atual', 'error');
-        return;
-      }
-
-      marcacaoEmCurso.value = true;
-      try {
-        await this.$api.request('/api/captura/marcar', {
-          method: 'POST',
-          data: {
-            location: 'temp',
-            filenames: [...imagensMarcadasTemp.value],
-            suffix: sufixo,
-            operationId: makeOperationId('marcar-temp')
-          }
-        });
-        imagensMarcadasTemp.value = [];
-        await loadTempImages();
-        showStatus(`✓ Imagens marcadas com ${rotulo}`, 'success');
-      } catch (err) {
-        showStatus(`✗ ${err.message}`, 'error');
-      } finally {
-        marcacaoEmCurso.value = false;
-      }
-    };
-
-    const aplicarSufixo = async sufixo => {
-      await marcarTemp(sufixo, sufixo);
-      checkCoding.value = false;
-    };
-
-    // RT/IS/AP na captura viram sufixo no nome; salvar transforma em subpasta.
-    const aplicarSubpasta = async pasta => {
-      await marcarTemp(`_${pasta}`, pasta);
-      if (pasta === 'RT') checkRT.value = false;
-      if (pasta === 'IS') checkIS.value = false;
-      if (pasta === 'AP') checkAP.value = false;
-    };
-
     const onDeletePrevious = async img => {
       if (!confirm(`Remover ${img.name}?`)) return;
       try {
@@ -1699,20 +1611,10 @@ export default {
       statusType,
       currentStatus,
       currentStatusLabel,
-      imagensMarcadasTemp,
       observacoes,
       descricaoProduto,
-      marcacaoEmCurso,
       salvandoCaptura,
       finalizandoCaptura,
-      checkCoding,
-      checkRT,
-      checkIS,
-      checkAP,
-      toggleMarcacao,
-      classesMiniatura,
-      aplicarSufixo,
-      aplicarSubpasta,
       onDeletePrevious,
       selecionarGtinDaLista,
       onFinalizar,

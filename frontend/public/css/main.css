@@ -1226,33 +1226,6 @@ select {
   padding-top: 8px;
 }
 
-.check-wrapper {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 10px;
-  background: var(--ag-panel-2);
-  border: 1px solid var(--ag-line);
-  border-left: 0;
-  color: var(--ag-text);
-  font-size: 12px;
-  cursor: pointer;
-  user-select: none;
-}
-
-.check-wrapper:last-child {
-  border-radius: 0 var(--ag-radius) var(--ag-radius) 0;
-}
-
-.check-wrapper.is-busy {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-.check-wrapper.coding { border-bottom: 2px solid #ffc107; }
-.check-wrapper.rt { border-bottom: 2px solid #fd7e14; }
-.check-wrapper.is { border-bottom: 2px solid #0dcaf0; }
-.check-wrapper.ap { border-bottom: 2px solid #9c27b0; }
 
 .capture-acoes {
   display: grid;
@@ -1323,13 +1296,15 @@ select {
   display: block;
 }
 
-.miniatura .btn-deletar,
-.miniatura .btn-marcar {
+.miniatura .btn-deletar {
   position: absolute;
   top: 6px;
+  right: 6px;
   width: 24px;
   height: 24px;
+  border: none;
   border-radius: 50%;
+  background: rgba(232, 38, 43, 0.9);
   color: #fff;
   font-size: 12px;
   line-height: 1;
@@ -1342,126 +1317,8 @@ select {
   z-index: 10;
 }
 
-.miniatura .btn-deletar {
-  right: 6px;
-  background: rgba(232, 38, 43, 0.9);
-  border: none;
-}
-
-.miniatura .btn-marcar {
-  left: 6px;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-}
-
-.miniatura:hover .btn-deletar,
-.miniatura:hover .btn-marcar { opacity: 1; }
+.miniatura:hover .btn-deletar { opacity: 1; }
 .miniatura .btn-deletar:hover { background: var(--ag-red); }
-.miniatura .btn-marcar:hover { background: var(--ag-orange); }
-
-.miniatura.marcada {
-  border-color: var(--ag-orange);
-  box-shadow: 0 0 0 2px var(--ag-orange);
-}
-
-.miniatura.marcada .btn-marcar {
-  opacity: 1;
-  background: var(--ag-orange);
-  border-color: var(--ag-orange);
-  color: #000;
-}
-
-/* Sufixo ja gravado no nome - contorno permanente, independente da selecao atual */
-.miniatura.tem-coding {
-  border-color: #ffc107;
-  box-shadow: 0 0 0 2px #ffc107;
-}
-
-.miniatura.tem-coding.marcada {
-  box-shadow: 0 0 0 2px #ffc107, 0 0 0 4px var(--ag-orange);
-}
-
-.miniatura.tem-rt { border-color: #fd7e14; box-shadow: 0 0 0 2px #fd7e14; }
-.miniatura.tem-is { border-color: #0dcaf0; box-shadow: 0 0 0 2px #0dcaf0; }
-.miniatura.tem-ap { border-color: #9c27b0; box-shadow: 0 0 0 2px #9c27b0; }
-
-/* Legenda de cores do palco Anterior */
-.legenda-cores {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 10px;
-  font-size: 11px;
-  color: var(--ag-muted);
-}
-
-.legenda-cores-item {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.legenda-cores-cor {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  display: inline-block;
-}
-
-.legenda-cores-cor.coding { background: #ffc107; }
-.legenda-cores-cor.rt { background: #fd7e14; }
-.legenda-cores-cor.is { background: #0dcaf0; }
-.legenda-cores-cor.ap { background: #9c27b0; }
-
-/* Preview das subpastas RT/IS/AP ja movidas */
-.subpasta-preview-titulo {
-  margin: 12px 0 6px;
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--ag-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.subpasta-preview-grid {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.subpasta-preview-item {
-  position: relative;
-  width: 80px;
-  border: 2px solid var(--ag-line);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.subpasta-preview-item img {
-  width: 80px;
-  height: 80px;
-  object-fit: cover;
-  display: block;
-}
-
-.subpasta-preview-item.rt { border-color: #fd7e14; }
-.subpasta-preview-item.is { border-color: #0dcaf0; }
-.subpasta-preview-item.ap { border-color: #9c27b0; }
-
-.subpasta-preview-item .btn-voltar {
-  width: 100%;
-  border: 0;
-  background: var(--ag-panel-3);
-  color: var(--ag-text);
-  font-size: 10px;
-  padding: 3px 0;
-  cursor: pointer;
-}
-
-.subpasta-preview-item .btn-voltar:hover {
-  background: var(--ag-orange);
-  color: #000;
-}
 
 @media (max-width: 1100px) {
   .capture-row-topo,
