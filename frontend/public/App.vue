@@ -36,12 +36,12 @@
 <main v-if="activePage === 'captura'" class="ag-view capture-view">
   <section class="ag-card capture-entry">
     <header class="ag-card-header">
-      <h2 class="ag-card-title">Entrada</h2>
+      <h2 class="ag-card-title">Buscar</h2>
     </header>
-    <div class="ag-card-body" style="display:flex;flex-direction:column;gap:18px">
+    <div class="ag-card-body" style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:flex-end">
       <div>
         <label class="ag-label">Lote</label>
-        <select class="ag-field is-large" v-model="selectedLote" @change="onLoteSelected">
+        <select class="ag-field" v-model="selectedLote" @change="onLoteSelected">
           <option value="">Selecione um lote</option>
           <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ lote }}</option>
         </select>
@@ -49,24 +49,14 @@
 
       <div>
         <label class="ag-label">GTIN / EAN</label>
-        <div style="display:flex;gap:8px">
-          <input class="ag-field is-large" v-model="inputGtin" @keydown.enter="onGtinSearch" type="text" placeholder="Leitor ou digitação" autocomplete="off" style="flex:1">
-          <button class="ag-btn is-primary" @click="onGtinSearch" :disabled="!inputGtin" style="flex:0 0 auto">Buscar</button>
-        </div>
+        <input class="ag-field" v-model="inputGtin" @keydown.enter="onGtinSearch" type="text" placeholder="Leitor ou digitação" autocomplete="off">
       </div>
 
-      <div v-if="selectedGtin">
-        <label class="ag-label">Status</label>
+      <button class="ag-btn is-primary" @click="onGtinSearch" :disabled="!inputGtin">Buscar</button>
+
+      <div v-if="selectedGtin" style="grid-column:1/-1;padding-top:8px;border-top:1px solid var(--ag-line)">
+        <label class="ag-label" style="margin-bottom:6px">Status</label>
         <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span>
-      </div>
-
-      <div class="capture-actions">
-        <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedLote || !selectedGtin || tempImages.length === 0">
-          Salvar ({{ tempImages.length }})
-        </button>
-        <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0">
-          Limpar TEMP
-        </button>
       </div>
     </div>
   </section>
@@ -103,6 +93,17 @@
           <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
         </div>
       </div>
+    </div>
+  </section>
+
+  <section class="ag-card" style="grid-column:1/-1">
+    <div class="capture-actions" style="display:flex;gap:8px">
+      <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedLote || !selectedGtin || tempImages.length === 0" style="flex:1">
+        Salvar ({{ tempImages.length }})
+      </button>
+      <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0" style="flex:1">
+        Limpar TEMP
+      </button>
     </div>
   </section>
 
@@ -238,7 +239,23 @@
           </div>
         </div>
       </section>
-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header><div class="stage-grid"><div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card"><div style="height:74px;display:grid;place-items:center;background:var(--ag-panel);margin-bottom:8px">Foto</div><div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div><div style="display:flex;gap:4px;margin-top:8px"><button class="ag-btn" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button><button class="ag-btn is-warning" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button></div></div></div><div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div></section>
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header>
+        <div class="stage-grid">
+          <div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card" :class="{ 'photo-ap': photo.classification === 'AP', 'photo-at': photo.classification === 'AT' }">
+            <div style="height:120px;background:var(--ag-panel);margin-bottom:8px;border:2px solid var(--ag-line);position:relative;cursor:pointer;overflow:hidden" @click="openModal(photo)">
+              <img :src="photo.url || getImageUrl(photo)" style="width:100%;height:100%;object-fit:cover" @error="onImageError">
+              <div v-if="photo.classification" style="position:absolute;top:4px;right:4px;background:var(--ag-red);color:#fff;padding:2px 6px;font-size:11px;font-weight:bold;border-radius:3px">{{ photo.classification }}</div>
+            </div>
+            <div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div>
+            <div style="display:flex;gap:4px;margin-top:8px">
+              <button class="ag-btn" :class="{ 'is-primary': photo.classification === 'AP' }" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button>
+              <button class="ag-btn is-warning" :class="{ 'is-primary': photo.classification === 'AT' }" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button>
+            </div>
+          </div>
+        </div>
+        <div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div>
+      </section>
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Marcacoes</h2></header><div class="ag-card-body" style="color:var(--ag-muted);font-size:13px"><p><b style="color:var(--ag-yellow)">AP</b> fica fora da entrega normal.</p><p><b style="color:var(--ag-orange)">AT</b> entra na entrega de atualizacao.</p><p>Desfazer e exclusao continuam registrados por auditoria.</p></div></section>
     </main>
     <main v-if="activePage === 'relatorios'" class="ag-view report-view">
