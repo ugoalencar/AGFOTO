@@ -1,0 +1,1169 @@
+﻿# Review package: c51b8ca..b015e94
+
+## Commits
+b015e94 docs: record second task 3 recheck fixes
+9dcb1da fix: make product captures failure-safe
+4555ee6 docs: record task 3 review fixes
+05bad6f fix: preserve product capture state
+75f7343 docs: record task 3 implementation report
+5168075 feat: implement product capture state and control workbook
+
+## Files changed
+ .superpowers/sdd/task-3-report.md          |  81 +++++++++++
+ domain/lote.js                             |  26 +++-
+ domain/status.js                           |  47 +++++-
+ repositories/file-repository.js            |  62 ++++++--
+ repositories/lote-repository.js            |   4 +-
+ server/json-persistence.js                 |  12 +-
+ services/captura-service.js                | 100 ++++++++++---
+ services/excel-service.js                  |  41 ++++++
+ tests/integration/captura-products.test.js | 221 +++++++++++++++++++++++++++++
+ tests/unit/domain-lote.test.js             |  26 +++-
+ 10 files changed, 560 insertions(+), 60 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/task-3-report.md b/.superpowers/sdd/task-3-report.md
+new file mode 100644
+index 0000000..cab1fe1
+--- /dev/null
++++ b/.superpowers/sdd/task-3-report.md
+@@ -0,0 +1,81 @@
++# Task 3 Report
++
++## Status
++
++Completed. Product capture now moves stable TEMP images to `Finalizadas/LOTE <n>/<gtin>/`, persists the lote JSON atomically, and rebuilds the lote sheet in the local `controle-lotes.xlsx` workbook.
++
++## Files
++
++- `domain/status.js`: explicit product events and enforced transitions.
++- `domain/lote.js`: numeric GTIN validation from 1 to 64 digits with leading-zero preservation.
++- `server/json-persistence.js`, `repositories/lote-repository.js`: atomic JSON writes accept the configured backup directory.
++- `repositories/file-repository.js`: collision-safe moves with deterministic `_001` suffixes and cross-device fallback.
++- `services/captura-service.js`: normalized GTIN capture flow, move counters, JSON save, and control workbook update.
++- `services/excel-service.js`: rebuilds the per-lote control sheet from JSON in `controle-lotes.xlsx`.
++- `tests/unit/domain-lote.test.js`, `tests/integration/captura-products.test.js`: domain and end-to-end capture coverage.
++
++No route change was necessary: the app factory operation middleware already owns `operationId` begin/complete behavior for the mutating capture route.
++
++## Commits
++
++- `5168075 feat: implement product capture state and control workbook`
++
++## Tests
++
++- `node --test tests/integration/captura-products.test.js tests/unit/domain-lote.test.js`: 21 passed, 1 skipped (Windows symlink permission).
++- `npm.cmd test`: 128 passed, 1 skipped, 0 failed.
++
++## Concerns
++
++- The existing JSON loader logs an ENOENT before creating a new lote, which makes successful test output noisy. This was pre-existing and was not changed by Task 3.
++- A capture with individual move failures still persists the count of successfully moved files and returns `ok: false`; retry/rework orchestration remains outside this task's scope.
++
++## Fix Review Findings
++
++### Corrections
++
++- Recapture of a GTIN already in `pendente_qa` now retains its status, accumulates `quantidadeFotos`, and records a second `captura_salva` history event with the incremental and total counts.
++- Capture only creates or updates a product after at least one move succeeds. A total move failure returns `ok: false` with `No files moved; capture was not saved`, leaves the lote without a capture record, and does not rebuild Excel.
++- Partial move failures persist only the files moved, update JSON and Excel for that partial operational state, and return `ok: false` with a clear error.
++- Excel is treated as a rebuildable derivative: after the JSON save, an Excel error is returned in `warnings` without changing an otherwise successful capture to `ok: false`.
++- Final destination allocation uses `copyFile(..., COPYFILE_EXCL)` followed by source unlink and retries deterministic suffixes after `EEXIST`; this avoids the Windows `rename` overwrite race while retaining cross-device-safe behavior.
++- Updated move-related comments that still described the flow as a copy.
++
++### Tests
++
++- Added temporary-directory integration coverage for same-GTIN recapture with `foto_001.jpg`, cumulative JSON photo count, and capture history.
++- Added temporary-directory integration coverage for concurrent filename collisions, total move failure, partial move failure, and Excel rebuild failure warnings.
++- `node --test tests/integration/captura-products.test.js tests/unit/domain-lote.test.js`: 26 passed, 1 skipped (Windows symlink permission), 0 failed.
++- `npm.cmd test`: 133 passed, 1 skipped (Windows symlink permission), 0 failed.
++
++### Commits
++
++- `05bad6f fix: preserve product capture state`
++
++### Concerns
++
++- This prior concern was resolved in the second recheck: a total move failure now returns before `loadOrCreate`, so no empty lote JSON is created.
++
++## Fixes da Segunda Rechecagem
++
++### Correções
++
++- A falha de `unlink` após uma cópia exclusiva agora remove o destino recém-criado como compensação. Se essa remoção também falhar, o erro informa explicitamente as duas falhas de limpeza.
++- `saveCapture` é serializado localmente por lote, cobrindo JSON, histórico e a reconstrução da planilha para capturas concorrentes do mesmo lote/GTIN.
++- O lote só é carregado/criado após pelo menos uma foto ser movida, portanto uma falha total de move não cria JSON vazio, produto, status ou planilha de controle.
++
++### Testes
++
++- Adicionada cobertura para falha de `unlink` após `copyFile(..., COPYFILE_EXCL)`: o destino é removido e JSON/Excel não são criados.
++- Adicionada cobertura para duas capturas concorrentes do mesmo lote/GTIN, verificando contagem acumulada e dois eventos `captura_salva`.
++- `node --test tests/integration/captura-products.test.js tests/unit/domain-lote.test.js`: 28 aprovados, 1 ignorado (permissão de symlink no Windows), 0 falhas.
++- `npm.cmd test`: 135 aprovados, 1 ignorado (permissão de symlink no Windows), 0 falhas.
++
++### Commits
++
++- `9dcb1da fix: make product captures failure-safe`
++
++### Preocupações
++
++- A serialização é deliberadamente apenas em memória e protege uma única instância local; coordenação entre processos permanece fora do escopo da Fase 1.
++- O carregador JSON continua emitindo mensagens de ENOENT ao criar lotes novos; isto é ruído preexistente e não afeta o resultado dos testes.
+diff --git a/domain/lote.js b/domain/lote.js
+index 7ba3faa..08b2133 100644
+--- a/domain/lote.js
++++ b/domain/lote.js
+@@ -1,11 +1,11 @@
+-import { ProductStatus } from './status.js';
++import { ProductEvents, ProductStatus, transitionProduct } from './status.js';
+ 
+ /**
+  * Entidade Lote (batch)
+  * Representa um lote de fotografias com múltiplos produtos
+  */
+ export class Lote {
+   constructor(numero) {
+     this.numero = String(numero);
+     this.criadoEm = new Date().toISOString();
+     this.atualizadoEm = new Date().toISOString();
+@@ -120,22 +120,21 @@ export class Produto {
+     if (normalized.length === 0) throw new Error('GTIN cannot be empty');
+     return normalized;
+   }
+ 
+   /**
+    * Valida se GTIN/EAN é válido
+    * Aceita 8, 12, 13 ou 14 dígitos
+    */
+   static isValid(gtin) {
+     const normalized = String(gtin).trim();
+-    const allowedLengths = [8, 12, 13, 14];
+-    return /^\d+$/.test(normalized) && allowedLengths.includes(normalized.length);
++    return /^\d{1,64}$/.test(normalized);
+   }
+ 
+   /**
+    * Registra evento no histórico
+    */
+   addHistoricoEvent(evento, detalhes = {}) {
+     this.historico.push({
+       evento,
+       em: new Date().toISOString(),
+       detalhes
+@@ -148,26 +147,39 @@ export class Produto {
+    */
+   updatePhotoCount(count) {
+     this.quantidadeFotos = Math.max(0, count);
+     if (this.dataFotografia === null && count > 0) {
+       this.dataFotografia = new Date().toISOString();
+     }
+     this.addHistoricoEvent('foto_count_updated', { quantidadeFotos: count });
+   }
+ 
+   /**
+-   * Marca como captura salva (muda status para pendente_qa)
++   * Registra fotos movidas e conserva o produto em pendente_qa em recapturas.
+    */
+   markCaptureSaved(photoCount) {
+-    this.updatePhotoCount(photoCount);
+-    this.status = ProductStatus.PENDENTE_QA;
+-    this.addHistoricoEvent('captura_salva', { quantidadeFotos: photoCount });
++    const quantidadeFotos = this.quantidadeFotos + photoCount;
++    this.updatePhotoCount(quantidadeFotos);
++
++    if (this.status === ProductStatus.PENDENTE_QA) {
++      this.addHistoricoEvent(ProductEvents.CAPTURA_SALVA, {
++        quantidadeFotos: photoCount,
++        totalFotos: quantidadeFotos,
++        recaptura: true
++      });
++      return;
++    }
++
++    transitionProduct(this, ProductEvents.CAPTURA_SALVA, {
++      quantidadeFotos: photoCount,
++      totalFotos: quantidadeFotos
++    });
+   }
+ 
+   /**
+    * Registra erro de entrega
+    */
+   recordDeliveryError(error) {
+     this.ultimoErro = error;
+     this.status = ProductStatus.ERRO_ENTREGA;
+     this.addHistoricoEvent('erro_entrega', { erro: error });
+   }
+diff --git a/domain/status.js b/domain/status.js
+index 973e2fe..645df3d 100644
+--- a/domain/status.js
++++ b/domain/status.js
+@@ -1,22 +1,31 @@
+ /**
+  * Estados possíveis para um produto em lote
+  */
+-export const ProductStatus = {
++export const ProductStatus = Object.freeze({
+   EM_CAPTURA: 'em_captura',
+   PENDENTE_QA: 'pendente_qa',
+   PRONTO_PARA_ENTREGA: 'pronto_para_entrega',
+   ENTREGANDO: 'entregando',
+   ENTREGUE: 'entregue',
+   ERRO_ENTREGA: 'erro_entrega',
+   RETRABALHO: 'retrabalho'
+-};
++});
++
++export const ProductEvents = Object.freeze({
++  CAPTURA_SALVA: 'captura_salva',
++  QA_CONCLUIDO: 'qa_concluido',
++  ENTREGA_INICIADA: 'entrega_iniciada',
++  ENTREGA_CONFIRMADA: 'entrega_confirmada',
++  ENTREGA_FALHOU: 'entrega_falhou',
++  RETRABALHO_INICIADO: 'retrabalho_iniciado'
++});
+ 
+ /**
+  * Transições permitidas entre estados
+  */
+ export const StatusTransitions = {
+   [ProductStatus.EM_CAPTURA]: [ProductStatus.PENDENTE_QA],
+   [ProductStatus.PENDENTE_QA]: [ProductStatus.PRONTO_PARA_ENTREGA, ProductStatus.RETRABALHO],
+   [ProductStatus.PRONTO_PARA_ENTREGA]: [ProductStatus.ENTREGANDO, ProductStatus.RETRABALHO],
+   [ProductStatus.ENTREGANDO]: [ProductStatus.ENTREGUE, ProductStatus.ERRO_ENTREGA],
+   [ProductStatus.ERRO_ENTREGA]: [ProductStatus.ENTREGANDO, ProductStatus.RETRABALHO],
+@@ -24,27 +33,59 @@ export const StatusTransitions = {
+ };
+ 
+ /**
+  * Valida transição de status
+  */
+ export function canTransition(currentStatus, targetStatus) {
+   const allowed = StatusTransitions[currentStatus];
+   return allowed && allowed.includes(targetStatus);
+ }
+ 
++export function nextProductStatus(currentStatus, event) {
++  const targets = {
++    [ProductEvents.CAPTURA_SALVA]: ProductStatus.PENDENTE_QA,
++    [ProductEvents.QA_CONCLUIDO]: ProductStatus.PRONTO_PARA_ENTREGA,
++    [ProductEvents.ENTREGA_INICIADA]: ProductStatus.ENTREGANDO,
++    [ProductEvents.ENTREGA_CONFIRMADA]: ProductStatus.ENTREGUE,
++    [ProductEvents.ENTREGA_FALHOU]: ProductStatus.ERRO_ENTREGA,
++    [ProductEvents.RETRABALHO_INICIADO]: ProductStatus.RETRABALHO
++  };
++  const targetStatus = targets[event];
++  if (!targetStatus) throw new Error(`Unknown product event: ${event}`);
++  if (!canTransition(currentStatus, targetStatus)) {
++    throw new Error(`Invalid product transition: ${currentStatus} -> ${targetStatus}`);
++  }
++  return targetStatus;
++}
++
++export function transitionProduct(produto, event, details = {}) {
++  const targetStatus = nextProductStatus(produto.status, event);
++  produto.status = targetStatus;
++  produto.addHistoricoEvent(event, details);
++  return produto;
++}
++
+ /**
+  * Obtém descrição legível do status
+  */
+ export function getStatusLabel(status) {
+   const labels = {
+     [ProductStatus.EM_CAPTURA]: 'Em Captura',
+     [ProductStatus.PENDENTE_QA]: 'Pendente QA',
+     [ProductStatus.PRONTO_PARA_ENTREGA]: 'Pronto para Entrega',
+     [ProductStatus.ENTREGANDO]: 'Entregando',
+     [ProductStatus.ENTREGUE]: 'Entregue',
+     [ProductStatus.ERRO_ENTREGA]: 'Erro na Entrega',
+     [ProductStatus.RETRABALHO]: 'Retrabalho'
+   };
+   return labels[status] || status;
+ }
+ 
+-export default { ProductStatus, StatusTransitions, canTransition, getStatusLabel };
++export default {
++  ProductStatus,
++  ProductEvents,
++  StatusTransitions,
++  canTransition,
++  nextProductStatus,
++  transitionProduct,
++  getStatusLabel
++};
+diff --git a/repositories/file-repository.js b/repositories/file-repository.js
+index b61205f..1273539 100644
+--- a/repositories/file-repository.js
++++ b/repositories/file-repository.js
+@@ -1,19 +1,18 @@
+ import path from 'path';
+ import fs from 'fs';
+ import { fileURLToPath } from 'url';
+ import {
+   securePath,
+   validateFilename,
+   createSecureDirectory,
+   listAllowedFiles,
+-  copySecureFile,
+   removeSecureFile,
+   waitForFileStability
+ } from '../server/secure-filesystem.js';
+ import { config } from '../server/config.js';
+ import { auditDelete } from '../server/audit-logger.js';
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ const ROOT = path.resolve(__dirname, '..');
+ 
+ /**
+@@ -70,45 +69,78 @@ export class FileRepository {
+         size: stats.size,
+         modified: stats.mtime.toISOString(),
+         isFile: stats.isFile()
+       };
+     } catch (err) {
+       throw new Error(`Cannot get file info: ${err.message}`);
+     }
+   }
+ 
+   /**
+-   * Copia arquivo de TEMP para Finalizadas com snapshot atomicidade
++   * Move arquivo de TEMP para Finalizadas sem sobrescrever.
+    * Não sobrescreve, usa nome determinístico em colisão
+    */
+-  static async copyToFinalizadas(srcPath, loteNumero, gtin) {
++  static async uniqueDestPath(destDir, filename, counter = 0) {
++    const ext = path.extname(filename);
++    const base = path.basename(filename, ext);
++    return counter === 0
++      ? path.join(destDir, filename)
++      : path.join(destDir, `${base}_${String(counter).padStart(3, '0')}${ext}`);
++  }
++
++  /**
++   * Moves a validated TEMP image to Finalizadas without overwriting existing files.
++   */
++  static async moveToFinalizadas(srcPath, loteNumero, gtin) {
+     try {
+       const safeSrc = securePath(srcPath, config.paths.imagesTemp);
+ 
+       // Valida GTIN
+       if (!gtin || typeof gtin !== 'string') {
+         throw new Error('GTIN is required');
+       }
+ 
+       // Cria diretório de destino
+       const destDir = path.join(
+         config.paths.finalizadas,
+         `LOTE ${loteNumero}`,
+         gtin
+       );
+-      await createSecureDirectory(destDir);
++      await createSecureDirectory(destDir, config.paths.finalizadas);
++      const filename = validateFilename(path.basename(safeSrc));
+ 
+-      // Copia arquivo
+-      const destPath = await copySecureFile(srcPath, destDir);
+-      return destPath;
++      for (let counter = 0; ; counter++) {
++        const destPath = await this.uniqueDestPath(destDir, filename, counter);
++        try {
++          await fs.promises.copyFile(safeSrc, destPath, fs.constants.COPYFILE_EXCL);
++        } catch (err) {
++          if (err.code === 'EEXIST') continue;
++          throw err;
++        }
++
++        try {
++          await fs.promises.unlink(safeSrc);
++        } catch (unlinkError) {
++          try {
++            await fs.promises.unlink(destPath);
++          } catch (cleanupError) {
++            throw new Error(
++              `Source cleanup failed after exclusive copy (${unlinkError.message}); ` +
++              `destination cleanup also failed (${cleanupError.message})`
++            );
++          }
++          throw new Error(`Source cleanup failed after exclusive copy; destination copy was removed (${unlinkError.message})`);
++        }
++        return destPath;
++      }
+     } catch (err) {
+-      throw new Error(`Cannot copy to finalizadas: ${err.message}`);
++      throw new Error(`Cannot move to finalizadas: ${err.message}`);
+     }
+   }
+ 
+   /**
+    * Lista imagens em um diretório Finalizadas
+    */
+   static async listFinalizadasImages(loteNumero, gtin, subfolder = null) {
+     try {
+       let dirPath = path.join(
+         config.paths.finalizadas,
+@@ -205,40 +237,40 @@ export class FileRepository {
+         }
+       }
+ 
+       return stable;
+     } catch (err) {
+       throw new Error(`Cannot snapshot temp files: ${err.message}`);
+     }
+   }
+ 
+   /**
+-   * Copia snapshot de arquivos para Finalizadas
++   * Move snapshot de arquivos para Finalizadas
+    */
+-  static async copySnapshotToFinalizadas(snapshot, loteNumero, gtin) {
++  static async moveSnapshotToFinalizadas(snapshot, loteNumero, gtin) {
+     try {
+-      const copied = [];
++      const moved = [];
+       const failed = [];
+ 
+       for (const file of snapshot) {
+         try {
+-          const destPath = await this.copyToFinalizadas(file.path, loteNumero, gtin);
+-          copied.push({
++          const destPath = await this.moveToFinalizadas(file.path, loteNumero, gtin);
++          moved.push({
+             src: file.name,
+             dest: path.basename(destPath)
+           });
+         } catch (err) {
+           failed.push({
+             file: file.name,
+             error: err.message
+           });
+         }
+       }
+ 
+-      return { copied, failed };
++      return { moved, failed };
+     } catch (err) {
+-      throw new Error(`Cannot copy snapshot: ${err.message}`);
++      throw new Error(`Cannot move snapshot: ${err.message}`);
+     }
+   }
+ }
+ 
+ export default FileRepository;
+diff --git a/repositories/lote-repository.js b/repositories/lote-repository.js
+index 3b00490..eb9ffff 100644
+--- a/repositories/lote-repository.js
++++ b/repositories/lote-repository.js
+@@ -46,21 +46,21 @@ export class LoteRepository {
+         return Lote.fromJSON(data);
+       } catch (err) {
+         // Lote não existe, cria novo
+         const lote = new Lote(numero);
+ 
+         // Cria diretórios
+         await createSecureDirectory(this.getLoteFinalizadasPath(numero), config.paths.root);
+         await createSecureDirectory(config.paths.jsons, config.paths.root);
+ 
+         // Salva JSON inicial
+-        await writeJsonAtomic(jsonPath, lote.toJSON());
++        await writeJsonAtomic(jsonPath, lote.toJSON(), { backupDir: config.paths.backups });
+ 
+         return lote;
+       }
+     } catch (err) {
+       throw new Error(`Failed to load or create lote: ${err.message}`);
+     }
+   }
+ 
+   /**
+    * Carrega lote existente
+@@ -80,21 +80,21 @@ export class LoteRepository {
+    * Salva um lote
+    */
+   static async save(lote) {
+     try {
+       if (!(lote instanceof Lote)) {
+         throw new Error('Invalid lote object');
+       }
+ 
+       const jsonPath = this.getLoteJsonPath(lote.numero);
+       await createSecureDirectory(path.dirname(jsonPath), config.paths.root);
+-      await writeJsonAtomic(jsonPath, lote.toJSON());
++      await writeJsonAtomic(jsonPath, lote.toJSON(), { backupDir: config.paths.backups });
+ 
+       return jsonPath;
+     } catch (err) {
+       throw new Error(`Failed to save lote: ${err.message}`);
+     }
+   }
+ 
+   /**
+    * Atualiza um lote de forma segura (lê, modifica, escreve)
+    */
+diff --git a/server/json-persistence.js b/server/json-persistence.js
+index 1dee393..63b0b90 100644
+--- a/server/json-persistence.js
++++ b/server/json-persistence.js
+@@ -1,44 +1,44 @@
+ import fs from 'fs';
+ import path from 'path';
+ import { v4 as uuidv4 } from 'uuid';
+ import { config } from './config.js';
+-function getBackupsDir() {
+-  return config.paths.backups || path.join(config.paths.dados, 'backups');
++function getBackupsDir(backupDir = null) {
++  return backupDir || config.paths.backups || path.join(config.paths.dados, 'backups');
+ }
+ 
+ /**
+  * Realiza escrita atômica de JSON com backup automático
+  * 1. Escreve em arquivo temporário na mesma pasta
+  * 2. Sincroniza
+  * 3. Renomeia para destino
+  * 4. Mantém backup da última versão válida
+  */
+-export async function writeJsonAtomic(filePath, data) {
++export async function writeJsonAtomic(filePath, data, { backupDir = null } = {}) {
+   try {
+     // Validação básica
+     if (!filePath) throw new Error('filePath is required');
+     const dir = path.dirname(filePath);
+ 
+     // Cria diretório se necessário
+     await fs.promises.mkdir(dir, { recursive: true });
+ 
+     // Escreve em arquivo temporário
+     const tempPath = `${filePath}.${Date.now()}.tmp`;
+     const jsonContent = JSON.stringify(data, null, 2);
+ 
+     await fs.promises.writeFile(tempPath, jsonContent, 'utf8');
+ 
+     // Se arquivo original existe, faz backup
+     try {
+       await fs.promises.access(filePath);
+-      const backupPath = await createBackup(filePath);
++      const backupPath = await createBackup(filePath, backupDir);
+       console.log(`Backup created: ${backupPath}`);
+     } catch {
+       // Arquivo original não existe, ignorar
+     }
+ 
+     // Renomeia arquivo temporário para destino
+     await fs.promises.rename(tempPath, filePath);
+ 
+     return { success: true, path: filePath };
+   } catch (err) {
+@@ -75,23 +75,23 @@ export async function readJsonSafe(filePath) {
+       }
+     }
+ 
+     throw new Error(`Cannot read JSON and no backup available: ${err.message}`);
+   }
+ }
+ 
+ /**
+  * Cria backup de arquivo JSON
+  */
+-async function createBackup(filePath) {
++async function createBackup(filePath, backupDir = null) {
+   try {
+-    const backupsDir = getBackupsDir();
++    const backupsDir = getBackupsDir(backupDir);
+     await fs.promises.mkdir(backupsDir, { recursive: true });
+ 
+     const filename = path.basename(filePath);
+     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+     const id = uuidv4().substring(0, 8);
+     const backupPath = path.join(backupsDir, `${filename}.${timestamp}.${id}.bak`);
+ 
+     await fs.promises.copyFile(filePath, backupPath);
+     return backupPath;
+   } catch (err) {
+diff --git a/services/captura-service.js b/services/captura-service.js
+index d15e6cf..9fc0972 100644
+--- a/services/captura-service.js
++++ b/services/captura-service.js
+@@ -1,20 +1,43 @@
+ import LoteRepository from '../repositories/lote-repository.js';
+ import { FileRepository } from '../repositories/file-repository.js';
+ import { Produto } from '../domain/lote.js';
+ import { auditLogger } from '../server/audit-logger.js';
++import ExcelService from './excel-service.js';
+ 
+ /**
+  * Serviço de Captura
+  * Orquestra lógica de captura de fotos, salvamento e transições de estado
+  */
+ export class CapturaService {
++  static captureLocks = new Map();
++
++  static async withCaptureLock(loteNumero, operation) {
++    const key = String(loteNumero ?? '').trim();
++    const previous = this.captureLocks.get(key) || Promise.resolve();
++    let release;
++    const current = new Promise(resolve => {
++      release = resolve;
++    });
++    this.captureLocks.set(key, current);
++
++    await previous.catch(() => {});
++    try {
++      return await operation();
++    } finally {
++      release();
++      if (this.captureLocks.get(key) === current) {
++        this.captureLocks.delete(key);
++      }
++    }
++  }
++
+   /**
+    * Carrega ou cria lote
+    */
+   static async loadOrCreateLote(numero) {
+     try {
+       const lote = await LoteRepository.loadOrCreate(numero);
+       return {
+         ok: true,
+         data: {
+           lote: lote.numero,
+@@ -87,91 +110,122 @@ export class CapturaService {
+       };
+     }
+   }
+ 
+   /**
+    * Salva captura de fotos para um lote e GTIN
+    * Fluxo:
+    * 1. Snapshots nomes disponíveis em TEMP
+    * 2. Valida GTIN
+    * 3. Carrega/cria lote
+-   * 4. Copia snapshot para Finalizadas/LOTE/GTIN/
++   * 4. Move snapshot para Finalizadas/LOTE/GTIN/
+    * 5. Atualiza JSON com novo status
+    * 6. Registra auditoria
+    */
+   static async saveCapture(loteNumero, gtin, codigo = null, descricao = null) {
++    return this.withCaptureLock(loteNumero, () => (
++      this.saveCaptureLocked(loteNumero, gtin, codigo, descricao)
++    ));
++  }
++
++  static async saveCaptureLocked(loteNumero, gtin, codigo = null, descricao = null) {
+     let snapshot;
++    let normalizedGtin = gtin;
+ 
+     try {
+       // 1. Snapshots arquivos estáveis em TEMP
+       snapshot = await FileRepository.snapshotTempFiles();
+ 
+       if (snapshot.length === 0) {
+         return {
+           ok: false,
+           error: 'No stable images in TEMP'
+         };
+       }
+ 
+       // 2. Valida GTIN
+       if (!Produto.isValid(gtin)) {
+         return {
+           ok: false,
+           error: `Invalid GTIN: ${gtin}`
+         };
+       }
++      normalizedGtin = Produto.normalize(gtin);
+ 
+       // 3. Carrega ou cria lote
+-      const lote = await LoteRepository.loadOrCreate(loteNumero);
+-
+-      // 4. Atualiza produto
+-      const produto = lote.getOrCreateItem(gtin, codigo, descricao);
+-      produto.markCaptureSaved(snapshot.length);
+-
+-      // 5. Copia snapshot para Finalizadas
+-      const copyResult = await FileRepository.copySnapshotToFinalizadas(
++      // 4. ObtÃ©m produto alvo
++      const moveResult = await FileRepository.moveSnapshotToFinalizadas(
+         snapshot,
+         loteNumero,
+-        gtin
++        normalizedGtin
+       );
+ 
+-      if (copyResult.failed.length > 0) {
+-        console.warn(`Some files failed to copy: `, copyResult.failed);
++      if (moveResult.failed.length > 0) {
++        console.warn(`Some files failed to move: `, moveResult.failed);
+       }
+ 
+-      // 6. Salva lote
++      if (moveResult.moved.length === 0) {
++        return {
++          ok: false,
++          error: 'No files moved; capture was not saved',
++          data: {
++            lote: loteNumero,
++            gtin: normalizedGtin,
++            fotosMovidas: 0,
++            fotosFalhadas: moveResult.failed.length,
++            detalhes: moveResult
++          }
++        };
++      }
++
++      // Atualiza o JSON apenas com as fotos efetivamente movidas.
++      const lote = await LoteRepository.loadOrCreate(loteNumero);
++      const produto = lote.getOrCreateItem(normalizedGtin, codigo, descricao);
++      produto.markCaptureSaved(moveResult.moved.length);
+       await LoteRepository.save(lote);
+ 
++      const warnings = [];
++      try {
++        await ExcelService.updateControlFromLote(loteNumero);
++      } catch (err) {
++        warnings.push({
++          code: 'CONTROL_WORKBOOK_UPDATE_FAILED',
++          error: err.message
++        });
++      }
++
+       // 7. Registra auditoria
+       await auditLogger.log('CAPTURA_SALVA', {
+         lote: loteNumero,
+-        gtin,
++        gtin: normalizedGtin,
+         codigo,
+-        fotosCopied: copyResult.copied.length,
+-        fotosFailed: copyResult.failed.length
++        fotosMovidas: moveResult.moved.length,
++        fotosFalhadas: moveResult.failed.length
+       });
+ 
+       return {
+-        ok: true,
++        ok: moveResult.failed.length === 0,
+         data: {
+           lote: lote.numero,
+-          gtin,
+-          fotosCopidas: copyResult.copied.length,
+-          fotosFalhadas: copyResult.failed.length,
++          gtin: normalizedGtin,
++          fotosMovidas: moveResult.moved.length,
++          fotosFalhadas: moveResult.failed.length,
+           status: produto.status,
+-          detalhes: copyResult
+-        }
++          detalhes: moveResult
++        },
++        error: moveResult.failed.length ? 'Some files failed to move' : undefined,
++        warnings: warnings.length > 0 ? warnings : undefined
+       };
+     } catch (err) {
+       await auditLogger.log('CAPTURA_ERRO', {
+         lote: loteNumero,
+-        gtin,
++        gtin: normalizedGtin,
+         erro: err.message
+       });
+ 
+       return {
+         ok: false,
+         error: err.message
+       };
+     }
+   }
+ 
+diff --git a/services/excel-service.js b/services/excel-service.js
+index 9d79b7d..0669f15 100644
+--- a/services/excel-service.js
++++ b/services/excel-service.js
+@@ -11,20 +11,61 @@ import {
+ } from '../domain/excel.js';
+ import { config } from '../server/config.js';
+ import { auditLogger } from '../server/audit-logger.js';
+ import LoteRepository from '../repositories/lote-repository.js';
+ 
+ /**
+  * Serviço de Excel
+  * Gerencia importação, unificação e exportação de planilhas
+  */
+ export class ExcelService {
++  /**
++   * Rebuilds one lote sheet in the local control workbook from the JSON source.
++   */
++  static async updateControlFromLote(loteNumero) {
++    const lote = await LoteRepository.load(loteNumero);
++    await fs.promises.mkdir(config.paths.xlsx, { recursive: true });
++
++    const filePath = path.join(config.paths.xlsx, 'controle-lotes.xlsx');
++    const workbook = new ExcelJS.Workbook();
++    try {
++      await workbook.xlsx.readFile(filePath);
++    } catch {
++      // A missing or unreadable derivative is rebuilt from the operational JSON.
++    }
++
++    const sheetName = `Lote ${loteNumero}`;
++    const existingSheet = workbook.getWorksheet(sheetName);
++    if (existingSheet) workbook.removeWorksheet(existingSheet.id);
++
++    const sheet = workbook.addWorksheet(sheetName);
++    sheet.addRow([
++      'EAN', 'Codigo', 'Descricao', 'Data da foto',
++      'Quantidade de fotos', 'Status', 'Ultima entrega', 'Ultimo erro'
++    ]);
++    for (const item of Object.values(lote.itens)) {
++      sheet.addRow([
++        item.gtin,
++        item.codigo || '',
++        item.descricao || '',
++        item.dataFotografia || '',
++        item.quantidadeFotos,
++        item.status,
++        item.ultimaEntregaEm || '',
++        item.ultimoErro || ''
++      ]);
++    }
++
++    await workbook.xlsx.writeFile(filePath);
++    return { ok: true, data: { filePath } };
++  }
++
+   /**
+    * Lê arquivo Excel e extrai items
+    */
+   static async parseExcelFile(filePath) {
+     try {
+       const workbook = new ExcelJS.Workbook();
+       await workbook.xlsx.readFile(filePath);
+ 
+       const worksheet = workbook.worksheets[0];
+       if (!worksheet) {
+diff --git a/tests/integration/captura-products.test.js b/tests/integration/captura-products.test.js
+index f083472..8729e9d 100644
+--- a/tests/integration/captura-products.test.js
++++ b/tests/integration/captura-products.test.js
+@@ -1,15 +1,18 @@
+ import test from 'node:test';
+ import assert from 'node:assert/strict';
+ import fs from 'fs';
+ import path from 'path';
++import ExcelJS from 'exceljs';
+ import { FileRepository } from '../../repositories/file-repository.js';
++import CapturaService from '../../services/captura-service.js';
++import ExcelService from '../../services/excel-service.js';
+ import { createApp } from '../../server/app.js';
+ import { createTestEnv } from '../helpers/test-env.js';
+ import { applyConfigOverrides } from '../../server/config.js';
+ 
+ const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+ const RIFF_WAV_BYTES = Buffer.from([
+   0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
+   0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20
+ ]);
+ 
+@@ -102,10 +105,228 @@ test('camera API reports status and opens through the operation middleware', asy
+     headers: { 'Content-Type': 'application/json' },
+     body: JSON.stringify({ operationId: 'open-camera' })
+   });
+   const missingOperationId = await request(app, '/api/status/camera/open', { method: 'POST' });
+ 
+   assert.deepEqual(JSON.parse(status.body.toString()).data, await cameraService.getStatus());
+   assert.deepEqual(JSON.parse(opened.body.toString()).data, await cameraService.open());
+   assert.equal(missingOperationId.status, 400);
+   assert.match(JSON.parse(missingOperationId.body.toString()).error, /operationId/i);
+ });
++
++test('save capture moves snapshot, updates JSON and control workbook without overwriting', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
++  const finalPhoto = path.join(env.paths.finalizadas, 'LOTE 37', '000123', 'foto.jpg');
++  const suffixedPhoto = path.join(env.paths.finalizadas, 'LOTE 37', '000123', 'foto_001.jpg');
++  await fs.promises.writeFile(tempPhoto, JPG_BYTES);
++  await fs.promises.mkdir(path.dirname(finalPhoto), { recursive: true });
++  await fs.promises.writeFile(finalPhoto, Buffer.from('existing photo'));
++
++  const result = await CapturaService.saveCapture('37', '000123', '', 'Produto local');
++
++  assert.equal(result.ok, true);
++  assert.equal(result.data.fotosMovidas, 1);
++  assert.equal(await fs.promises.stat(tempPhoto).then(() => true, () => false), false);
++  assert.deepEqual(await fs.promises.readFile(finalPhoto), Buffer.from('existing photo'));
++  assert.deepEqual(await fs.promises.readFile(suffixedPhoto), JPG_BYTES);
++
++  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_37.json'), 'utf8'));
++  assert.equal(loteJson.itens['000123'].status, 'pendente_qa');
++  assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
++
++  const controlPath = path.join(env.paths.xlsx, 'controle-lotes.xlsx');
++  const workbook = new ExcelJS.Workbook();
++  await workbook.xlsx.readFile(controlPath);
++  const sheet = workbook.getWorksheet('Lote 37');
++  assert.ok(sheet);
++  assert.equal(sheet.getCell('A2').value, '000123');
++  assert.equal(sheet.getCell('F2').value, 'pendente_qa');
++});
++
++test('save capture uses the normalized GTIN as the JSON key and final folder', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto.jpg'), JPG_BYTES);
++
++  const result = await CapturaService.saveCapture('38', ' 000123 ');
++
++  assert.equal(result.ok, true);
++  assert.equal(result.data.gtin, '000123');
++  assert.equal(
++    await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 38', '000123', 'foto.jpg')).then(() => true, () => false),
++    true
++  );
++  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_38.json'), 'utf8'));
++  assert.ok(loteJson.itens['000123']);
++});
++
++test('moving colliding filenames concurrently preserves both files with deterministic suffixes', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  const firstSource = path.join(env.paths.imagesTemp, 'primeira', 'foto.jpg');
++  const secondSource = path.join(env.paths.imagesTemp, 'segunda', 'foto.jpg');
++  await fs.promises.mkdir(path.dirname(firstSource), { recursive: true });
++  await fs.promises.mkdir(path.dirname(secondSource), { recursive: true });
++  await fs.promises.writeFile(firstSource, Buffer.from('first'));
++  await fs.promises.writeFile(secondSource, Buffer.from('second'));
++
++  await Promise.all([
++    FileRepository.moveToFinalizadas(firstSource, '38', '000123'),
++    FileRepository.moveToFinalizadas(secondSource, '38', '000123')
++  ]);
++
++  const destination = path.join(env.paths.finalizadas, 'LOTE 38', '000123');
++  const contents = await Promise.all([
++    fs.promises.readFile(path.join(destination, 'foto.jpg'), 'utf8'),
++    fs.promises.readFile(path.join(destination, 'foto_001.jpg'), 'utf8')
++  ]);
++  assert.deepEqual(contents.sort(), ['first', 'second']);
++});
++
++test('save capture recaptures the same GTIN with a deterministic suffix and cumulative photo count', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
++
++  await fs.promises.writeFile(tempPhoto, JPG_BYTES);
++  const firstCapture = await CapturaService.saveCapture('39', '000123');
++  await fs.promises.writeFile(tempPhoto, JPG_BYTES);
++  const secondCapture = await CapturaService.saveCapture('39', '000123');
++
++  assert.equal(firstCapture.ok, true);
++  assert.equal(secondCapture.ok, true);
++  assert.equal(secondCapture.data.fotosMovidas, 1);
++  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 39', '000123', 'foto.jpg')).then(() => true, () => false), true);
++  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 39', '000123', 'foto_001.jpg')).then(() => true, () => false), true);
++
++  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_39.json'), 'utf8'));
++  const produto = loteJson.itens['000123'];
++  assert.equal(produto.status, 'pendente_qa');
++  assert.equal(produto.quantidadeFotos, 2);
++  assert.equal(produto.historico.filter(evento => evento.evento === 'captura_salva').length, 2);
++});
++
++test('save capture does not persist a lote, product, or workbook when no files move', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto.jpg'), JPG_BYTES);
++  const originalMove = FileRepository.moveToFinalizadas;
++  FileRepository.moveToFinalizadas = async () => {
++    throw new Error('destination unavailable');
++  };
++  t.after(() => {
++    FileRepository.moveToFinalizadas = originalMove;
++  });
++
++  const result = await CapturaService.saveCapture('40', '000123');
++
++  assert.equal(result.ok, false);
++  assert.match(result.error, /no files moved/i);
++  assert.equal(await fs.promises.stat(path.join(env.paths.jsons, 'Lote_40.json')).then(() => true, () => false), false);
++  assert.equal(await fs.promises.stat(path.join(env.paths.xlsx, 'controle-lotes.xlsx')).then(() => true, () => false), false);
++});
++
++test('save capture persists only moved files when a later move fails', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'a.jpg'), JPG_BYTES);
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'b.jpg'), JPG_BYTES);
++  const originalMove = FileRepository.moveToFinalizadas;
++  FileRepository.moveToFinalizadas = async (srcPath, ...args) => {
++    if (path.basename(srcPath) === 'b.jpg') throw new Error('simulated move failure');
++    return originalMove.call(FileRepository, srcPath, ...args);
++  };
++  t.after(() => {
++    FileRepository.moveToFinalizadas = originalMove;
++  });
++
++  const result = await CapturaService.saveCapture('41', '000123');
++
++  assert.equal(result.ok, false);
++  assert.match(result.error, /some files failed to move/i);
++  assert.equal(result.data.fotosMovidas, 1);
++  assert.equal(result.data.fotosFalhadas, 1);
++  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_41.json'), 'utf8'));
++  assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
++  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 41', '000123', 'a.jpg')).then(() => true, () => false), true);
++  assert.equal(await fs.promises.stat(path.join(env.paths.imagesTemp, 'b.jpg')).then(() => true, () => false), true);
++});
++
++test('save capture reports an Excel rebuild failure as a warning after JSON is saved', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto.jpg'), JPG_BYTES);
++  const originalUpdateControl = ExcelService.updateControlFromLote;
++  ExcelService.updateControlFromLote = async () => {
++    throw new Error('workbook is locked');
++  };
++  t.after(() => {
++    ExcelService.updateControlFromLote = originalUpdateControl;
++  });
++
++  const result = await CapturaService.saveCapture('42', '000123');
++
++  assert.equal(result.ok, true);
++  assert.equal(result.data.fotosMovidas, 1);
++  assert.match(result.warnings[0].error, /workbook is locked/i);
++  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_42.json'), 'utf8'));
++  assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
++});
++
++test('save capture removes its final destination when TEMP unlink fails after an exclusive copy', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
++  const finalPhoto = path.join(env.paths.finalizadas, 'LOTE 43', '000123', 'foto.jpg');
++  await fs.promises.writeFile(tempPhoto, JPG_BYTES);
++  const originalUnlink = fs.promises.unlink;
++  fs.promises.unlink = async filePath => {
++    if (filePath === tempPhoto) throw new Error('simulated TEMP unlink failure');
++    return originalUnlink.call(fs.promises, filePath);
++  };
++  t.after(() => {
++    fs.promises.unlink = originalUnlink;
++  });
++
++  const result = await CapturaService.saveCapture('43', '000123');
++
++  assert.equal(result.ok, false);
++  assert.match(result.error, /no files moved/i);
++  assert.equal(await fs.promises.stat(finalPhoto).then(() => true, () => false), false);
++  assert.equal(await fs.promises.stat(path.join(env.paths.jsons, 'Lote_43.json')).then(() => true, () => false), false);
++  assert.equal(await fs.promises.stat(path.join(env.paths.xlsx, 'controle-lotes.xlsx')).then(() => true, () => false), false);
++});
++
++test('concurrent captures for the same lote and GTIN preserve cumulative JSON state', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  const firstPhoto = path.join(env.paths.imagesTemp, 'first.jpg');
++  const secondPhoto = path.join(env.paths.imagesTemp, 'second.jpg');
++  await fs.promises.writeFile(firstPhoto, JPG_BYTES);
++  await fs.promises.writeFile(secondPhoto, JPG_BYTES);
++
++  const originalSnapshot = FileRepository.snapshotTempFiles;
++  let snapshotCall = 0;
++  FileRepository.snapshotTempFiles = async () => {
++    snapshotCall += 1;
++    return snapshotCall === 1
++      ? [{ name: 'first.jpg', path: firstPhoto }]
++      : [{ name: 'second.jpg', path: secondPhoto }];
++  };
++  t.after(() => {
++    FileRepository.snapshotTempFiles = originalSnapshot;
++  });
++
++  const [first, second] = await Promise.all([
++    CapturaService.saveCapture('44', '000123'),
++    CapturaService.saveCapture('44', '000123')
++  ]);
++
++  assert.equal(first.ok, true);
++  assert.equal(second.ok, true);
++  const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_44.json'), 'utf8'));
++  const produto = loteJson.itens['000123'];
++  assert.equal(produto.quantidadeFotos, 2);
++  assert.equal(produto.historico.filter(evento => evento.evento === 'captura_salva').length, 2);
++});
+diff --git a/tests/unit/domain-lote.test.js b/tests/unit/domain-lote.test.js
+index e2c197c..49c958b 100644
+--- a/tests/unit/domain-lote.test.js
++++ b/tests/unit/domain-lote.test.js
+@@ -1,14 +1,14 @@
+ import test from 'node:test';
+ import assert from 'node:assert';
+ import { Lote, Produto } from '../../domain/lote.js';
+-import { ProductStatus } from '../../domain/status.js';
++import { ProductEvents, ProductStatus, transitionProduct } from '../../domain/status.js';
+ 
+ test('Lote - normalize number', () => {
+   assert.strictEqual(Lote.normalize('37'), '37');
+   assert.strictEqual(Lote.normalize('  37  '), '37');
+   assert.throws(() => Lote.normalize(''), /Lote number must be/);
+   assert.throws(() => Lote.normalize(null), /Lote number must be/);
+ });
+ 
+ test('Lote - validate number', () => {
+   assert.ok(Lote.isValid('37'));
+@@ -62,33 +62,51 @@ test('Lote - countByStatus', () => {
+ });
+ 
+ test('Produto - normalize GTIN', () => {
+   assert.strictEqual(Produto.normalize('07890000000001'), '07890000000001');
+   assert.strictEqual(Produto.normalize('  12345678  '), '12345678');
+   assert.throws(() => Produto.normalize(''), /GTIN/);
+   assert.throws(() => Produto.normalize(null), /GTIN/);
+ });
+ 
+ test('Produto - validate GTIN', () => {
+-  // Valid lengths: 8, 12, 13, 14
++  // Local product identifiers are numeric and preserve their original width.
+   assert.ok(Produto.isValid('12345678')); // 8
+   assert.ok(Produto.isValid('123456789012')); // 12
+   assert.ok(Produto.isValid('1234567890123')); // 13
+   assert.ok(Produto.isValid('12345678901234')); // 14
++  assert.ok(Produto.isValid('000123'));
++  assert.ok(Produto.isValid('1'));
++  assert.ok(Produto.isValid('9'.repeat(64)));
+ 
+   // Invalid
+-  assert.ok(!Produto.isValid('123')); // Too short
+-  assert.ok(!Produto.isValid('123456789012345')); // Too long
++  assert.ok(!Produto.isValid('9'.repeat(65))); // Too long
+   assert.ok(!Produto.isValid('ABCD1234')); // Non-numeric
+   assert.ok(!Produto.isValid('')); // Empty
+ });
+ 
++test('Produto - normalizes numeric local identifiers without losing zeros', () => {
++  assert.strictEqual(Produto.normalize(' 000123 '), '000123');
++});
++
++test('Produto - capture transition is enforced and recorded', () => {
++  const produto = new Produto('000123');
++  transitionProduct(produto, ProductEvents.CAPTURA_SALVA, { quantidadeFotos: 2 });
++
++  assert.strictEqual(produto.status, ProductStatus.PENDENTE_QA);
++  assert.strictEqual(produto.historico.at(-1).evento, ProductEvents.CAPTURA_SALVA);
++  assert.throws(
++    () => transitionProduct(produto, ProductEvents.CAPTURA_SALVA),
++    /Invalid product transition/
++  );
++});
++
+ test('Produto - preserve leading zeros in GTIN', () => {
+   const produto = new Produto('07890000000001');
+   assert.strictEqual(produto.gtin, '07890000000001');
+   assert.strictEqual(produto.gtin[0], '0'); // Preserved!
+ });
+ 
+ test('Produto - initial status', () => {
+   const produto = new Produto('12345678', 'CODE', 'Desc');
+   assert.strictEqual(produto.status, ProductStatus.EM_CAPTURA);
+ });

@@ -1,0 +1,895 @@
+﻿# Review package: ff438bd..44ef57d
+
+## Commits
+44ef57d feat: implement safe local product delivery
+
+## Files changed
+ .superpowers/sdd/task-6-report.md           |  22 ++++
+ domain/delivery.js                          |   3 +-
+ server/app.js                               |   2 +-
+ services/delivery-service.js                | 156 +++++++++++++++++-----------
+ services/ftp-service.js                     |  56 +++-------
+ tests/integration/api-routes.test.js        |   1 -
+ tests/integration/delivery-products.test.js | 147 ++++++++++++++++++++++++++
+ tests/unit/ftp-service.test.js              |  39 ++++---
+ 8 files changed, 308 insertions(+), 118 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/task-6-report.md b/.superpowers/sdd/task-6-report.md
+new file mode 100644
+index 0000000..57940b7
+--- /dev/null
++++ b/.superpowers/sdd/task-6-report.md
+@@ -0,0 +1,22 @@
++# Task 6 Report - Safe Local Product Delivery
++
++## Changes
++
++- Added local staging at `Entrega/LOTE <lote>/<codigo>/` with exclusive copies, SHA-256 manifests, source paths, and persisted delivery records in `dados/envios/`.
++- Normal delivery reads only product-root photos; update delivery reads only `AT/` photos and stages them in the product root.
++- Reworked the mock FTP provider to read real local files and retain actual size and SHA-256 metadata for verification. No external FTP provider is enabled.
++- `executeDelivery` uploads every manifest file, checks remote count, then verifies each remote file's existence, size, and hash before setting `entregue`.
++- Failures preserve `Finalizadas`, persist the failed attempt, set `erro_entrega` and `ultimoErro`, refresh the control workbook, and write `ENTREGA_ERRO`. Success refreshes JSON and workbook, persists the completed attempt, and writes `ENTREGA_COMPLETA`.
++- Exposed `/api/entregas/preparar` and `/api/entregas/executar` through the existing global operation middleware. The execute endpoint was removed from the phase-one block list because it is now locally mocked and integration-tested.
++
++## Tests
++
++- `node --test tests/integration/delivery-products.test.js` - 5 passed.
++- `node --test tests/integration/qa-products.test.js tests/integration/api-routes.test.js` - 25 passed.
++- `node --test tests/unit/ftp-service.test.js` - 11 passed.
++- `npm.cmd test` - 172 passed, 0 failed, 1 skipped because Windows symlink creation requires Developer Mode or elevation.
++
++## Concerns
++
++- The provider is intentionally process-local and in-memory. It verifies uploaded bytes without network access, but remote FTP support remains out of scope for Phase 1.
++- Existing test output includes expected repository bootstrap and audit-failure diagnostic messages; the final suite has no test failures.
+diff --git a/domain/delivery.js b/domain/delivery.js
+index d42195b..176062c 100644
+--- a/domain/delivery.js
++++ b/domain/delivery.js
+@@ -35,25 +35,26 @@ export class Manifest {
+     this.totalSize = 0;
+     this.fileCount = 0;
+     this.createdAt = new Date().toISOString();
+     this.completedAt = null;
+     this.checksums = {};
+   }
+ 
+   /**
+    * Adiciona arquivo ao manifest
+    */
+-  addFile(filename, size, checksum) {
++  addFile(filename, size, checksum, stagingPath = null) {
+     this.files.push({
+       name: filename,
+       size,
+       checksum,
++      stagingPath,
+       addedAt: new Date().toISOString()
+     });
+     this.totalSize += size;
+     this.fileCount = this.files.length;
+     this.checksums[filename] = checksum;
+   }
+ 
+   /**
+    * Marca como concluído
+    */
+diff --git a/server/app.js b/server/app.js
+index cb4592e..87cc2f4 100644
+--- a/server/app.js
++++ b/server/app.js
+@@ -8,21 +8,20 @@ import qaHubRoutes from '../routes/qa-hub.js';
+ import { auditLogger } from './audit-logger.js';
+ import { applyConfigOverrides } from './config.js';
+ import { createOperationStore } from './operation-store.js';
+ import { sendError, sendOk } from './response.js';
+ import { CameraService } from '../services/camera-service.js';
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ const rootDir = path.resolve(__dirname, '..');
+ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+ const PHASE_ONE_BLOCKED_PATHS = new Set([
+-  '/api/entregas/executar',
+   '/api/qa/executar',
+   '/api/retrabalhos/executar',
+   '/api/relatorios/executar',
+   '/api/carros',
+   '/api/adset'
+ ]);
+ 
+ function blockPhaseOneRoutes(req, res, next) {
+   if (MUTATING_METHODS.has(req.method) && PHASE_ONE_BLOCKED_PATHS.has(req.path)) {
+     return sendError(res, 404, `Not found: ${req.originalUrl}`);
+@@ -102,20 +101,21 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
+     } catch (error) {
+       return next(error);
+     }
+   });
+ 
+   app.use('/api/captura', capturaRoutes);
+   app.use('/api/lotes', capturaRoutes);
+   app.use('/api/imagens', capturaRoutes);
+   app.use('/api/planilhas', planilhasRoutes);
+   app.use('/api/qa', qaHubRoutes);
++  app.use('/api/entregas', qaHubRoutes);
+   app.use('/api/retrabalhos', qaHubRoutes);
+   app.use('/api/relatorios', qaHubRoutes);
+ 
+   app.use(express.static(path.join(rootDir, 'frontend', 'public')));
+   app.use((req, res) => sendError(res, 404, `Not found: ${req.path}`));
+   app.use((err, req, res, _next) => {
+     if (
+       err.type === 'entity.parse.failed' &&
+       MUTATING_METHODS.has(req.method) &&
+       !req.headers['x-operation-id']
+diff --git a/services/delivery-service.js b/services/delivery-service.js
+index 3c0ecf3..94fbd7b 100644
+--- a/services/delivery-service.js
++++ b/services/delivery-service.js
+@@ -1,12 +1,13 @@
+ import path from 'path';
+-import { v4 as uuidv4 } from 'uuid';
++import fs from 'fs';
++import crypto from 'crypto';
+ import LoteRepository from '../repositories/lote-repository.js';
+ import { FileRepository } from '../repositories/file-repository.js';
+ import { Manifest, DeliveryRecord, DeliveryType, DeliveryStatus } from '../domain/delivery.js';
+ import { ProductStatus } from '../domain/status.js';
+ import { getFtpService } from './ftp-service.js';
+ import { auditLogger } from '../server/audit-logger.js';
+ import { config } from '../server/config.js';
+ import ExcelService from './excel-service.js';
+ import { Lote, Produto } from '../domain/lote.js';
+ 
+@@ -286,125 +287,160 @@ export class DeliveryService {
+     } catch (err) {
+       return { ok: false, error: err.message };
+     }
+   }
+ 
+   /**
+    * Prepara entrega (monta staging + manifest)
+    */
+   static async prepareDelivery(lote, gtin, codigo, deliveryType = DeliveryType.NORMAL) {
+     try {
+-      const loteObj = await LoteRepository.load(lote);
+-      const produto = loteObj.itens[gtin];
+-
+-      if (!produto) {
+-        throw new Error(`Product not found: ${gtin}`);
+-      }
+-
+-      if (!codigo) {
+-        throw new Error('Internal code required for delivery');
+-      }
+-
+-      // Seleciona fotos conforme tipo de entrega
+-      let photos;
+-      if (deliveryType === DeliveryType.ATUALIZACAO) {
+-        photos = await FileRepository.listFinalizadasImages(lote, gtin, 'AT');
+-      } else {
+-        photos = await FileRepository.listFinalizadasImages(lote, gtin);
+-        // Filtra AP/
+-        photos = photos.filter(p => !p.name.includes('AP/'));
+-      }
+-
+-      if (photos.length === 0) {
+-        throw new Error('No eligible photos for delivery');
+-      }
+-
+-      // Cria manifest
+-      const manifest = new Manifest(lote, gtin, codigo, deliveryType);
+-      photos.forEach(photo => {
+-        // TODO: Calcular hash real
+-        manifest.addFile(photo.name, 0, uuidv4());
+-      });
+-
+-      return {
+-        ok: true,
+-        data: {
+-          manifest: manifest.toJSON(),
+-          readyForDelivery: true
+-        }
+-      };
++      const delivery = await this.buildDeliveryManifest(lote, gtin, codigo, deliveryType);
++      const record = new DeliveryRecord(delivery.normalizedLote, delivery.normalizedGtin, codigo, deliveryType);
++      record.status = DeliveryStatus.STAGING;
++      record.manifest = delivery.manifest;
++      record.remoteFolder = getFtpService().buildRemotePath(delivery.normalizedLote, codigo);
++      await this.persistDeliveryRecord(record);
++      return { ok: true, data: { manifest: delivery.manifest.toJSON(), attemptId: record.id, readyForDelivery: true } };
+     } catch (err) {
+       return { ok: false, error: err.message };
+     }
+   }
+ 
+   /**
+    * Executa entrega via FTP
+    */
+   static async executeDelivery(lote, gtin, codigo, deliveryType = DeliveryType.NORMAL) {
++    let record = null;
++    let loaded = null;
++    let ftpService = null;
+     try {
+-      const ftpService = getFtpService();
++      const delivery = await this.buildDeliveryManifest(lote, gtin, codigo, deliveryType);
++      loaded = delivery.loaded;
++      ftpService = getFtpService();
+ 
+       // Conecta ao FTP
+       const connectResult = await ftpService.connect();
+       if (!connectResult.ok) {
+         throw new Error(`FTP connection failed: ${connectResult.error}`);
+       }
+ 
+       // Constrói caminho remoto
+-      const remotePath = ftpService.buildRemotePath(lote, codigo);
+-      const tempPath = `${remotePath}_${uuidv4().substring(0, 8)}_tmp`;
+-
+-      // TODO: Upload de arquivos
+-      // 1. Criar pasta temporária
+-      // 2. Upload cada arquivo
+-      // 3. Verificar checksums
+-      // 4. Renomear para destino final
++      const remotePath = ftpService.buildRemotePath(delivery.normalizedLote, codigo);
++      record = new DeliveryRecord(delivery.normalizedLote, delivery.normalizedGtin, codigo, deliveryType);
++      record.remoteFolder = remotePath;
++      record.startAttempt(delivery.manifest);
++      await this.persistDeliveryRecord(record);
++
++      for (const file of delivery.manifest.files) {
++        const upload = await ftpService.uploadFile(file.stagingPath, path.join(remotePath, file.name));
++        if (!upload.ok) throw new Error(`Upload failed for ${file.name}: ${upload.error}`);
++      }
++      const listed = await ftpService.listRemoteFiles(remotePath);
++      if (!listed.ok || listed.data.count !== delivery.manifest.fileCount) throw new Error('Remote verification failed: unexpected file count');
++      for (const file of delivery.manifest.files) {
++        const verified = await ftpService.verifyRemoteFile(path.join(remotePath, file.name));
++        if (!verified.ok || !verified.data.exists || verified.data.size !== file.size || verified.data.hash !== file.checksum) {
++          throw new Error(`Remote verification failed for ${file.name}`);
++        }
++      }
++      record.verify(delivery.manifest.fileCount);
++      delivery.manifest.complete();
++      record.complete(remotePath);
++      record.manifest = delivery.manifest;
+ 
+       // Marca como entregue
+-      const loteObj = await LoteRepository.load(lote);
+-      const produto = loteObj.itens[gtin];
+-      produto.markDelivered();
+-      await LoteRepository.save(loteObj);
++      loaded.produto.markDelivered();
++      await LoteRepository.save(loaded.loteObj);
++      await ExcelService.updateControlFromLote(delivery.normalizedLote);
++      await this.persistDeliveryRecord(record);
+ 
+       // Auditoria
+       await auditLogger.log('ENTREGA_COMPLETA', {
+-        lote,
+-        gtin,
++        lote: delivery.normalizedLote,
++        gtin: delivery.normalizedGtin,
+         codigo,
+         deliveryType,
+         remotePath
+       });
+ 
+-      // Desconecta
+-      await ftpService.disconnect();
+-
+       return {
+         ok: true,
+         data: {
+-          status: 'delivered',
++          status: ProductStatus.ENTREGUE,
+           remotePath,
+-          productoStatus: ProductStatus.ENTREGUE
++          produtoStatus: ProductStatus.ENTREGUE
+         }
+       };
+     } catch (err) {
++      if (!loaded) {
++        try { loaded = await this.loadQaProduct(lote, gtin); } catch { /* invalid identities cannot be persisted */ }
++      }
++      if (record) {
++        record.fail(err.message);
++        await this.persistDeliveryRecord(record);
++      }
++      if (loaded) {
++        loaded.produto.recordDeliveryError(err.message);
++        await LoteRepository.save(loaded.loteObj);
++        await ExcelService.updateControlFromLote(loaded.lote);
++      }
+       await auditLogger.log('ENTREGA_ERRO', {
+         lote,
+         gtin,
+         codigo,
+         erro: err.message
+       });
+ 
+       return { ok: false, error: err.message };
++    } finally {
++      if (ftpService) await ftpService.disconnect();
+     }
+   }
+ 
++  static async buildDeliveryManifest(lote, gtin, codigo, deliveryType) {
++    if (![DeliveryType.NORMAL, DeliveryType.ATUALIZACAO].includes(deliveryType)) throw new Error('Invalid delivery type');
++    if (typeof codigo !== 'string' || codigo.trim().length === 0 || /[\\/:*?"<>|]/.test(codigo) || codigo.includes('..')) throw new Error('Internal code required for delivery');
++    const loaded = await this.loadQaProduct(lote, gtin);
++    if (loaded.produto.status !== ProductStatus.PRONTO_PARA_ENTREGA) throw new Error('Product is not ready for delivery');
++    const photos = await FileRepository.listFinalizadasImages(loaded.lote, loaded.gtin, deliveryType === DeliveryType.ATUALIZACAO ? 'AT' : null);
++    if (photos.length === 0) throw new Error('No eligible photos for delivery');
++    const stagingDir = path.join(config.paths.entrega, `LOTE ${loaded.lote}`, codigo);
++    await fs.promises.mkdir(stagingDir, { recursive: true });
++    const manifest = new Manifest(loaded.lote, loaded.gtin, codigo, deliveryType);
++    for (const photo of photos) {
++      const stagingPath = await this.copyToStaging(photo.path, stagingDir, photo.name);
++      const contents = await fs.promises.readFile(stagingPath);
++      manifest.addFile(path.basename(stagingPath), contents.length, crypto.createHash('sha256').update(contents).digest('hex'), stagingPath);
++    }
++    return { loaded, manifest, normalizedLote: loaded.lote, normalizedGtin: loaded.gtin };
++  }
++
++  static async copyToStaging(sourcePath, stagingDir, filename) {
++    const extension = path.extname(filename);
++    const basename = path.basename(filename, extension);
++    for (let index = 0; ; index += 1) {
++      const destination = path.join(stagingDir, index === 0 ? filename : `${basename}_${String(index).padStart(3, '0')}${extension}`);
++      try {
++        await fs.promises.copyFile(sourcePath, destination, fs.constants.COPYFILE_EXCL);
++        return destination;
++      } catch (error) {
++        if (error.code !== 'EEXIST') throw error;
++      }
++    }
++  }
++
++  static async persistDeliveryRecord(record) {
++    await fs.promises.mkdir(config.paths.envios, { recursive: true });
++    await fs.promises.writeFile(path.join(config.paths.envios, `${record.id}.json`), JSON.stringify(record.toJSON(), null, 2), 'utf8');
++  }
++
+   /**
+    * Reinicia para retrabalho
+    */
+   static async restartRework(lote, gtin, codigo = null) {
+     try {
+       const loteObj = await LoteRepository.load(lote);
+ 
+       // Se não passou GTIN, tentar encontrar por código
+       let targetGtin = gtin;
+       if (!targetGtin && codigo) {
+diff --git a/services/ftp-service.js b/services/ftp-service.js
+index 283b676..119b182 100644
+--- a/services/ftp-service.js
++++ b/services/ftp-service.js
+@@ -1,13 +1,13 @@
+ import path from 'path';
+-import { v4 as uuidv4 } from 'uuid';
+-import { auditLogger } from '../server/audit-logger.js';
++import fs from 'fs';
++import crypto from 'crypto';
+ import { config } from '../server/config.js';
+ 
+ /**
+  * Contrato FTP Provider
+  * Implementar MockFtpProvider para testes ou RealFtpProvider para produção
+  */
+ export class FtpProvider {
+   async connect() {
+     throw new Error('Not implemented');
+   }
+@@ -42,73 +42,62 @@ export class FtpProvider {
+  * Simula FTP sem conexão real
+  */
+ export class MockFtpProvider extends FtpProvider {
+   constructor() {
+     super();
+     this.connected = false;
+     this.files = new Map(); // path -> { size, hash, uploadedAt }
+   }
+ 
+   async connect() {
+-    console.log('🔌 Mock FTP: Connecting...');
+     this.connected = true;
+     return true;
+   }
+ 
+   async disconnect() {
+-    console.log('🔌 Mock FTP: Disconnecting...');
+     this.connected = false;
+     return true;
+   }
+ 
+   async uploadFile(localPath, remotePath) {
+     if (!this.connected) {
+       throw new Error('Not connected');
+     }
+ 
+-    // Simula upload de arquivo
+-    console.log(`📤 Mock FTP: Upload ${localPath} → ${remotePath}`);
+-
+-    const fakeSize = Math.random() * 5000000 + 500000; // 0.5-5.5 MB
+-    const fakeHash = uuidv4();
++    const contents = await fs.promises.readFile(localPath);
++    const size = contents.length;
++    const hash = crypto.createHash('sha256').update(contents).digest('hex');
+ 
+     this.files.set(remotePath, {
+-      size: fakeSize,
+-      hash: fakeHash,
++      size,
++      hash,
+       uploadedAt: new Date().toISOString()
+     });
+ 
+-    // Simula delay
+-    await new Promise(resolve => setTimeout(resolve, 200));
+-
+     return {
+       success: true,
+-      size: fakeSize,
+-      hash: fakeHash
++      size,
++      hash
+     };
+   }
+ 
+   async listFiles(remotePath) {
+     if (!this.connected) {
+       throw new Error('Not connected');
+     }
+ 
+-    console.log(`📋 Mock FTP: List ${remotePath}`);
+-
+     const files = [];
+-    const normPath = remotePath.endsWith('/') ? remotePath : `${remotePath}/`;
+ 
+-    for (const [path, info] of this.files.entries()) {
+-      if (path.startsWith(normPath)) {
+-        const relativeName = path.substring(normPath.length);
+-        // Only include direct children, not subdirectories
+-        if (!relativeName.includes('/')) {
++    for (const [filePath, info] of this.files.entries()) {
++      const relativeName = path.relative(remotePath, filePath);
++      if (relativeName && !relativeName.startsWith('..') && !path.isAbsolute(relativeName)) {
++        if (!relativeName.includes(path.sep)) {
+           files.push({
+             name: relativeName,
+             size: info.size,
+             hash: info.hash,
+             uploadedAt: info.uploadedAt
+           });
+         }
+       }
+     }
+ 
+@@ -130,72 +119,59 @@ export class MockFtpProvider extends FtpProvider {
+       size: file.size,
+       hash: file.hash
+     };
+   }
+ 
+   async renameRemote(oldPath, newPath) {
+     if (!this.connected) {
+       throw new Error('Not connected');
+     }
+ 
+-    console.log(`📝 Mock FTP: Rename ${oldPath} → ${newPath}`);
+-
+     const file = this.files.get(oldPath);
+     if (!file) {
+       throw new Error(`File not found: ${oldPath}`);
+     }
+ 
+     this.files.delete(oldPath);
+     this.files.set(newPath, file);
+ 
+     return { success: true };
+   }
+ 
+   async deleteRemote(remotePath) {
+     if (!this.connected) {
+       throw new Error('Not connected');
+     }
+ 
+-    console.log(`🗑️ Mock FTP: Delete ${remotePath}`);
+     this.files.delete(remotePath);
+     return { success: true };
+   }
+ }
+ 
+ /**
+  * Serviço FTP para gerenciar uploads e entregas
+  */
+ export class FtpService {
+   constructor(provider = null) {
+     // Por padrão usa mock
+     this.provider = provider || new MockFtpProvider();
+     this.remoteTemplate = config.ftp?.remoteTemplate || '<remoteRoot>/LOTE <lote>/<codigo>';
+   }
+ 
+   /**
+    * Valida e constrói caminho remoto
+    */
+   buildRemotePath(lote, codigo, baseRemote = null) {
+-    const remote = baseRemote || this.remoteTemplate;
+-
+-    // Substitui template
+-    let path = remote
+-      .replace('<remoteRoot>', config.ftp?.remoteRoot || '/fotos')
+-      .replace('<lote>', lote)
+-      .replace('<codigo>', codigo);
+-
+-    // Bloqueia path traversal, absolute paths
+-    if (path.includes('..') || path.startsWith('/') && path[1] === '/' || path.includes('\\')) {
++    if (typeof lote !== 'string' || typeof codigo !== 'string' || lote.includes('..') || codigo.includes('..') || /[\\/:*?"<>|]/.test(codigo)) {
+       throw new Error('Invalid remote path');
+     }
+-
+-    return path;
++    return path.join(baseRemote || config.ftp?.remoteRoot || 'remote-ftp', `LOTE ${lote}`, codigo);
+   }
+ 
+   /**
+    * Prepara staging local antes de enviar
+    */
+   async prepareStaging(lote, gtin, codigo, deliveryType) {
+     try {
+       // TODO: Implementar staging
+       // Verificar se fotos existem em Finalizadas
+       // Copiar para Entrega/LOTE/CODIGO/
+@@ -215,34 +191,32 @@ export class FtpService {
+       };
+     }
+   }
+ 
+   /**
+    * Conecta ao FTP
+    */
+   async connect() {
+     try {
+       await this.provider.connect();
+-      console.log('✓ FTP connected');
+       return { ok: true };
+     } catch (err) {
+       return { ok: false, error: err.message };
+     }
+   }
+ 
+   /**
+    * Desconecta do FTP
+    */
+   async disconnect() {
+     try {
+       await this.provider.disconnect();
+-      console.log('✓ FTP disconnected');
+       return { ok: true };
+     } catch (err) {
+       return { ok: false, error: err.message };
+     }
+   }
+ 
+   /**
+    * Faz upload de arquivo
+    */
+   async uploadFile(localPath, remotePath) {
+diff --git a/tests/integration/api-routes.test.js b/tests/integration/api-routes.test.js
+index 356fb1d..57d0b18 100644
+--- a/tests/integration/api-routes.test.js
++++ b/tests/integration/api-routes.test.js
+@@ -40,21 +40,20 @@ test('mutating routes reject missing operationId', async t => {
+   });
+ 
+   assert.equal(res.status, 400);
+   assert.match(res.body.error, /operationId/i);
+ });
+ 
+ test('phase 1 blocked mutating routes return 404 before operationId validation', async t => {
+   const env = await createTestEnv(t);
+   const app = createApp({ configOverrides: env.config });
+   const paths = [
+-    '/api/entregas/executar',
+     '/api/qa/executar',
+     '/api/retrabalhos/executar',
+     '/api/relatorios/executar',
+     '/api/carros',
+     '/api/adset'
+   ];
+ 
+   for (const method of ['POST', 'PUT', 'PATCH', 'DELETE']) {
+     for (const path of paths) {
+       for (const headers of [{}, { 'X-Operation-ID': 'blocked-route' }]) {
+diff --git a/tests/integration/delivery-products.test.js b/tests/integration/delivery-products.test.js
+new file mode 100644
+index 0000000..6e4e91a
+--- /dev/null
++++ b/tests/integration/delivery-products.test.js
+@@ -0,0 +1,147 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'fs';
++import path from 'path';
++import ExcelJS from 'exceljs';
++import { createTestEnv } from '../helpers/test-env.js';
++import { applyConfigOverrides } from '../../server/config.js';
++import { createApp } from '../../server/app.js';
++import CapturaService from '../../services/captura-service.js';
++import DeliveryService from '../../services/delivery-service.js';
++import { DeliveryType } from '../../domain/delivery.js';
++import { FtpProvider, resetFtpService } from '../../services/ftp-service.js';
++
++const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
++
++async function saveReadyProduct(env, lote = '37', gtin = '000123') {
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'root.jpg'), JPG_BYTES);
++  const saved = await CapturaService.saveCapture(lote, gtin, 'COD-1', 'Produto local');
++  assert.equal(saved.ok, true);
++  const qa = await DeliveryService.completeQa(lote, gtin, DeliveryType.NORMAL);
++  assert.equal(qa.ok, true);
++}
++
++async function request(app, requestPath, body, operationId) {
++  const server = app.listen(0, '127.0.0.1');
++  await new Promise(resolve => server.once('listening', resolve));
++  try {
++    const response = await fetch(`http://127.0.0.1:${server.address().port}${requestPath}`, {
++      method: 'POST',
++      headers: operationId ? { 'Content-Type': 'application/json', 'X-Operation-ID': operationId } : { 'Content-Type': 'application/json' },
++      body: JSON.stringify(operationId ? { ...body, operationId } : body)
++    });
++    return { status: response.status, body: await response.json() };
++  } finally {
++    await new Promise(resolve => server.close(resolve));
++  }
++}
++
++test('prepare normal stages only root photos and persists an exact manifest', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await saveReadyProduct(env);
++  const root = path.join(env.paths.finalizadas, 'LOTE 37', '000123');
++  await fs.promises.mkdir(path.join(root, 'AP'), { recursive: true });
++  await fs.promises.mkdir(path.join(root, 'AT'), { recursive: true });
++  await fs.promises.writeFile(path.join(root, 'AP', 'ap.jpg'), JPG_BYTES);
++  await fs.promises.writeFile(path.join(root, 'AT', 'at.jpg'), JPG_BYTES);
++
++  const prepared = await DeliveryService.prepareDelivery('37', '000123', 'COD-1', DeliveryType.NORMAL);
++
++  assert.equal(prepared.ok, true);
++  assert.deepEqual(prepared.data.manifest.files.map(file => file.name), ['root.jpg']);
++  assert.equal(prepared.data.manifest.files[0].size, JPG_BYTES.length);
++  assert.match(prepared.data.manifest.files[0].checksum, /^[a-f0-9]{64}$/);
++  assert.equal(fs.existsSync(path.join(env.paths.entrega, 'LOTE 37', 'COD-1', 'root.jpg')), true);
++  assert.equal(fs.existsSync(path.join(env.paths.entrega, 'LOTE 37', 'COD-1', 'AP', 'ap.jpg')), false);
++  assert.equal((await fs.promises.readdir(env.paths.envios)).length, 1);
++});
++
++test('prepare update stages AT photos in the product root and rejects unready inputs', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await saveReadyProduct(env, '38');
++  const root = path.join(env.paths.finalizadas, 'LOTE 38', '000123');
++  const classified = await DeliveryService.classifyPhotoAT('38', '000123', 'root.jpg');
++  assert.equal(classified.ok, true);
++
++  const prepared = await DeliveryService.prepareDelivery('38', '000123', 'COD-1', DeliveryType.ATUALIZACAO);
++  const invalidType = await DeliveryService.prepareDelivery('38', '000123', 'COD-1', 'external');
++  const missingCode = await DeliveryService.prepareDelivery('38', '000123', '', DeliveryType.ATUALIZACAO);
++
++  assert.equal(prepared.ok, true);
++  assert.equal(fs.existsSync(path.join(env.paths.entrega, 'LOTE 38', 'COD-1', 'root.jpg')), true);
++  assert.equal(fs.existsSync(path.join(env.paths.entrega, 'LOTE 38', 'COD-1', 'AT', 'root.jpg')), false);
++  assert.equal(invalidType.ok, false);
++  assert.equal(missingCode.ok, false);
++});
++
++test('execute uploads and verifies every staged file before recording delivered', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await saveReadyProduct(env, '39');
++  const prepared = await DeliveryService.prepareDelivery('39', '000123', 'COD-1', DeliveryType.NORMAL);
++  assert.equal(prepared.ok, true);
++
++  const executed = await DeliveryService.executeDelivery('39', '000123', 'COD-1', DeliveryType.NORMAL);
++  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_39.json'), 'utf8'));
++  const workbook = new ExcelJS.Workbook();
++  await workbook.xlsx.readFile(path.join(env.paths.xlsx, 'controle-lotes.xlsx'));
++  const attempts = await fs.promises.readdir(env.paths.envios);
++
++  assert.equal(executed.ok, true, executed.error);
++  assert.equal(lote.itens['000123'].status, 'entregue');
++  assert.ok(lote.itens['000123'].ultimaEntregaEm);
++  assert.equal(lote.itens['000123'].ultimoErro, null);
++  assert.equal(workbook.getWorksheet('Lote 39').getCell('F2').value, 'entregue');
++  assert.ok(attempts.length >= 2);
++});
++
++test('execute verification failure preserves source and records delivery error', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await saveReadyProduct(env, '40');
++  await DeliveryService.prepareDelivery('40', '000123', 'COD-1', DeliveryType.NORMAL);
++  class BrokenVerificationProvider extends FtpProvider {
++    async connect() { return true; }
++    async disconnect() { return true; }
++    async uploadFile() { return { success: true }; }
++    async listFiles() { return []; }
++    async verifyFile() { return { exists: false }; }
++  }
++  resetFtpService(new BrokenVerificationProvider());
++  t.after(() => resetFtpService());
++
++  const executed = await DeliveryService.executeDelivery('40', '000123', 'COD-1', DeliveryType.NORMAL);
++  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_40.json'), 'utf8'));
++  const auditFile = (await fs.promises.readdir(env.paths.auditoria))[0];
++  const audit = await fs.promises.readFile(path.join(env.paths.auditoria, auditFile), 'utf8');
++
++  assert.equal(executed.ok, false);
++  assert.equal(fs.existsSync(path.join(env.paths.finalizadas, 'LOTE 40', '000123', 'root.jpg')), true);
++  assert.equal(lote.itens['000123'].status, 'erro_entrega');
++  assert.match(lote.itens['000123'].ultimoErro, /verification/i);
++  assert.ok((await fs.promises.readdir(env.paths.envios)).length >= 2);
++  assert.match(audit, /ENTREGA_ERRO/);
++});
++
++test('delivery routes require and replay operationId with the global envelope', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await saveReadyProduct(env, '41');
++  const app = createApp({ configOverrides: env.config });
++
++  const missing = await request(app, '/api/entregas/preparar', { lote: '41', gtin: '000123', codigo: 'COD-1' }, undefined);
++  const first = await request(app, '/api/entregas/preparar', { lote: '41', gtin: '000123', codigo: 'COD-1' }, 'delivery-prepare');
++  const replay = await request(app, '/api/entregas/preparar', { lote: '41', gtin: '000123', codigo: 'COD-1' }, 'delivery-prepare');
++  const execute = await request(app, '/api/entregas/executar', { lote: '41', gtin: '000123', codigo: 'COD-1' }, 'delivery-execute');
++
++  assert.equal(missing.status, 400);
++  assert.equal(first.status, 200);
++  assert.equal(first.body.ok, true);
++  assert.ok(first.body.requestId);
++  assert.equal(replay.status, 200);
++  assert.deepEqual(replay.body.data, first.body.data);
++  assert.equal(execute.status, 200);
++  assert.equal(execute.body.ok, true);
++});
+diff --git a/tests/unit/ftp-service.test.js b/tests/unit/ftp-service.test.js
+index 7edd0e2..45f1bb0 100644
+--- a/tests/unit/ftp-service.test.js
++++ b/tests/unit/ftp-service.test.js
+@@ -1,70 +1,81 @@
+ import test from 'node:test';
+ import assert from 'node:assert';
++import fs from 'fs';
++import os from 'os';
++import path from 'path';
+ import { MockFtpProvider, FtpService } from '../../services/ftp-service.js';
+ 
++async function createPhoto(t, name = 'photo.jpg') {
++  const root = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agfoto-ftp-'));
++  t.after(() => fs.promises.rm(root, { recursive: true, force: true }));
++  const filePath = path.join(root, name);
++  await fs.promises.writeFile(filePath, Buffer.from(`photo:${name}`));
++  return filePath;
++}
++
+ test('MockFtpProvider - connect/disconnect', async () => {
+   const provider = new MockFtpProvider();
+ 
+   assert.strictEqual(provider.connected, false);
+ 
+   await provider.connect();
+   assert.strictEqual(provider.connected, true);
+ 
+   await provider.disconnect();
+   assert.strictEqual(provider.connected, false);
+ });
+ 
+-test('MockFtpProvider - upload file', async () => {
++test('MockFtpProvider - upload file', async t => {
+   const provider = new MockFtpProvider();
+   await provider.connect();
+ 
+-  const result = await provider.uploadFile('/local/photo.jpg', '/remote/LOTE 37/CODE/photo.jpg');
++  const result = await provider.uploadFile(await createPhoto(t), '/remote/LOTE 37/CODE/photo.jpg');
+ 
+   assert.ok(result.success);
+   assert.ok(result.hash);
+   assert.ok(result.size > 0);
+ });
+ 
+-test('MockFtpProvider - verify file', async () => {
++test('MockFtpProvider - verify file', async t => {
+   const provider = new MockFtpProvider();
+   await provider.connect();
+ 
+   // Upload first
+-  const uploadResult = await provider.uploadFile('/local/photo.jpg', '/remote/LOTE 37/photo.jpg');
++  const uploadResult = await provider.uploadFile(await createPhoto(t), '/remote/LOTE 37/photo.jpg');
+   assert.ok(uploadResult.success);
+ 
+   // Verify
+   const verifyResult = await provider.verifyFile('/remote/LOTE 37/photo.jpg');
+   assert.ok(verifyResult.exists);
+   assert.strictEqual(verifyResult.hash, uploadResult.hash);
+ });
+ 
+-test('MockFtpProvider - list files', async () => {
++test('MockFtpProvider - list files', async t => {
+   const provider = new MockFtpProvider();
+   await provider.connect();
+ 
+-  await provider.uploadFile('/local/photo1.jpg', '/remote/LOTE 37/photo1.jpg');
+-  await provider.uploadFile('/local/photo2.jpg', '/remote/LOTE 37/photo2.jpg');
++  await provider.uploadFile(await createPhoto(t, 'photo1.jpg'), '/remote/LOTE 37/photo1.jpg');
++  await provider.uploadFile(await createPhoto(t, 'photo2.jpg'), '/remote/LOTE 37/photo2.jpg');
+ 
+   const files = await provider.listFiles('/remote/LOTE 37');
+ 
+   assert.strictEqual(files.length, 2);
+   assert.ok(files.some(f => f.name === 'photo1.jpg'));
+   assert.ok(files.some(f => f.name === 'photo2.jpg'));
+ });
+ 
+-test('MockFtpProvider - rename file', async () => {
++test('MockFtpProvider - rename file', async t => {
+   const provider = new MockFtpProvider();
+   await provider.connect();
+ 
+-  await provider.uploadFile('/local/photo.jpg', '/remote/LOTE 37/photo.jpg');
++  await provider.uploadFile(await createPhoto(t), '/remote/LOTE 37/photo.jpg');
+ 
+   const renameResult = await provider.renameRemote(
+     '/remote/LOTE 37/photo.jpg',
+     '/remote/LOTE 37/final/photo.jpg'
+   );
+ 
+   assert.ok(renameResult.success);
+ 
+   // Verify old path gone
+   const oldVerify = await provider.verifyFile('/remote/LOTE 37/photo.jpg');
+@@ -105,36 +116,36 @@ test('FtpService - connect and disconnect', async () => {
+   const provider = new MockFtpProvider();
+   const service = new FtpService(provider);
+ 
+   const connectResult = await service.connect();
+   assert.ok(connectResult.ok);
+ 
+   const disconnectResult = await service.disconnect();
+   assert.ok(disconnectResult.ok);
+ });
+ 
+-test('FtpService - upload file', async () => {
++test('FtpService - upload file', async t => {
+   const provider = new MockFtpProvider();
+   const service = new FtpService(provider);
+ 
+   await service.connect();
+ 
+-  const result = await service.uploadFile('/local/photo.jpg', '/remote/photo.jpg');
++  const result = await service.uploadFile(await createPhoto(t), '/remote/photo.jpg');
+ 
+   assert.ok(result.ok);
+   assert.ok(result.data.hash);
+ });
+ 
+-test('FtpService - list remote files', async () => {
++test('FtpService - list remote files', async t => {
+   const provider = new MockFtpProvider();
+   const service = new FtpService(provider);
+ 
+   await service.connect();
+ 
+-  await service.uploadFile('/local/photo1.jpg', '/remote/photo1.jpg');
+-  await service.uploadFile('/local/photo2.jpg', '/remote/photo2.jpg');
++  await service.uploadFile(await createPhoto(t, 'photo1.jpg'), '/remote/photo1.jpg');
++  await service.uploadFile(await createPhoto(t, 'photo2.jpg'), '/remote/photo2.jpg');
+ 
+   const result = await service.listRemoteFiles('/remote');
+ 
+   assert.ok(result.ok);
+   assert.strictEqual(result.data.count, 2);
+ });

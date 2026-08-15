@@ -1,0 +1,474 @@
+﻿# Review package: 6db2db4..HEAD
+
+## Commits
+91f78c6 feat: add AGFOTO product app shell
+
+## Files changed
+ frontend/public/css/main.css | 268 ++++++++++++++++++++++++++++++++++++-------
+ frontend/src/App.vue         |  79 ++++++-------
+ 2 files changed, 268 insertions(+), 79 deletions(-)
+
+## Diff
+diff --git a/frontend/public/css/main.css b/frontend/public/css/main.css
+index c6a0d15..881d437 100644
+--- a/frontend/public/css/main.css
++++ b/frontend/public/css/main.css
+@@ -1,51 +1,30 @@
+ :root {
+-  /* Colors */
+-  --ag-black: #000000;
+-  --ag-red: #FF0000;
+-  --ag-yellow: #FFFF00;
+-  --ag-orange: #FF8800;
+-  --ag-dark-gray: #1a1a1a;
+-  --ag-light-gray: #f0f0f0;
+-
+-  /* Accent */
+-  --bs-primary: #FF0000;
+-  --bs-danger: #FF8800;
+-  --bs-warning: #FFFF00;
+-}
+-
+-@media (prefers-color-scheme: dark) {
+-  :root:not([data-theme="light"]) {
+-    --ag-bg: #000;
+-    --ag-fg: #fff;
+-    --ag-border: #333;
+-  }
+-}
+-
+-@media (prefers-color-scheme: light) {
+-  :root:not([data-theme="dark"]) {
+-    --ag-bg: #fff;
+-    --ag-fg: #000;
+-    --ag-border: #ddd;
+-  }
+-}
+-
+-:root[data-theme="dark"] {
+-  --ag-bg: #000;
+-  --ag-fg: #fff;
+-  --ag-border: #333;
+-}
+-
+-:root[data-theme="light"] {
+-  --ag-bg: #fff;
+-  --ag-fg: #000;
+-  --ag-border: #ddd;
++  --ag-ink: #0B0B0D;
++  --ag-panel: #131318;
++  --ag-panel-2: #1A1A21;
++  --ag-panel-3: #212129;
++  --ag-line: #2B2B34;
++  --ag-text: #EDEDF0;
++  --ag-muted: #8C8C99;
++  --ag-red: #E8262B;
++  --ag-orange: #FF6A13;
++  --ag-yellow: #FFC20E;
++  --ag-ok: #2EA043;
++  --ag-radius: 6px;
++  --ag-display: Impact, "Arial Narrow", sans-serif;
++  --ag-body: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
++  --ag-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
++  --ag-bg: var(--ag-ink);
++  --ag-fg: var(--ag-text);
++  --ag-border: var(--ag-line);
++  --ag-dark-gray: var(--ag-panel-2);
+ }
+ 
+ * {
+   box-sizing: border-box;
+ }
+ 
+ html, body {
+   height: 100%;
+   margin: 0;
+   padding: 0;
+@@ -453,10 +432,219 @@ footer {
+ 
+ .error {
+   color: var(--ag-red);
+   font-weight: bold;
+ }
+ 
+ .success {
+   color: #00aa00;
+   font-weight: bold;
+ }
++
++html,
++body,
++#app {
++  height: 100%;
++  margin: 0;
++  overflow: hidden;
++  background: var(--ag-ink);
++  color: var(--ag-text);
++  font-family: var(--ag-body);
++}
++
++button,
++input,
++select {
++  font-family: inherit;
++}
++
++:focus-visible {
++  outline: 2px solid var(--ag-orange);
++  outline-offset: 2px;
++}
++
++.app-shell {
++  height: 100vh;
++  display: grid;
++  grid-template-columns: 74px minmax(0, 1fr);
++  background: var(--ag-ink);
++  overflow: hidden;
++}
++
++.ag-rail {
++  background: #08080A;
++  border-right: 1px solid var(--ag-line);
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: 6px;
++  padding: 14px 0;
++}
++
++.ag-rail-button {
++  width: 58px;
++  padding: 9px 4px 8px;
++  border: 0;
++  border-radius: var(--ag-radius);
++  background: none;
++  color: var(--ag-muted);
++  cursor: pointer;
++  display: flex;
++  flex-direction: column;
++  align-items: center;
++  gap: 5px;
++  font-family: var(--ag-display);
++  font-size: 12px;
++  letter-spacing: .09em;
++  text-transform: uppercase;
++}
++
++.ag-rail-button:hover,
++.ag-rail-button.is-active {
++  color: var(--ag-text);
++  background: var(--ag-panel-2);
++}
++
++.ag-main {
++  min-width: 0;
++  min-height: 0;
++  display: flex;
++  flex-direction: column;
++  overflow: hidden;
++}
++
++.ag-topbar {
++  height: 52px;
++  border-bottom: 1px solid var(--ag-line);
++  background: var(--ag-panel);
++  display: flex;
++  align-items: center;
++  gap: 16px;
++  padding: 0 16px;
++  flex-shrink: 0;
++}
++
++.ag-wordmark {
++  font-family: var(--ag-display);
++  font-size: 23px;
++  letter-spacing: .02em;
++  text-transform: uppercase;
++}
++
++.ag-context {
++  display: flex;
++  gap: 8px;
++  align-items: center;
++  margin-left: 6px;
++  min-width: 0;
++}
++
++.ag-chip {
++  background: var(--ag-panel-2);
++  border: 1px solid var(--ag-line);
++  border-radius: 20px;
++  padding: 5px 12px;
++  font-family: var(--ag-mono);
++  font-size: 11.5px;
++  color: var(--ag-text);
++}
++
++.ag-content {
++  flex: 1;
++  min-height: 0;
++  overflow: hidden;
++}
++
++.ag-view {
++  height: 100%;
++  min-height: 0;
++  padding: 12px;
++  gap: 12px;
++  overflow: hidden;
++}
++
++.ag-card {
++  background: var(--ag-panel);
++  border: 1px solid var(--ag-line);
++  border-radius: 8px;
++  display: flex;
++  flex-direction: column;
++  min-height: 0;
++  overflow: hidden;
++}
++
++.ag-card-header {
++  padding: 11px 14px;
++  border-bottom: 1px solid var(--ag-line);
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  flex-shrink: 0;
++}
++
++.ag-card-title {
++  margin: 0;
++  font-family: var(--ag-display);
++  font-size: 15px;
++  letter-spacing: .1em;
++  text-transform: uppercase;
++  font-weight: 600;
++}
++
++.ag-card-body {
++  padding: 14px;
++  overflow: auto;
++  min-height: 0;
++}
++
++.ag-rail-mark {
++  width: 30px;
++  height: 30px;
++  margin-bottom: 4px;
++}
++
++.ag-rail-button small {
++  font-family: var(--ag-body);
++  font-size: 9px;
++  letter-spacing: 0;
++  text-transform: none;
++}
++
++.ag-rail-foot {
++  margin-top: auto;
++  color: var(--ag-muted);
++  font-family: var(--ag-mono);
++  font-size: 9px;
++  line-height: 1.45;
++  text-align: center;
++}
++
++.ag-footer {
++  min-height: 34px;
++  padding: 8px 16px;
++  background: var(--ag-panel);
++  border-top: 1px solid var(--ag-line);
++  display: flex;
++  align-items: center;
++  justify-content: flex-end;
++}
++
++.ag-btn {
++  border: 1px solid var(--ag-line);
++  border-radius: var(--ag-radius);
++  background: var(--ag-panel-2);
++  color: var(--ag-text);
++  cursor: pointer;
++}
++
++.ag-status {
++  font-size: 12px;
++}
++
++.ag-topbar {
++  box-shadow: none;
++}
++
++.ag-content {
++  display: flex;
++  flex-direction: column;
++}
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index edcaa77..af0e14d 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -1,45 +1,44 @@
+ <template>
+-  <div class="app-container">
+-    <header>
+-      <div style="display: flex; justify-content: space-between; align-items: center;">
+-        <div class="logo">
+-          <img src="/favicon.svg" alt="AG Foto" class="logo-svg">
+-          <div>
+-            <div class="title">AG Foto</div>
+-            <div class="subtitle">Sistema de Fotografia</div>
+-          </div>
+-        </div>
+-        <div style="display: flex; gap: 1rem;">
+-          <button
+-            @click="activePage = 'captura'"
+-            :style="{ background: activePage === 'captura' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
+-            📸 Captura
+-          </button>
+-          <button
+-            @click="activePage = 'planilhas'"
+-            :style="{ background: activePage === 'planilhas' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
+-            📊 Planilhas
+-          </button>
+-          <button
+-            @click="activePage = 'qa-hub'"
+-            :style="{ background: activePage === 'qa-hub' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
+-            ✓ QA Hub
+-          </button>
+-          <button
+-            @click="activePage = 'veiculos'"
+-            :style="{ background: activePage === 'veiculos' ? '#FF0000' : '#666', color: '#fff', border: 'none', padding: '0.75rem 1.5rem', cursor: 'pointer', fontWeight: 'bold' }">
+-            🚗 Veículos
+-          </button>
++  <div class="app-shell">
++    <nav class="ag-rail" aria-label="Produtos">
++      <img src="/favicon.svg" alt="AG Foto" class="ag-rail-mark">
++      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'captura' }" @click="activePage = 'captura'">
++        <span>CAP</span>
++        <small>Captura</small>
++      </button>
++      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="activePage = 'entregar'; qaHubTab = 'entregar'">
++        <span>ENT</span>
++        <small>Entregar</small>
++      </button>
++      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="activePage = 'qa'; qaHubTab = 'qa'">
++        <span>QA</span>
++        <small>QA</small>
++      </button>
++      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'; qaHubTab = 'relatorios'">
++        <span>REL</span>
++        <small>Relat.</small>
++      </button>
++      <div class="ag-rail-foot">Fase 1<br>Produtos</div>
++    </nav>
++
++    <div class="ag-main">
++      <header class="ag-topbar">
++        <div class="ag-wordmark"><b>AG</b> Foto</div>
++        <div class="ag-chip">Produtos</div>
++        <div class="ag-context">
++          <span v-if="selectedLote" class="ag-chip">Lote {{ selectedLote }}</span>
++          <span class="ag-chip">Entrega local/mock</span>
+         </div>
+-      </div>
+-    </header>
++      </header>
++
++      <div class="ag-content">
+ 
+     <main v-if="activePage === 'captura'">
+       <div class="panel-inputs">
+         <div class="input-group-wrapper">
+           <label>Lote</label>
+           <input
+             v-model="selectedLote"
+             @keydown.enter="onLoteSelected"
+             type="text"
+             placeholder="Digite o número do lote"
+@@ -136,24 +135,20 @@
+               <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
+               <div class="thumbnail-overlay">
+                 <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">🔍</button>
+               </div>
+             </div>
+           </div>
+         </div>
+       </div>
+     </main>
+ 
+-    <footer>
+-      <span v-if="status" :class="`${statusType}`">{{ status }}</span>
+-    </footer>
+-
+     <!-- Planilhas Page -->
+     <main v-if="activePage === 'planilhas'" style="padding: 2rem; overflow-y: auto;">
+       <div style="max-width: 900px;">
+         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">📊 Importação de Planilhas</h2>
+         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Upload Excel com EAN, Código e Descrição para unificar no master catalog.</p>
+ 
+         <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+           <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+           <input
+             v-model="selectedLote"
+@@ -214,21 +209,21 @@
+             </table>
+           </div>
+           <div v-if="excelItems.length > 10" style="padding: 1rem; text-align: center; color: var(--ag-border);">
+             ... e {{ excelItems.length - 10 }} items adicionais
+           </div>
+         </div>
+       </div>
+     </main>
+ 
+     <!-- QA Hub Page -->
+-    <main v-if="activePage === 'qa-hub'" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
++    <main v-if="['entregar', 'qa', 'relatorios'].includes(activePage)" style="padding: 0; display: flex; flex-direction: column; overflow: hidden;">
+       <!-- Sub-tabs -->
+       <div style="display: flex; gap: 0; background: #333; border-bottom: 2px solid #FF0000;">
+         <button
+           @click="qaHubTab = 'entregar'"
+           :style="{ flex: 1, background: qaHubTab === 'entregar' ? '#FF0000' : '#444', color: '#fff', border: 'none', padding: '1rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }">
+           📤 Entregar
+         </button>
+         <button
+           @click="qaHubTab = 'qa'"
+           :style="{ flex: 1, background: qaHubTab === 'qa' ? '#FF0000' : '#444', color: '#fff', border: 'none', padding: '1rem', cursor: 'pointer', fontWeight: 'bold', fontSize: '0.9rem' }">
+@@ -520,30 +515,36 @@
+           <button @click="closeModal" style="background: none; border: none; color: #fff; cursor: pointer; font-size: 1.5rem;">×</button>
+         </div>
+         <div class="modal-body">
+           <img :src="`blob:${modalImage.path}`" :alt="modalImage.name" class="modal-image">
+         </div>
+         <div class="modal-footer">
+           <button class="btn-action secondary" @click="closeModal">Fechar</button>
+         </div>
+       </div>
+     </div>
++      </div>
++
++      <footer class="ag-footer">
++        <span v-if="status" class="ag-status" :class="statusType">{{ status }}</span>
++      </footer>
++    </div>
+   </div>
+ </template>
+ 
+ <script>
+ import { ref, computed, onMounted, onUnmounted } from 'vue';
+ 
+ export default {
+   name: 'App',
+   setup() {
+-    const activePage = ref('captura'); // 'captura', 'planilhas', 'qa-hub', 'veiculos'
++    const activePage = ref('captura'); // 'captura', 'entregar', 'qa', 'relatorios'
+     const qaHubTab = ref('entregar'); // 'entregar', 'qa', 'relatorios'
+     const selectedLote = ref('');
+     const selectedGtin = ref('');
+     const inputGtin = ref('');
+     const tempImages = ref([]);
+     const previousImages = ref([]);
+     const loteItems = ref([]);
+     const modalImage = ref(null);
+     const status = ref('');
+     const statusType = ref('');

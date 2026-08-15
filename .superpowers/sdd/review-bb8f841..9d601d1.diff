@@ -1,0 +1,569 @@
+﻿# Review package: bb8f841..9d601d1
+
+## Commits
+9d601d1 docs: record task 2 implementation report
+9f84d98 feat: add local camera status and secure temp previews
+
+## Files changed
+ .superpowers/sdd/task-2-report.md          | 37 +++++++++++++++
+ repositories/file-repository.js            | 17 ++++++-
+ routes/captura.js                          | 11 +++++
+ server/app.js                              | 20 ++++++--
+ server/config.js                           |  2 +-
+ server/secure-filesystem.js                | 35 +++++++++-----
+ services/camera-service.js                 | 46 +++++++++++++++++++
+ services/preview-service.js                | 16 +++++++
+ tests/integration/captura-products.test.js | 73 ++++++++++++++++++++++++++++++
+ tests/unit/camera-service.test.js          | 55 ++++++++++++++++++++++
+ 10 files changed, 295 insertions(+), 17 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/task-2-report.md b/.superpowers/sdd/task-2-report.md
+new file mode 100644
+index 0000000..c4ff05c
+--- /dev/null
++++ b/.superpowers/sdd/task-2-report.md
+@@ -0,0 +1,37 @@
++# Tarefa 2 - Camera Service and Secure TEMP Previews
++
++## STATUS
++
++COMPLETED
++
++## Resumo
++
++Implemented local, non-blocking camera status and launch support using the configured `simplusCameraLib/simplusCamera.exe` path. Added secure TEMP image listing with signature validation and metadata, plus a guarded preview endpoint that only serves valid images within the configured TEMP directory. Mutable camera opening is handled by the app factory operation middleware and therefore requires `operationId`.
++
++## Arquivos
++
++- Created `services/camera-service.js`
++- Created `services/preview-service.js`
++- Created `tests/unit/camera-service.test.js`
++- Created `tests/integration/captura-products.test.js`
++- Modified `server/config.js`
++- Modified `server/secure-filesystem.js`
++- Modified `repositories/file-repository.js`
++- Modified `routes/captura.js`
++- Modified `server/app.js`
++
++## Commits
++
++- `9f84d98 feat: add local camera status and secure temp previews`
++
++## Testes
++
++- RED verified with `npm.cmd test -- tests/unit/camera-service.test.js tests/integration/captura-products.test.js`: failed because the camera module, secured preview route, and validated TEMP metadata did not yet exist.
++- Focused verification: `node --test tests/unit/camera-service.test.js tests/integration/captura-products.test.js tests/integration/api-routes.test.js` passed 11/11 tests.
++- Full verification: `npm.cmd test` passed 123/123 tests with exit code 0.
++
++## Preocupacoes
++
++- No physical camera process was started during testing; `CameraService` uses injected process-list and starter fakes in temporary environments. Production launching is deliberately detached and non-blocking.
++- Existing integration tests emit expected legacy JSON/backup log messages while passing; they are unrelated to this task.
++- No Redmine, Java, `start.jar`, `C:\\sphoto-terminais`, or `D:\\Syndi_qa` integration was introduced.
+diff --git a/repositories/file-repository.js b/repositories/file-repository.js
+index 9de6eea..b61205f 100644
+--- a/repositories/file-repository.js
++++ b/repositories/file-repository.js
+@@ -18,21 +18,36 @@ const ROOT = path.resolve(__dirname, '..');
+ 
+ /**
+  * Repository para operações de arquivo (imagens, cópias, exclusões)
+  */
+ export class FileRepository {
+   /**
+    * Lista imagens estáveis em images/temp
+    */
+   static async listTempImages() {
+     try {
+-      return await listAllowedFiles(config.paths.imagesTemp);
++      const files = await listAllowedFiles(config.paths.imagesTemp, config.paths.imagesTemp);
++      const images = [];
++      for (const file of files) {
++        const stats = await fs.promises.stat(file.path);
++        images.push({
++          name: file.name,
++          path: file.path,
++          url: `/api/captura/imagem/temp/${encodeURIComponent(file.name)}`,
++          size: stats.size,
++          modified: stats.mtime.toISOString(),
++          stable: true,
++          signatureOk: true,
++          state: 'stable'
++        });
++      }
++      return images;
+     } catch (err) {
+       throw new Error(`Cannot list temp images: ${err.message}`);
+     }
+   }
+ 
+   /**
+    * Aguarda estabilidade de arquivo (e.g., câmera ainda gravando)
+    */
+   static async waitForFileStable(filePath, timeoutMs = 5000) {
+     try {
+diff --git a/routes/captura.js b/routes/captura.js
+index 48dbde6..c7b9c8f 100644
+--- a/routes/captura.js
++++ b/routes/captura.js
+@@ -1,14 +1,16 @@
+ import express from 'express';
+ import { Router } from 'express';
+ import CapturaService from '../services/captura-service.js';
+ import { Lote, Produto } from '../domain/lote.js';
++import { PreviewService } from '../services/preview-service.js';
++import { sendError } from '../server/response.js';
+ 
+ const router = Router();
+ 
+ /**
+  * GET /api/captura/temp
+  * Lista imagens atuais em images/temp/
+  */
+ router.get('/temp', async (req, res) => {
+   const result = await CapturaService.getTempImages();
+ 
+@@ -234,14 +236,23 @@ router.get('/anterior', async (req, res) => {
+     });
+   } else {
+     res.status(400).json({
+       ok: false,
+       error: result.error,
+       requestId: req.id
+     });
+   }
+ });
+ 
++router.get('/imagem/temp/:filename', async (req, res) => {
++  try {
++    const service = req.app.locals.services.previewService || new PreviewService();
++    return res.sendFile(await service.resolveTempImage(req.params.filename));
++  } catch (error) {
++    return sendError(res, error.code === 'ENOENT' ? 404 : 400, error);
++  }
++});
++
+ router.get('/:numero/itens', getLoteHandler);
+ router.get('/:numero', getLoteHandler);
+ 
+ export default router;
+diff --git a/server/app.js b/server/app.js
+index bd852e1..cb4592e 100644
+--- a/server/app.js
++++ b/server/app.js
+@@ -2,20 +2,21 @@ import express from 'express';
+ import path from 'path';
+ import { fileURLToPath } from 'url';
+ import { v4 as uuidv4 } from 'uuid';
+ import capturaRoutes from '../routes/captura.js';
+ import planilhasRoutes from '../routes/planilhas.js';
+ import qaHubRoutes from '../routes/qa-hub.js';
+ import { auditLogger } from './audit-logger.js';
+ import { applyConfigOverrides } from './config.js';
+ import { createOperationStore } from './operation-store.js';
+ import { sendError, sendOk } from './response.js';
++import { CameraService } from '../services/camera-service.js';
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ const rootDir = path.resolve(__dirname, '..');
+ const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+ const PHASE_ONE_BLOCKED_PATHS = new Set([
+   '/api/entregas/executar',
+   '/api/qa/executar',
+   '/api/retrabalhos/executar',
+   '/api/relatorios/executar',
+   '/api/carros',
+@@ -79,23 +80,36 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
+ 
+   app.get('/api/health', (_req, res) => sendOk(res, {
+     timestamp: new Date().toISOString(),
+     environment: 'local'
+   }));
+   app.get('/api/version', (_req, res) => sendOk(res, {
+     version: '1.0.0-fase1',
+     name: 'AG Fotografia',
+     displayName: 'AG Foto'
+   }));
+-  app.get('/api/status/camera', (_req, res) => sendOk(res, {
+-    camera: { connected: false, message: 'Camera status check not yet implemented' }
+-  }));
++  app.get('/api/status/camera', async (_req, res, next) => {
++    try {
++      const service = app.locals.services.cameraService || new CameraService();
++      return sendOk(res, await service.getStatus());
++    } catch (error) {
++      return next(error);
++    }
++  });
++  app.post('/api/status/camera/open', async (_req, res, next) => {
++    try {
++      const service = app.locals.services.cameraService || new CameraService();
++      return sendOk(res, await service.open());
++    } catch (error) {
++      return next(error);
++    }
++  });
+ 
+   app.use('/api/captura', capturaRoutes);
+   app.use('/api/lotes', capturaRoutes);
+   app.use('/api/imagens', capturaRoutes);
+   app.use('/api/planilhas', planilhasRoutes);
+   app.use('/api/qa', qaHubRoutes);
+   app.use('/api/retrabalhos', qaHubRoutes);
+   app.use('/api/relatorios', qaHubRoutes);
+ 
+   app.use(express.static(path.join(rootDir, 'frontend', 'public')));
+diff --git a/server/config.js b/server/config.js
+index f0e73cd..91a3909 100644
+--- a/server/config.js
++++ b/server/config.js
+@@ -58,21 +58,21 @@ export const config = {
+   // ADSET (valores padrão)
+   adset: {
+     enabled: process.env.ADSET_ENABLED === 'true',
+     username: process.env.ADSET_USER,
+     password: process.env.ADSET_PASS,
+     dryRun: process.env.ADSET_DRY_RUN === 'true'
+   },
+ 
+   // Camera
+   camera: {
+-    executable: process.env.CAMERA_EXE || 'simplusCamera.exe'
++    executable: process.env.CAMERA_EXE || path.join(ROOT, 'simplusCameraLib', 'simplusCamera.exe')
+   },
+ 
+   // Timezone
+   timezone: 'America/Sao_Paulo'
+ };
+ 
+ export function applyConfigOverrides(overrides = {}) {
+   if (overrides.server) Object.assign(config.server, overrides.server);
+   if (overrides.paths) Object.assign(config.paths, overrides.paths);
+   if (overrides.camera) Object.assign(config.camera, overrides.camera);
+diff --git a/server/secure-filesystem.js b/server/secure-filesystem.js
+index 88dad4e..40773d2 100644
+--- a/server/secure-filesystem.js
++++ b/server/secure-filesystem.js
+@@ -23,36 +23,41 @@ const WINDOWS_RESERVED = [
+ 
+ /**
+  * Valida e resolve um caminho para estar dentro de uma raiz permitida
+  * @throws {Error} se o caminho escapar da raiz
+  */
+ export function securePath(userPath, allowedRoot = ROOT) {
+   if (!userPath || typeof userPath !== 'string') {
+     throw new Error('Path must be a non-empty string');
+   }
+ 
+-  const resolved = path.resolve(allowedRoot, userPath);
+-  const normalized = path.normalize(resolved);
++  const normalized = path.resolve(path.isAbsolute(userPath) ? userPath : path.join(allowedRoot, userPath));
+ 
+   // Verifica se está realmente dentro da raiz
+-  if (!normalized.startsWith(path.normalize(allowedRoot))) {
+-    throw new Error(`Path traversal attempt: ${userPath}`);
+-  }
++  assertInsideRoot(normalized, allowedRoot);
+ 
+   // Rejeita caminhos UNC (\\server\share)
+   if (normalized.startsWith('\\\\')) {
+     throw new Error('UNC paths not allowed');
+   }
+ 
+   return normalized;
+ }
+ 
++export function assertInsideRoot(resolvedPath, allowedRoot) {
++  const root = path.resolve(allowedRoot);
++  const target = path.resolve(resolvedPath);
++  const relative = path.relative(root, target);
++  if (relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative))) return target;
++  throw new Error(`Path traversal attempt: ${resolvedPath}`);
++}
++
+ /**
+  * Valida componentes de nome de arquivo
+  */
+ export function validateFilename(filename) {
+   if (!filename || typeof filename !== 'string') {
+     throw new Error('Filename must be a non-empty string');
+   }
+ 
+   const baseName = path.basename(filename);
+   const upperName = baseName.toUpperCase().split('.')[0];
+@@ -157,27 +162,32 @@ export async function listAllowedFiles(dirPath, root = ROOT) {
+   const safe = securePath(dirPath, root);
+ 
+   try {
+     await fs.promises.access(safe);
+   } catch {
+     return [];
+   }
+ 
+   try {
+     const entries = await fs.promises.readdir(safe, { withFileTypes: true });
+-    return entries
+-      .filter(entry => entry.isFile() && ALLOWED_IMAGE_EXTENSIONS.includes(path.extname(entry.name).toLowerCase()))
+-      .map(entry => ({
+-        name: entry.name,
+-        path: path.join(safe, entry.name)
+-      }))
+-      .sort((a, b) => a.name.localeCompare(b.name));
++    const files = [];
++    for (const entry of entries) {
++      if (!entry.isFile() || !ALLOWED_IMAGE_EXTENSIONS.includes(path.extname(entry.name).toLowerCase())) continue;
++      const filePath = assertInsideRoot(path.join(safe, entry.name), root);
++      try {
++        await validateImageSignature(filePath);
++        files.push({ name: entry.name, path: filePath });
++      } catch {
++        // Do not expose incomplete or mislabeled camera files.
++      }
++    }
++    return files.sort((a, b) => a.name.localeCompare(b.name));
+   } catch (err) {
+     throw new Error(`Cannot list files: ${err.message}`);
+   }
+ }
+ 
+ /**
+  * Remove arquivo com segurança
+  */
+ export async function removeSecureFile(filePath, root = ROOT) {
+   const safe = securePath(filePath, root);
+@@ -225,19 +235,20 @@ export async function fileExists(filePath) {
+   try {
+     await fs.promises.access(filePath);
+     return true;
+   } catch {
+     return false;
+   }
+ }
+ 
+ export default {
+   securePath,
++  assertInsideRoot,
+   validateFilename,
+   validateImageSignature,
+   waitForFileStability,
+   createSecureDirectory,
+   listAllowedFiles,
+   removeSecureFile,
+   copySecureFile,
+   fileExists
+ };
+diff --git a/services/camera-service.js b/services/camera-service.js
+new file mode 100644
+index 0000000..a528957
+--- /dev/null
++++ b/services/camera-service.js
+@@ -0,0 +1,46 @@
++import fs from 'fs';
++import { execFile, spawn } from 'child_process';
++import { promisify } from 'util';
++import { config as defaultConfig } from '../server/config.js';
++
++const execFileAsync = promisify(execFile);
++
++export class CameraService {
++  constructor({ config = defaultConfig, processList = null, starter = null } = {}) {
++    this.config = config;
++    this.processList = processList || this.defaultProcessList;
++    this.starter = starter || this.defaultStarter;
++  }
++
++  async defaultProcessList() {
++    const { stdout } = await execFileAsync('tasklist', ['/FI', 'IMAGENAME eq simplusCamera*']);
++    return stdout;
++  }
++
++  async defaultStarter(executablePath) {
++    const child = spawn(executablePath, [], { detached: true, stdio: 'ignore', windowsHide: false });
++    child.unref();
++    return child.pid;
++  }
++
++  async getStatus() {
++    const executablePath = this.config.camera.executable;
++    const executableExists = fs.existsSync(executablePath);
++    const output = await this.processList().catch(() => '');
++    const running = /simplusCamera/i.test(output);
++    return {
++      running,
++      executableExists,
++      executablePath,
++      message: running ? 'simplusCamera.exe is running' : executableExists ? 'Camera executable available' : 'simplusCamera.exe not found'
++    };
++  }
++
++  async open() {
++    const status = await this.getStatus();
++    if (!status.executableExists) return { started: false, executablePath: status.executablePath, message: 'simplusCamera.exe not found' };
++    if (status.running) return { started: false, executablePath: status.executablePath, message: 'simplusCamera.exe already running' };
++    const pid = await this.starter(status.executablePath);
++    return { started: true, pid, executablePath: status.executablePath, message: 'simplusCamera.exe started' };
++  }
++}
+diff --git a/services/preview-service.js b/services/preview-service.js
+new file mode 100644
+index 0000000..2899656
+--- /dev/null
++++ b/services/preview-service.js
+@@ -0,0 +1,16 @@
++import fs from 'fs';
++import path from 'path';
++import { config as defaultConfig } from '../server/config.js';
++import { securePath, validateFilename, validateImageSignature } from '../server/secure-filesystem.js';
++
++export class PreviewService {
++  constructor({ config = defaultConfig } = {}) { this.config = config; }
++
++  async resolveTempImage(filename) {
++    if (filename !== path.basename(filename)) throw new Error(`Path traversal attempt: ${filename}`);
++    const filePath = securePath(validateFilename(filename), this.config.paths.imagesTemp);
++    await fs.promises.access(filePath);
++    await validateImageSignature(filePath);
++    return filePath;
++  }
++}
+diff --git a/tests/integration/captura-products.test.js b/tests/integration/captura-products.test.js
+new file mode 100644
+index 0000000..c1ee0f4
+--- /dev/null
++++ b/tests/integration/captura-products.test.js
+@@ -0,0 +1,73 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'fs';
++import path from 'path';
++import { FileRepository } from '../../repositories/file-repository.js';
++import { createApp } from '../../server/app.js';
++import { createTestEnv } from '../helpers/test-env.js';
++import { applyConfigOverrides } from '../../server/config.js';
++
++const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
++
++async function request(app, requestPath, options = {}) {
++  const server = app.listen(0, '127.0.0.1');
++  await new Promise(resolve => server.once('listening', resolve));
++  const { port } = server.address();
++
++  try {
++    const response = await fetch(`http://127.0.0.1:${port}${requestPath}`, options);
++    return { status: response.status, body: Buffer.from(await response.arrayBuffer()), contentType: response.headers.get('content-type') };
++  } finally {
++    await new Promise(resolve => server.close(resolve));
++  }
++}
++
++test('TEMP listing includes only valid image signatures with stable state', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto1.jpg'), JPG_BYTES);
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'fake.jpg'), 'not an image');
++
++  const images = await FileRepository.listTempImages();
++
++  assert.deepEqual(images.map(image => image.name), ['foto1.jpg']);
++  assert.equal(images[0].signatureOk, true);
++  assert.equal(images[0].state, 'stable');
++  assert.equal(images[0].url, '/api/captura/imagem/temp/foto1.jpg');
++});
++
++test('TEMP preview serves only a valid image inside its configured directory', async t => {
++  const env = await createTestEnv(t);
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto1.jpg'), JPG_BYTES);
++  const app = createApp({ configOverrides: env.config });
++
++  const image = await request(app, '/api/captura/imagem/temp/foto1.jpg');
++  const traversal = await request(app, '/api/captura/imagem/temp/%2e%2e%2foutside.jpg');
++
++  assert.equal(image.status, 200);
++  assert.match(image.contentType, /^image\/jpeg/);
++  assert.deepEqual(image.body, JPG_BYTES);
++  assert.equal(traversal.status, 400);
++});
++
++test('camera API reports status and opens through the operation middleware', async t => {
++  const env = await createTestEnv(t);
++  const cameraService = {
++    getStatus: async () => ({ running: false, executableExists: true, message: 'Camera executable available' }),
++    open: async () => ({ started: true, message: 'simplusCamera.exe started' })
++  };
++  const app = createApp({ configOverrides: env.config, services: { cameraService } });
++
++  const status = await request(app, '/api/status/camera');
++  const opened = await request(app, '/api/status/camera/open', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify({ operationId: 'open-camera' })
++  });
++  const missingOperationId = await request(app, '/api/status/camera/open', { method: 'POST' });
++
++  assert.deepEqual(JSON.parse(status.body.toString()).data, await cameraService.getStatus());
++  assert.deepEqual(JSON.parse(opened.body.toString()).data, await cameraService.open());
++  assert.equal(missingOperationId.status, 400);
++  assert.match(JSON.parse(missingOperationId.body.toString()).error, /operationId/i);
++});
+diff --git a/tests/unit/camera-service.test.js b/tests/unit/camera-service.test.js
+new file mode 100644
+index 0000000..36bdb86
+--- /dev/null
++++ b/tests/unit/camera-service.test.js
+@@ -0,0 +1,55 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'fs';
++import path from 'path';
++import { createTestEnv } from '../helpers/test-env.js';
++import { CameraService } from '../../services/camera-service.js';
++
++test('camera status reports missing executable without blocking', async t => {
++  const env = await createTestEnv(t);
++  const service = new CameraService({ config: env.config, processList: async () => '' });
++
++  const status = await service.getStatus();
++
++  assert.equal(status.running, false);
++  assert.equal(status.executableExists, false);
++  assert.match(status.message, /not found/i);
++});
++
++test('camera status detects executable and running process', async t => {
++  const env = await createTestEnv(t);
++  await fs.promises.mkdir(path.dirname(env.config.camera.executable), { recursive: true });
++  await fs.promises.writeFile(env.config.camera.executable, 'fake exe');
++  const service = new CameraService({
++    config: env.config,
++    processList: async () => 'simplusCamera.exe 1234 Console'
++  });
++
++  const status = await service.getStatus();
++
++  assert.equal(status.running, true);
++  assert.equal(status.executableExists, true);
++});
++
++test('camera open starts an available stopped executable without waiting for it', async t => {
++  const env = await createTestEnv(t);
++  await fs.promises.mkdir(path.dirname(env.config.camera.executable), { recursive: true });
++  await fs.promises.writeFile(env.config.camera.executable, 'fake exe');
++  const service = new CameraService({
++    config: env.config,
++    processList: async () => '',
++    starter: async executablePath => {
++      assert.equal(executablePath, env.config.camera.executable);
++      return 1234;
++    }
++  });
++
++  const result = await service.open();
++
++  assert.deepEqual(result, {
++    started: true,
++    pid: 1234,
++    executablePath: env.config.camera.executable,
++    message: 'simplusCamera.exe started'
++  });
++});

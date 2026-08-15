@@ -1,0 +1,339 @@
+﻿# Review package: 9767ab3..HEAD
+
+## Commits
+73b1e51 feat: polish product layout responsiveness
+
+## Files changed
+ .superpowers/sdd/layout-task-4-report.md | 17 ++++++++++++
+ frontend/public/App.vue                  | 27 ++++++++++++++++---
+ frontend/public/css/main.css             | 45 ++++++++++++++++++++++++++++++++
+ frontend/src/App.vue                     | 27 ++++++++++++++++---
+ tests/unit/frontend-shell.test.js        | 15 +++++++++++
+ 5 files changed, 123 insertions(+), 8 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/layout-task-4-report.md b/.superpowers/sdd/layout-task-4-report.md
+new file mode 100644
+index 0000000..10b5f58
+--- /dev/null
++++ b/.superpowers/sdd/layout-task-4-report.md
+@@ -0,0 +1,17 @@
++# Layout Task 4 Report
++
++Status: complete
++
++- Added the Planilhas file selector and local/mock unification action to the Entregar lote card.
++- Updated spreadsheet import validation to fall back to the selected delivery lote.
++- Hid legacy Planilhas and Veiculos pages behind non-Phase-1 route names; no active Phase 1 route exposes either page.
++- Kept `frontend/src/App.vue` and `frontend/public/App.vue` synchronized.
++- Added the requested 1180px and 760px responsive layout rules.
++- Added a focused frontend shell regression test for this Task 4 contract.
++
++Verification run 2026-08-14:
++
++- `npm.cmd test`: 186 passed, 0 failed, 1 skipped (Windows symlink capability skip).
++- Vue script syntax check: passed for `frontend/src/App.vue` and `frontend/public/App.vue`.
++- `git diff --check`: passed.
++- `frontend/public` remote/CDN scan excluding `vendor` and SVG XML namespaces: no obvious remote references found.
+diff --git a/frontend/public/App.vue b/frontend/public/App.vue
+index 3072bcd..8c6275e 100644
+--- a/frontend/public/App.vue
++++ b/frontend/public/App.vue
+@@ -109,21 +109,21 @@
+     <ul class="capture-lote-list">
+       <li v-for="item in loteItems" :key="item.gtin" @click="selectedGtin = item.gtin">
+         <span>{{ item.gtin }}</span>
+         <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
+       </li>
+     </ul>
+   </section>
+ </main>
+ 
+     <!-- Planilhas Page -->
+-    <main v-if="activePage === 'planilhas'" style="padding: 2rem; overflow-y: auto;">
++    <main v-if="activePage === 'legacy-planilhas'" style="padding: 2rem; overflow-y: auto;">
+       <div style="max-width: 900px;">
+         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">📊 Importação de Planilhas</h2>
+         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Upload Excel com EAN, Código e Descrição para unificar no master catalog.</p>
+ 
+         <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+           <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+           <input
+             v-model="selectedLote"
+             type="text"
+             placeholder="Digite número do lote"
+@@ -182,34 +182,52 @@
+             </table>
+           </div>
+           <div v-if="excelItems.length > 10" style="padding: 1rem; text-align: center; color: var(--ag-border);">
+             ... e {{ excelItems.length - 10 }} items adicionais
+           </div>
+         </div>
+       </div>
+     </main>
+ 
+     <main v-if="activePage === 'entregar'" class="ag-view two-column-view">
+-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Lote</h2></header><div class="ag-card-body"><label class="ag-label">Selecionar lote</label><input class="ag-field" v-model="qaSelectedLote" type="text" placeholder="Numero do lote"><button class="ag-btn is-primary" style="width:100%;margin-top:10px" @click="onLoadQaProducts" :disabled="!qaSelectedLote">Carregar produtos</button><p style="color:var(--ag-muted);font-size:12px;margin-top:14px">Entrega local/mock com staging, manifesto e verificacao antes de marcar entregue.</p></div></section>
++      <section class="ag-card">
++        <header class="ag-card-header"><h2 class="ag-card-title">Lote</h2></header>
++        <div class="ag-card-body">
++          <label class="ag-label">Selecionar lote</label>
++          <input class="ag-field" v-model="qaSelectedLote" type="text" placeholder="Numero do lote">
++          <button class="ag-btn is-primary" style="width:100%;margin-top:10px" @click="onLoadQaProducts" :disabled="!qaSelectedLote">Carregar produtos</button>
++          <p style="color:var(--ag-muted);font-size:12px;margin-top:14px">Entrega local/mock com staging, manifesto e verificacao antes de marcar entregue.</p>
++          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
++            <label class="ag-label">Planilha do cliente</label>
++            <input class="ag-field" type="file" accept=".xlsx" @change="onExcelFileSelected">
++            <button class="ag-btn is-warning" style="width:100%;margin-top:10px" @click="onImportExcel" :disabled="!qaSelectedLote || !excelFile">
++              Unificar planilha
++            </button>
++            <div v-if="excelFile" style="font-family:var(--ag-mono);font-size:11px;color:var(--ag-muted);margin-top:8px">
++              {{ excelFile.name }} · {{ excelItems.length }} itens · {{ excelConflicts.length }} conflitos
++            </div>
++          </div>
++        </div>
++      </section>
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Produtos prontos para entrega</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaProducts.length }} itens</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>GTIN</th><th>Codigo</th><th>Fotos</th><th>Acao</th></tr></thead><tbody><tr v-for="product in qaProducts" :key="`${product.gtin}:${product.codigo}`"><td>{{ product.gtin }}</td><td>{{ product.codigo }}</td><td>{{ product.quantidadeFotos }}</td><td><button class="ag-btn is-warning" @click="onPrepareDelivery(product)" :disabled="deliveryProductKey === `${product.gtin}:${product.codigo}`">{{ deliveryProductKey === `${product.gtin}:${product.codigo}` ? 'Entregando' : 'Entregar' }}</button></td></tr></tbody></table></div></section>
+     </main>
+     <main v-if="activePage === 'qa'" class="ag-view qa-view">
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Navegar</h2></header><div class="ag-card-body"><label class="ag-label">Lote</label><input class="ag-field" v-model="qaPhotoLote" type="text" placeholder="Lote"><label class="ag-label" style="margin-top:12px">GTIN</label><input class="ag-field" v-model="qaPhotoGtin" type="text" placeholder="GTIN"><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadQaPhotos" :disabled="!qaPhotoLote || !qaPhotoGtin">Carregar fotos</button></div></section>
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header><div class="stage-grid"><div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card"><div style="height:74px;display:grid;place-items:center;background:var(--ag-panel);margin-bottom:8px">Foto</div><div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div><div style="display:flex;gap:4px;margin-top:8px"><button class="ag-btn" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button><button class="ag-btn is-warning" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button></div></div></div><div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div></section>
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Marcacoes</h2></header><div class="ag-card-body" style="color:var(--ag-muted);font-size:13px"><p><b style="color:var(--ag-yellow)">AP</b> fica fora da entrega normal.</p><p><b style="color:var(--ag-orange)">AT</b> entra na entrega de atualizacao.</p><p>Desfazer e exclusao continuam registrados por auditoria.</p></div></section>
+     </main>
+     <main v-if="activePage === 'relatorios'" class="ag-view report-view">
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Filtros e totais</h2></header><div class="ag-card-body"><label class="ag-label">Status</label><select class="ag-field" v-model="reportStatus"><option value="">Todos</option><option value="pendente_qa">Pendente QA</option><option value="pronto_para_entrega">Pronto para Entrega</option><option value="entregue">Entregue</option><option value="erro_entrega">Erro na Entrega</option><option value="retrabalho">Retrabalho</option></select><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadReport">Gerar relatorio</button><div v-if="reportStats" class="kpi-grid" style="margin-top:14px"><div class="kpi-card"><strong>{{ reportStats.totalItens ?? reportStats.totalItems ?? 0 }}</strong><span>Itens</span></div><div class="kpi-card"><strong>{{ reportStats.entregues ?? reportStats.entregue ?? 0 }}</strong><span>Entregues</span></div><div class="kpi-card"><strong>{{ reportStats.prontos ?? reportStats.pronto_para_entrega ?? 0 }}</strong><span>Prontos</span></div><div class="kpi-card"><strong>{{ reportStats.retrabalho ?? 0 }}</strong><span>Retrabalho</span></div></div></div></section>
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Detalhamento</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ reportItems.length }} linhas</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Lote</th><th>GTIN</th><th>Codigo</th><th>Descricao</th><th>Fotos</th><th>Status</th></tr></thead><tbody><tr v-for="item in reportItems" :key="`${item.lote}:${item.gtin}`"><td>{{ item.lote }}</td><td>{{ item.gtin }}</td><td>{{ item.codigo }}</td><td>{{ item.descricao }}</td><td>{{ item.quantidadeFotos }}</td><td><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td></tr></tbody></table></div></section>
+     </main>
+     <!-- Veículos Page -->
+-    <main v-if="activePage === 'veiculos'" style="padding: 2rem; overflow-y: auto;">
++    <main v-if="activePage === 'legacy-veiculos'" style="padding: 2rem; overflow-y: auto;">
+       <div style="max-width: 1000px;">
+         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">🚗 Gerenciamento de Veículos</h2>
+         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Importar fotos de cartão de memória, processar OCR de placas, QA e entregar para ADSET.</p>
+ 
+         <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+           <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+           <input
+             v-model="vehiclesLote"
+             type="text"
+             placeholder="Digite número do lote"
+@@ -525,21 +543,22 @@ export default {
+           // In production, would parse with exceljs or send to server
+           showStatus(`✓ ${file.name} selecionado (${file.size} bytes)`, 'success');
+         };
+         reader.readAsArrayBuffer(file);
+       } catch (err) {
+         showStatus(`✗ ${err.message}`, 'error');
+       }
+     };
+ 
+     const onImportExcel = async () => {
+-      if (!selectedLote.value || !excelFile.value) return;
++      const loteParaImportar = selectedLote.value || qaSelectedLote.value;
++      if (!loteParaImportar || !excelFile.value) return;
+ 
+       try {
+         showStatus('Importando...', 'success');
+         // Send file to server for parsing
+         // In production, use FormData with multer
+         showStatus(`✓ Excel importado (mock)`, 'success');
+       } catch (err) {
+         showStatus(`✗ ${err.message}`, 'error');
+       }
+     };
+diff --git a/frontend/public/css/main.css b/frontend/public/css/main.css
+index b64d18a..7b17acd 100644
+--- a/frontend/public/css/main.css
++++ b/frontend/public/css/main.css
+@@ -967,10 +967,55 @@ select {
+     min-width: 620px;
+   }
+ }
+ 
+ .kpi-card strong {
+   display: block;
+   font-family: var(--ag-display);
+   font-size: 31px;
+   line-height: 1;
+ }
++
++@media (max-width: 1180px) {
++  .capture-view,
++  .qa-view,
++  .two-column-view,
++  .report-view {
++    grid-template-columns: 1fr;
++    overflow: auto;
++  }
++
++  .capture-stage {
++    min-height: 520px;
++  }
++}
++
++@media (max-width: 760px) {
++  .app-shell {
++    grid-template-columns: 1fr;
++    grid-template-rows: auto minmax(0, 1fr);
++  }
++
++  .ag-rail {
++    flex-direction: row;
++    justify-content: flex-start;
++    overflow-x: auto;
++    padding: 8px 10px;
++  }
++
++  .ag-rail-button {
++    width: auto;
++    min-width: 70px;
++  }
++
++  .ag-topbar {
++    height: auto;
++    min-height: 52px;
++    flex-wrap: wrap;
++    padding: 10px 12px;
++  }
++
++  .capture-stage {
++    grid-template-columns: 1fr;
++    grid-template-rows: auto minmax(180px, 1fr) auto minmax(180px, 1fr);
++  }
++}
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index 3072bcd..8c6275e 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -109,21 +109,21 @@
+     <ul class="capture-lote-list">
+       <li v-for="item in loteItems" :key="item.gtin" @click="selectedGtin = item.gtin">
+         <span>{{ item.gtin }}</span>
+         <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
+       </li>
+     </ul>
+   </section>
+ </main>
+ 
+     <!-- Planilhas Page -->
+-    <main v-if="activePage === 'planilhas'" style="padding: 2rem; overflow-y: auto;">
++    <main v-if="activePage === 'legacy-planilhas'" style="padding: 2rem; overflow-y: auto;">
+       <div style="max-width: 900px;">
+         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">📊 Importação de Planilhas</h2>
+         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Upload Excel com EAN, Código e Descrição para unificar no master catalog.</p>
+ 
+         <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+           <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+           <input
+             v-model="selectedLote"
+             type="text"
+             placeholder="Digite número do lote"
+@@ -182,34 +182,52 @@
+             </table>
+           </div>
+           <div v-if="excelItems.length > 10" style="padding: 1rem; text-align: center; color: var(--ag-border);">
+             ... e {{ excelItems.length - 10 }} items adicionais
+           </div>
+         </div>
+       </div>
+     </main>
+ 
+     <main v-if="activePage === 'entregar'" class="ag-view two-column-view">
+-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Lote</h2></header><div class="ag-card-body"><label class="ag-label">Selecionar lote</label><input class="ag-field" v-model="qaSelectedLote" type="text" placeholder="Numero do lote"><button class="ag-btn is-primary" style="width:100%;margin-top:10px" @click="onLoadQaProducts" :disabled="!qaSelectedLote">Carregar produtos</button><p style="color:var(--ag-muted);font-size:12px;margin-top:14px">Entrega local/mock com staging, manifesto e verificacao antes de marcar entregue.</p></div></section>
++      <section class="ag-card">
++        <header class="ag-card-header"><h2 class="ag-card-title">Lote</h2></header>
++        <div class="ag-card-body">
++          <label class="ag-label">Selecionar lote</label>
++          <input class="ag-field" v-model="qaSelectedLote" type="text" placeholder="Numero do lote">
++          <button class="ag-btn is-primary" style="width:100%;margin-top:10px" @click="onLoadQaProducts" :disabled="!qaSelectedLote">Carregar produtos</button>
++          <p style="color:var(--ag-muted);font-size:12px;margin-top:14px">Entrega local/mock com staging, manifesto e verificacao antes de marcar entregue.</p>
++          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
++            <label class="ag-label">Planilha do cliente</label>
++            <input class="ag-field" type="file" accept=".xlsx" @change="onExcelFileSelected">
++            <button class="ag-btn is-warning" style="width:100%;margin-top:10px" @click="onImportExcel" :disabled="!qaSelectedLote || !excelFile">
++              Unificar planilha
++            </button>
++            <div v-if="excelFile" style="font-family:var(--ag-mono);font-size:11px;color:var(--ag-muted);margin-top:8px">
++              {{ excelFile.name }} · {{ excelItems.length }} itens · {{ excelConflicts.length }} conflitos
++            </div>
++          </div>
++        </div>
++      </section>
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Produtos prontos para entrega</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaProducts.length }} itens</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>GTIN</th><th>Codigo</th><th>Fotos</th><th>Acao</th></tr></thead><tbody><tr v-for="product in qaProducts" :key="`${product.gtin}:${product.codigo}`"><td>{{ product.gtin }}</td><td>{{ product.codigo }}</td><td>{{ product.quantidadeFotos }}</td><td><button class="ag-btn is-warning" @click="onPrepareDelivery(product)" :disabled="deliveryProductKey === `${product.gtin}:${product.codigo}`">{{ deliveryProductKey === `${product.gtin}:${product.codigo}` ? 'Entregando' : 'Entregar' }}</button></td></tr></tbody></table></div></section>
+     </main>
+     <main v-if="activePage === 'qa'" class="ag-view qa-view">
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Navegar</h2></header><div class="ag-card-body"><label class="ag-label">Lote</label><input class="ag-field" v-model="qaPhotoLote" type="text" placeholder="Lote"><label class="ag-label" style="margin-top:12px">GTIN</label><input class="ag-field" v-model="qaPhotoGtin" type="text" placeholder="GTIN"><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadQaPhotos" :disabled="!qaPhotoLote || !qaPhotoGtin">Carregar fotos</button></div></section>
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header><div class="stage-grid"><div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card"><div style="height:74px;display:grid;place-items:center;background:var(--ag-panel);margin-bottom:8px">Foto</div><div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div><div style="display:flex;gap:4px;margin-top:8px"><button class="ag-btn" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button><button class="ag-btn is-warning" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button></div></div></div><div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div></section>
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Marcacoes</h2></header><div class="ag-card-body" style="color:var(--ag-muted);font-size:13px"><p><b style="color:var(--ag-yellow)">AP</b> fica fora da entrega normal.</p><p><b style="color:var(--ag-orange)">AT</b> entra na entrega de atualizacao.</p><p>Desfazer e exclusao continuam registrados por auditoria.</p></div></section>
+     </main>
+     <main v-if="activePage === 'relatorios'" class="ag-view report-view">
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Filtros e totais</h2></header><div class="ag-card-body"><label class="ag-label">Status</label><select class="ag-field" v-model="reportStatus"><option value="">Todos</option><option value="pendente_qa">Pendente QA</option><option value="pronto_para_entrega">Pronto para Entrega</option><option value="entregue">Entregue</option><option value="erro_entrega">Erro na Entrega</option><option value="retrabalho">Retrabalho</option></select><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadReport">Gerar relatorio</button><div v-if="reportStats" class="kpi-grid" style="margin-top:14px"><div class="kpi-card"><strong>{{ reportStats.totalItens ?? reportStats.totalItems ?? 0 }}</strong><span>Itens</span></div><div class="kpi-card"><strong>{{ reportStats.entregues ?? reportStats.entregue ?? 0 }}</strong><span>Entregues</span></div><div class="kpi-card"><strong>{{ reportStats.prontos ?? reportStats.pronto_para_entrega ?? 0 }}</strong><span>Prontos</span></div><div class="kpi-card"><strong>{{ reportStats.retrabalho ?? 0 }}</strong><span>Retrabalho</span></div></div></div></section>
+       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Detalhamento</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ reportItems.length }} linhas</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Lote</th><th>GTIN</th><th>Codigo</th><th>Descricao</th><th>Fotos</th><th>Status</th></tr></thead><tbody><tr v-for="item in reportItems" :key="`${item.lote}:${item.gtin}`"><td>{{ item.lote }}</td><td>{{ item.gtin }}</td><td>{{ item.codigo }}</td><td>{{ item.descricao }}</td><td>{{ item.quantidadeFotos }}</td><td><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td></tr></tbody></table></div></section>
+     </main>
+     <!-- Veículos Page -->
+-    <main v-if="activePage === 'veiculos'" style="padding: 2rem; overflow-y: auto;">
++    <main v-if="activePage === 'legacy-veiculos'" style="padding: 2rem; overflow-y: auto;">
+       <div style="max-width: 1000px;">
+         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">🚗 Gerenciamento de Veículos</h2>
+         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Importar fotos de cartão de memória, processar OCR de placas, QA e entregar para ADSET.</p>
+ 
+         <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+           <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+           <input
+             v-model="vehiclesLote"
+             type="text"
+             placeholder="Digite número do lote"
+@@ -525,21 +543,22 @@ export default {
+           // In production, would parse with exceljs or send to server
+           showStatus(`✓ ${file.name} selecionado (${file.size} bytes)`, 'success');
+         };
+         reader.readAsArrayBuffer(file);
+       } catch (err) {
+         showStatus(`✗ ${err.message}`, 'error');
+       }
+     };
+ 
+     const onImportExcel = async () => {
+-      if (!selectedLote.value || !excelFile.value) return;
++      const loteParaImportar = selectedLote.value || qaSelectedLote.value;
++      if (!loteParaImportar || !excelFile.value) return;
+ 
+       try {
+         showStatus('Importando...', 'success');
+         // Send file to server for parsing
+         // In production, use FormData with multer
+         showStatus(`✓ Excel importado (mock)`, 'success');
+       } catch (err) {
+         showStatus(`✗ ${err.message}`, 'error');
+       }
+     };
+diff --git a/tests/unit/frontend-shell.test.js b/tests/unit/frontend-shell.test.js
+index e56af4c..b051568 100644
+--- a/tests/unit/frontend-shell.test.js
++++ b/tests/unit/frontend-shell.test.js
+@@ -40,10 +40,25 @@ test('product QA rail routes render direct views without hub tabs', async () =>
+   assert.equal(publicApp, app);
+ });
+ 
+ test('product QA layouts stack and retain table scrolling on narrow screens', async () => {
+   const css = await readFile(path.join(publicDir, 'css', 'main.css'), 'utf8');
+ 
+   assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*?\.two-column-view,[\s\S]*?\.qa-view,[\s\S]*?\.report-view[\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);/);
+   assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*?\.two-column-view,[\s\S]*?\.qa-view,[\s\S]*?\.report-view[\s\S]*?overflow:\s*auto;/);
+   assert.match(css, /\.ag-table-wrap\s*\{[\s\S]*?overflow:\s*auto;/);
+ });
++
++test('Planilhas is available from Entregar without legacy Phase 1 routes', async () => {
++  const app = await readFile(path.join(root, 'frontend', 'src', 'App.vue'), 'utf8');
++  const publicApp = await readFile(path.join(publicDir, 'App.vue'), 'utf8');
++  const css = await readFile(path.join(publicDir, 'css', 'main.css'), 'utf8');
++
++  assert.match(app, /activePage === 'entregar'[\s\S]*?Planilha do cliente/);
++  assert.match(app, /:disabled="!qaSelectedLote \|\| !excelFile"/);
++  assert.match(app, /const loteParaImportar = selectedLote\.value \|\| qaSelectedLote\.value;/);
++  assert.doesNotMatch(app, /activePage === 'planilhas'/);
++  assert.doesNotMatch(app, /activePage === 'veiculos'/);
++  assert.equal(publicApp, app);
++  assert.match(css, /@media \(max-width: 1180px\)/);
++  assert.match(css, /@media \(max-width: 760px\) \{[\s\S]*?\.app-shell[\s\S]*?grid-template-columns:\s*1fr;/);
++});

@@ -1,0 +1,1023 @@
+﻿# Review package: 6df5801..037aeda
+
+## Commits
+037aeda fix: make QA photo mutations audit-safe
+6d06e66 fix: preserve QA file history consistency
+a8d337b docs: record task 5 review fixes
+ef74d45 fix: harden product QA mutations
+979e837 feat: implement product QA AP AT classification
+
+## Files changed
+ .superpowers/sdd/task-5-report.md     |  60 ++++++
+ domain/lote.js                        |   1 +
+ repositories/file-repository.js       |  60 +++++-
+ routes/qa-hub.js                      |  39 +++-
+ services/delivery-service.js          | 207 +++++++++++++++-----
+ tests/integration/qa-products.test.js | 352 ++++++++++++++++++++++++++++++++++
+ 6 files changed, 659 insertions(+), 60 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/task-5-report.md b/.superpowers/sdd/task-5-report.md
+new file mode 100644
+index 0000000..3c386dc
+--- /dev/null
++++ b/.superpowers/sdd/task-5-report.md
+@@ -0,0 +1,60 @@
++# Task 5 Report: QA Hub Products
++
++## Delivered
++
++- Added safe AP and AT classification moves, unclassification, and audited deletion for finalized product photos.
++- Added JSON history for QA classification actions and adjusted the captured-photo count on deletion.
++- Updated QA completion to set `pronto_para_entrega`, record `qa_concluido`, and rebuild the local control workbook without preparing or executing a delivery.
++- Added QA route coverage for classify, unclassify, and delete with the app-wide operationId middleware.
++
++## Verification
++
++- `node --test tests/integration/qa-products.test.js`: 4 passed, 0 failed.
++- `npm.cmd test`: 150 passed, 0 failed, 1 skipped because Windows symlink creation is unavailable in this environment.
++
++## Scope
++
++No delivery, rework, frontend, report, Redmine, Java, or external-system behavior was added.
++
++## Fix Review Findings
++
++- Validated and normalized lote/GTIN before creating finalized-photo paths; unsafe path components, filenames, source folders, and delete locations now fail without touching files. QA mutation routes also validate lote and GTIN before dispatching.
++- QA classify, unclassify, and delete now load the lote/product JSON before any physical mutation. History updates use that loaded object and no longer suppress missing-file errors.
++- `completeQa` accepts only `normal` and `atualizacao`, and uses one eligible-photo lookup rather than repeating the validation.
++- Added integration coverage in temporary directories for GTIN/lote traversal, filename/location rejection, missing JSON/product preservation, AP/AT destination collisions, invalid unclassify origin, invalid delivery type, and route validation.
++
++### Tests
++
++- `node --test tests/integration/qa-products.test.js`: 10 passed, 0 failed.
++- `npm.cmd test`: 156 passed, 0 failed, 1 skipped (Windows symlink capability unavailable).
++
++### Commits
++
++- `ef74d45 fix: harden product QA mutations`
++
++### Concerns
++
++- The QA mutation paths validate lote/product before moving or deleting files. Save failures are now either compensated (moves) or stop physical deletion before it begins.
++
++## Ajuste Final da Tarefa 5
++
++- Delete agora resolve e confirma o arquivo finalizado antes de preparar historico, auditar ou persistir JSON. A rota tambem rejeita `location` fora de `root`, `AP` e `AT` antes de chamar o servico.
++- Classify e unclassify movem o arquivo, registram auditoria e somente depois persistem o historico JSON. Falhas de auditoria e de save compensam o move fisico e deixam o JSON inalterado.
++- Delete prepara historico somente em memoria, registra auditoria, persiste JSON e por fim tenta o unlink. Falha no unlink retorna aviso para retry, mantendo a trilha de intencao persistida.
++- Foram incluidos testes para location invalida preservar arquivo, quantidade e historico, e para falhas de auditoria em classify e delete nao produzirem JSON falso nem exclusao fisica.
++
++### Testes
++
++- `node --test tests/integration/qa-products.test.js`: 16 aprovados, 0 falhos.
++- `npm.cmd test`: 162 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).
++
++## Fixes Finais da Tarefa 5
++
++- Classify e unclassify agora compensam o move fisico quando a persistencia do historico JSON falha. A resposta permanece `ok:false`; se a compensacao tambem falhar, ela informa explicitamente que o arquivo pode exigir recuperacao manual.
++- Delete persiste o historico e a auditoria antes da exclusao fisica. Assim, falha em `LoteRepository.save` interrompe a operacao com a foto intacta. Se o `unlink` falhar depois da trilha persistida, a resposta retorna `ok:false` com aviso de que a foto foi retida para nova tentativa ou limpeza manual.
++- Foram adicionadas regressões para falha de save em classify, unclassify e delete.
++
++### Testes
++
++- `node --test tests/integration/qa-products.test.js`: 13 aprovados, 0 falhos.
++- `npm.cmd test`: 159 aprovados, 0 falhos, 1 ignorado (criacao de symlink indisponivel no Windows).
+diff --git a/domain/lote.js b/domain/lote.js
+index 08b2133..644a389 100644
+--- a/domain/lote.js
++++ b/domain/lote.js
+@@ -21,20 +21,21 @@ export class Lote {
+     }
+     return numero.trim();
+   }
+ 
+   /**
+    * Valida se número de lote é seguro
+    */
+   static isValid(numero) {
+     if (!numero || typeof numero !== 'string') return false;
+     if (numero.length > 50) return false;
++    if (numero.includes('..')) return false;
+     if (/[<>:"|?*\\/]/.test(numero)) return false;
+     return true;
+   }
+ 
+   /**
+    * Adiciona ou obtém produto no lote
+    */
+   getOrCreateItem(gtin, codigo, descricao) {
+     if (!this.itens[gtin]) {
+       this.itens[gtin] = new Produto(gtin, codigo, descricao);
+diff --git a/repositories/file-repository.js b/repositories/file-repository.js
+index cad5c90..ba98a70 100644
+--- a/repositories/file-repository.js
++++ b/repositories/file-repository.js
+@@ -4,24 +4,32 @@ import { fileURLToPath } from 'url';
+ import {
+   securePath,
+   validateFilename,
+   createSecureDirectory,
+   listAllowedFiles,
+   removeSecureFile,
+   waitForFileStability
+ } from '../server/secure-filesystem.js';
+ import { config } from '../server/config.js';
+ import { auditDelete } from '../server/audit-logger.js';
++import { Lote, Produto } from '../domain/lote.js';
+ 
+ const __dirname = path.dirname(fileURLToPath(import.meta.url));
+ const ROOT = path.resolve(__dirname, '..');
+ 
++function normalizeFinalizadaPathComponents(loteNumero, gtin) {
++  const normalizedLote = Lote.normalize(loteNumero);
++  if (!Lote.isValid(normalizedLote)) throw new Error(`Invalid lote number: ${loteNumero}`);
++  if (!Produto.isValid(gtin)) throw new Error(`Invalid GTIN: ${gtin}`);
++  return { loteNumero: normalizedLote, gtin: Produto.normalize(gtin) };
++}
++
+ /**
+  * Repository para operações de arquivo (imagens, cópias, exclusões)
+  */
+ export class FileRepository {
+   /**
+    * Lista imagens estáveis em images/temp
+    */
+   static async listTempImages() {
+     try {
+       const files = await listAllowedFiles(config.paths.imagesTemp, config.paths.imagesTemp);
+@@ -128,39 +136,89 @@ export class FileRepository {
+             }
+           };
+         }
+         return { destPath };
+       }
+     } catch (err) {
+       throw new Error(`Cannot move to finalizadas: ${err.message}`);
+     }
+   }
+ 
++  static async moveFinalizadaPhoto({ loteNumero, gtin, filename, fromSubfolder = null, toSubfolder = null }) {
++    const components = normalizeFinalizadaPathComponents(loteNumero, gtin);
++    const cleanFilename = validateFilename(filename);
++    if (cleanFilename !== filename) throw new Error('Filename must not include a path');
++    if (fromSubfolder && !['AP', 'AT'].includes(fromSubfolder)) throw new Error(`Invalid source subfolder: ${fromSubfolder}`);
++    if (toSubfolder && !['AP', 'AT'].includes(toSubfolder)) throw new Error(`Invalid destination subfolder: ${toSubfolder}`);
++
++    const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${components.loteNumero}`, components.gtin), config.paths.finalizadas);
++    const srcDir = fromSubfolder ? path.join(baseDir, fromSubfolder) : baseDir;
++    const destDir = toSubfolder ? path.join(baseDir, toSubfolder) : baseDir;
++    const srcPath = securePath(path.join(srcDir, cleanFilename), config.paths.finalizadas);
++    await createSecureDirectory(destDir, config.paths.finalizadas);
++
++    for (let counter = 0; ; counter++) {
++      const destPath = securePath(await this.uniqueDestPath(destDir, cleanFilename, counter), config.paths.finalizadas);
++      try {
++        await fs.promises.copyFile(srcPath, destPath, fs.constants.COPYFILE_EXCL);
++      } catch (err) {
++        if (err.code === 'EEXIST') continue;
++        throw err;
++      }
++      try {
++        await fs.promises.unlink(srcPath);
++      } catch (err) {
++        await fs.promises.unlink(destPath).catch(() => {});
++        throw err;
++      }
++      return { srcPath, destPath, destName: path.basename(destPath) };
++    }
++  }
++
++  static async resolveFinalizadaPhoto({ loteNumero, gtin, filename, location = null }) {
++    const components = normalizeFinalizadaPathComponents(loteNumero, gtin);
++    const cleanFilename = validateFilename(filename);
++    if (cleanFilename !== filename) throw new Error('Filename must not include a path');
++    const subfolder = location === 'root' ? null : location;
++    if (subfolder && !['AP', 'AT'].includes(subfolder)) throw new Error('location must be root, AP, or AT');
++    const baseDir = securePath(path.join(config.paths.finalizadas, `LOTE ${components.loteNumero}`, components.gtin), config.paths.finalizadas);
++    const filePath = securePath(path.join(subfolder ? path.join(baseDir, subfolder) : baseDir, cleanFilename), config.paths.finalizadas);
++    const stats = await fs.promises.stat(filePath);
++    if (!stats.isFile()) throw new Error('Finalized photo path is not a file');
++    return { filePath, filename: cleanFilename, location: subfolder || 'root' };
++  }
++
++  static async deleteFinalizadaPhoto({ loteNumero, gtin, filename, location = null }) {
++    const photo = await this.resolveFinalizadaPhoto({ loteNumero, gtin, filename, location });
++    await fs.promises.unlink(photo.filePath);
++    return photo;
++  }
++
+   /**
+    * Lista imagens em um diretório Finalizadas
+    */
+   static async listFinalizadasImages(loteNumero, gtin, subfolder = null) {
+     try {
+       let dirPath = path.join(
+         config.paths.finalizadas,
+         `LOTE ${loteNumero}`,
+         gtin
+       );
+ 
+       if (subfolder) {
+         if (!['AP', 'AT'].includes(subfolder)) {
+           throw new Error(`Invalid subfolder: ${subfolder}`);
+         }
+         dirPath = path.join(dirPath, subfolder);
+       }
+ 
+-      return await listAllowedFiles(dirPath);
++      return await listAllowedFiles(dirPath, config.paths.finalizadas);
+     } catch (err) {
+       throw new Error(`Cannot list finalizadas images: ${err.message}`);
+     }
+   }
+ 
+   /**
+    * Remove arquivo de TEMP com auditoria
+    */
+   static async removeFromTemp(filePath) {
+     try {
+diff --git a/routes/qa-hub.js b/routes/qa-hub.js
+index a3fd126..054da51 100644
+--- a/routes/qa-hub.js
++++ b/routes/qa-hub.js
+@@ -1,17 +1,21 @@
+ import express, { Router } from 'express';
+ import DeliveryService from '../services/delivery-service.js';
+ import ReportService from '../services/report-service.js';
+ import { Lote, Produto } from '../domain/lote.js';
+ 
+ const router = Router();
+ 
++function hasValidQaIdentifiers(lote, gtin) {
++  return Lote.isValid(lote) && Produto.isValid(gtin);
++}
++
+ /**
+  * GET /api/qa/produtos/:lote
+  * Lista produtos de um lote prontos para QA
+  */
+ router.get('/produtos/:lote', async (req, res) => {
+   const { lote } = req.params;
+ 
+   if (!Lote.isValid(lote)) {
+     return res.status(400).json({
+       ok: false,
+@@ -55,74 +59,95 @@ router.get('/fotos/:lote/:gtin', async (req, res) => {
+ 
+ /**
+  * POST /api/qa/classificar
+  * Classifica foto como AP ou AT
+  *
+  * Body: { lote, gtin, filename, classification }
+  */
+ router.post('/classificar', express.json(), async (req, res) => {
+   const { lote, gtin, filename, classification } = req.body;
+ 
+-  if (!lote || !gtin || !filename || !['AP', 'AT'].includes(classification)) {
++  if (!hasValidQaIdentifiers(lote, gtin) || !filename || !['AP', 'AT'].includes(classification)) {
+     return res.status(400).json({
+       ok: false,
+       error: 'Invalid parameters',
+       requestId: req.id
+     });
+   }
+ 
+   let result;
++  const operationContext = { operationId: req.body.operationId || req.headers['x-operation-id'] };
+   if (classification === 'AP') {
+-    result = await DeliveryService.classifyPhotoAP(lote, gtin, filename);
++    result = await DeliveryService.classifyPhotoAP(lote, gtin, filename, operationContext);
+   } else {
+-    result = await DeliveryService.classifyPhotoAT(lote, gtin, filename);
++    result = await DeliveryService.classifyPhotoAT(lote, gtin, filename, operationContext);
+   }
+ 
+   if (result.ok) {
+     res.json({ ok: true, data: result.data, requestId: req.id });
+   } else {
+     res.status(400).json({ ok: false, error: result.error, requestId: req.id });
+   }
+ });
+ 
+ /**
+  * POST /api/qa/desclassificar
+  * Remove classificação de foto
+  */
+ router.post('/desclassificar', express.json(), async (req, res) => {
+-  const { lote, gtin, filename } = req.body;
++  const { lote, gtin, filename, fromClassification = null } = req.body;
+ 
+-  if (!lote || !gtin || !filename) {
++  if (!hasValidQaIdentifiers(lote, gtin) || !filename) {
+     return res.status(400).json({
+       ok: false,
+       error: 'Invalid parameters',
+       requestId: req.id
+     });
+   }
+ 
+-  const result = await DeliveryService.unclassifyPhoto(lote, gtin, filename);
++  const operationContext = { operationId: req.body.operationId || req.headers['x-operation-id'] };
++  const result = await DeliveryService.unclassifyPhoto(lote, gtin, filename, fromClassification, operationContext);
+ 
+   if (result.ok) {
+     res.json({ ok: true, data: result.data, requestId: req.id });
+   } else {
+     res.status(400).json({ ok: false, error: result.error, requestId: req.id });
+   }
+ });
+ 
++/**
++ * POST /api/qa/excluir
++ * Exclui uma foto classificada ou da raiz e registra auditoria.
++ */
++router.post('/excluir', express.json(), async (req, res) => {
++  const { lote, gtin, filename, location = 'root' } = req.body;
++
++  if (!hasValidQaIdentifiers(lote, gtin) || !filename || !['root', 'AP', 'AT'].includes(location)) {
++    return res.status(400).json({ ok: false, error: 'Invalid parameters', requestId: req.id });
++  }
++
++  const operationContext = { operationId: req.body.operationId || req.headers['x-operation-id'] };
++  const result = await DeliveryService.deletePhoto(lote, gtin, filename, location, operationContext);
++  if (result.ok) {
++    return res.json({ ok: true, data: result.data, requestId: req.id });
++  }
++  return res.status(400).json({ ok: false, error: result.error, requestId: req.id });
++});
++
+ /**
+  * POST /api/qa/concluir
+  * Conclui QA e muda status para pronto_para_entrega
+  */
+ router.post('/concluir', express.json(), async (req, res) => {
+   const { lote, gtin, deliveryType = 'normal' } = req.body;
+ 
+-  if (!lote || !gtin) {
++  if (!hasValidQaIdentifiers(lote, gtin)) {
+     return res.status(400).json({
+       ok: false,
+       error: 'Lote and GTIN required',
+       requestId: req.id
+     });
+   }
+ 
+   const result = await DeliveryService.completeQa(lote, gtin, deliveryType);
+ 
+   if (result.ok) {
+diff --git a/services/delivery-service.js b/services/delivery-service.js
+index 12ea492..0033d3c 100644
+--- a/services/delivery-service.js
++++ b/services/delivery-service.js
+@@ -1,19 +1,21 @@
+ import path from 'path';
+ import { v4 as uuidv4 } from 'uuid';
+ import LoteRepository from '../repositories/lote-repository.js';
+ import { FileRepository } from '../repositories/file-repository.js';
+ import { Manifest, DeliveryRecord, DeliveryType, DeliveryStatus } from '../domain/delivery.js';
+ import { ProductStatus } from '../domain/status.js';
+ import { getFtpService } from './ftp-service.js';
+ import { auditLogger } from '../server/audit-logger.js';
+ import { config } from '../server/config.js';
++import ExcelService from './excel-service.js';
++import { Lote, Produto } from '../domain/lote.js';
+ 
+ /**
+  * Serviço de Entrega
+  * Gerencia QA, classificação, preparação e entrega de fotos
+  */
+ export class DeliveryService {
+   /**
+    * Carrega fotos de um produto para QA
+    */
+   static async loadQaPhotos(lote, gtin) {
+@@ -37,117 +39,218 @@ export class DeliveryService {
+         }
+       };
+     } catch (err) {
+       return { ok: false, error: err.message };
+     }
+   }
+ 
+   /**
+    * Classifica foto como AP (Apoio)
+    */
+-  static async classifyPhotoAP(lote, gtin, filename) {
++  static async classifyPhotoAP(lote, gtin, filename, operationContext = null) {
+     try {
+-      // TODO: Move arquivo para AP/
+-      // Mover Finalizadas/LOTE/GTIN/filename → Finalizadas/LOTE/GTIN/AP/filename
+-
+-      await auditLogger.log('CLASSIFY_AP', {
+-        lote,
+-        gtin,
+-        filename
+-      });
+-
+-      return { ok: true, data: { classified: 'AP' } };
++      return await this.classifyPhoto(lote, gtin, filename, 'AP', operationContext);
+     } catch (err) {
+       return { ok: false, error: err.message };
+     }
+   }
+ 
+   /**
+    * Classifica foto como AT (Atualização)
+    */
+-  static async classifyPhotoAT(lote, gtin, filename) {
++  static async classifyPhotoAT(lote, gtin, filename, operationContext = null) {
+     try {
+-      // TODO: Move arquivo para AT/
+-
+-      await auditLogger.log('CLASSIFY_AT', {
+-        lote,
+-        gtin,
+-        filename
+-      });
+-
+-      return { ok: true, data: { classified: 'AT' } };
++      return await this.classifyPhoto(lote, gtin, filename, 'AT', operationContext);
+     } catch (err) {
+       return { ok: false, error: err.message };
+     }
+   }
+ 
+   /**
+    * Remove classificação de foto
+    */
+-  static async unclassifyPhoto(lote, gtin, filename) {
++  static async unclassifyPhoto(lote, gtin, filename, fromClassification = null, operationContext = null) {
++    let moved = null;
++    let normalizedLote = null;
++    let normalizedGtin = null;
+     try {
+-      // TODO: Move arquivo de volta para raiz se estiver em AP/ ou AT/
+-
++      const loaded = await this.loadQaProduct(lote, gtin);
++      const { loteObj, produto } = loaded;
++      normalizedLote = loaded.lote;
++      normalizedGtin = loaded.gtin;
++      if (!['AP', 'AT'].includes(fromClassification)) return { ok: false, error: 'fromClassification must be AP or AT' };
++      moved = await FileRepository.moveFinalizadaPhoto({
++        loteNumero: normalizedLote, gtin: normalizedGtin, filename, fromSubfolder: fromClassification
++      });
++      this.recordQaHistory(produto, 'foto_desclassificada', {
++        classificacaoAnterior: fromClassification, filename: moved.destName
++      });
+       await auditLogger.log('UNCLASSIFY', {
+-        lote,
+-        gtin,
+-        filename
++        lote: normalizedLote, gtin: normalizedGtin, filename, fromClassification,
++        destName: moved.destName, operationId: operationContext?.operationId || null
+       });
++      await LoteRepository.save(loteObj);
++      return { ok: true, data: { unclassified: true, filename: moved.destName } };
++    } catch (err) {
++      return this.compensateQaMoveFailure(err, moved, {
++        loteNumero: normalizedLote,
++        gtin: normalizedGtin,
++        fromSubfolder: null,
++        toSubfolder: fromClassification,
++        originalFilename: filename
++      });
++    }
++  }
+ 
+-      return { ok: true, data: { unclassified: true } };
++  static async classifyPhoto(lote, gtin, filename, classification, operationContext = null) {
++    let moved = null;
++    let normalizedLote = null;
++    let normalizedGtin = null;
++    try {
++      if (!['AP', 'AT'].includes(classification)) return { ok: false, error: 'Invalid classification' };
++      const loaded = await this.loadQaProduct(lote, gtin);
++      const { loteObj, produto } = loaded;
++      normalizedLote = loaded.lote;
++      normalizedGtin = loaded.gtin;
++      moved = await FileRepository.moveFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, toSubfolder: classification });
++      this.recordQaHistory(produto, 'foto_classificada', { classificacao: classification, filename: moved.destName });
++      await auditLogger.log(`CLASSIFY_${classification}`, {
++        lote: normalizedLote, gtin: normalizedGtin, filename, destName: moved.destName,
++        operationId: operationContext?.operationId || null
++      });
++      await LoteRepository.save(loteObj);
++      return { ok: true, data: { classified: classification, filename: moved.destName } };
+     } catch (err) {
++      return this.compensateQaMoveFailure(err, moved, {
++        loteNumero: normalizedLote,
++        gtin: normalizedGtin,
++        fromSubfolder: classification,
++        toSubfolder: null,
++        originalFilename: filename
++      });
++    }
++  }
++
++  static async deletePhoto(lote, gtin, filename, location = 'root', operationContext = null) {
++    let historyPersisted = false;
++    let auditPersisted = false;
++    try {
++      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
++      const photo = await FileRepository.resolveFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, location });
++      this.recordQaHistory(produto, 'foto_excluida', {
++        filename: photo.filename, location: photo.location
++      }, -1);
++      await auditLogger.log('DELETE_PHOTO', {
++        lote: normalizedLote, gtin: normalizedGtin, filename: photo.filename, location: photo.location,
++        operationId: operationContext?.operationId || null, phase: 'pre_delete'
++      });
++      auditPersisted = true;
++      await LoteRepository.save(loteObj);
++      historyPersisted = true;
++      const deleted = await FileRepository.deleteFinalizadaPhoto({ loteNumero: normalizedLote, gtin: normalizedGtin, filename, location });
++      return { ok: true, data: { deleted: true, filename: deleted.filename, location: deleted.location } };
++    } catch (err) {
++      if (historyPersisted && auditPersisted) {
++        return {
++          ok: false,
++          error: `Physical delete failed after persisted history/audit: ${err.message}`,
++          warning: 'The file was retained and requires retry or manual cleanup.'
++        };
++      }
++      if (historyPersisted) return { ok: false, error: `Delete stopped after persisted history because audit logging failed: ${err.message}` };
+       return { ok: false, error: err.message };
+     }
+   }
+ 
++  static async compensateQaMoveFailure(error, moved, { loteNumero, gtin, fromSubfolder, toSubfolder, originalFilename }) {
++    if (!moved) return { ok: false, error: error.message };
++
++    try {
++      const compensation = await FileRepository.moveFinalizadaPhoto({
++        loteNumero,
++        gtin,
++        filename: moved.destName,
++        fromSubfolder,
++        toSubfolder
++      });
++      const warning = compensation.destName === originalFilename
++        ? null
++        : `Compensation restored the file as ${compensation.destName} instead of ${originalFilename}.`;
++      return {
++        ok: false,
++        error: error.message,
++        ...(warning ? { warning } : {})
++      };
++    } catch (compensationError) {
++      return {
++        ok: false,
++        error: `${error.message}; compensation failed: ${compensationError.message}`,
++        warning: 'The physical file may be out of sync with JSON history and requires manual recovery.'
++      };
++    }
++  }
++
++  static async loadQaProduct(lote, gtin) {
++    const normalizedLote = Lote.normalize(lote);
++    if (!Lote.isValid(normalizedLote)) throw new Error(`Invalid lote number: ${lote}`);
++    if (!Produto.isValid(gtin)) throw new Error(`Invalid GTIN: ${gtin}`);
++    const normalizedGtin = Produto.normalize(gtin);
++    const loteObj = await LoteRepository.load(normalizedLote);
++    const produto = loteObj.itens[normalizedGtin];
++    if (!produto) throw new Error(`Product not found: ${normalizedGtin}`);
++    return { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin };
++  }
++
++  static recordQaHistory(produto, event, details, photoCountDelta = 0) {
++    if (photoCountDelta !== 0) produto.quantidadeFotos = Math.max(0, produto.quantidadeFotos + photoCountDelta);
++    produto.addHistoricoEvent(event, details);
++  }
++
+   /**
+    * Conclui QA e muda status para pronto_para_entrega
+    */
+   static async completeQa(lote, gtin, deliveryType = DeliveryType.NORMAL) {
+     try {
+-      const loteObj = await LoteRepository.load(lote);
+-      const produto = loteObj.itens[gtin];
+-
+-      if (!produto) {
+-        throw new Error(`Product not found: ${gtin}`);
++      if (![DeliveryType.NORMAL, DeliveryType.ATUALIZACAO].includes(deliveryType)) {
++        return { ok: false, error: 'Invalid delivery type' };
+       }
+-
+-      // Valida que tem fotos elegíveis
+-      if (deliveryType === DeliveryType.NORMAL) {
+-        // Deve ter fotos na raiz
+-        const raizPhotos = await FileRepository.listFinalizadasImages(lote, gtin);
+-        if (raizPhotos.length === 0) {
+-          return { ok: false, error: 'No photos in root folder for normal delivery' };
+-        }
+-      } else if (deliveryType === DeliveryType.ATUALIZACAO) {
+-        // Deve ter fotos em AT/
+-        const atPhotos = await FileRepository.listFinalizadasImages(lote, gtin, 'AT');
+-        if (atPhotos.length === 0) {
+-          return { ok: false, error: 'No photos in AT folder for update delivery' };
+-        }
++      const { loteObj, produto, lote: normalizedLote, gtin: normalizedGtin } = await this.loadQaProduct(lote, gtin);
++      const subfolder = deliveryType === DeliveryType.ATUALIZACAO ? 'AT' : null;
++      const photos = await FileRepository.listFinalizadasImages(normalizedLote, normalizedGtin, subfolder);
++      if (photos.length === 0) {
++        return {
++          ok: false,
++          error: deliveryType === DeliveryType.ATUALIZACAO
++            ? 'No AT photos available for update delivery'
++            : 'No root photos available for normal delivery'
++        };
+       }
+ 
+       // Muda status
+       produto.status = ProductStatus.PRONTO_PARA_ENTREGA;
++      produto.addHistoricoEvent('qa_concluido', { deliveryType, quantidadeFotosElegiveis: photos.length });
+       await LoteRepository.save(loteObj);
++      await ExcelService.updateControlFromLote(normalizedLote);
+ 
+       await auditLogger.log('QA_COMPLETO', {
+-        lote,
+-        gtin,
+-        deliveryType
++        lote: normalizedLote,
++        gtin: normalizedGtin,
++        deliveryType,
++        quantidadeFotosElegiveis: photos.length
+       });
+ 
+       return {
+         ok: true,
+         data: {
+-          status: 'pronto_para_entrega',
+-          deliveryType
++          status: produto.status,
++          deliveryType,
++          quantidadeFotosElegiveis: photos.length
+         }
+       };
+     } catch (err) {
+       return { ok: false, error: err.message };
+     }
+   }
+ 
+   /**
+    * Prepara entrega (monta staging + manifest)
+    */
+diff --git a/tests/integration/qa-products.test.js b/tests/integration/qa-products.test.js
+new file mode 100644
+index 0000000..a06e620
+--- /dev/null
++++ b/tests/integration/qa-products.test.js
+@@ -0,0 +1,352 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'fs';
++import path from 'path';
++import ExcelJS from 'exceljs';
++import { createTestEnv } from '../helpers/test-env.js';
++import { applyConfigOverrides } from '../../server/config.js';
++import { createApp } from '../../server/app.js';
++import CapturaService from '../../services/captura-service.js';
++import DeliveryService from '../../services/delivery-service.js';
++import LoteRepository from '../../repositories/lote-repository.js';
++import { DeliveryType } from '../../domain/delivery.js';
++import { auditLogger } from '../../server/audit-logger.js';
++
++const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
++
++async function request(app, requestPath, body, operationId) {
++  const server = app.listen(0, '127.0.0.1');
++  await new Promise(resolve => server.once('listening', resolve));
++  const { port } = server.address();
++
++  try {
++    const response = await fetch(`http://127.0.0.1:${port}${requestPath}`, {
++      method: 'POST',
++      headers: { 'Content-Type': 'application/json', 'X-Operation-ID': operationId },
++      body: JSON.stringify(body)
++    });
++    return { status: response.status, body: await response.json() };
++  } finally {
++    await new Promise(resolve => server.close(resolve));
++  }
++}
++
++async function savePhoto(env, lote = '37', gtin = '000123', filename = 'a.jpg') {
++  await fs.promises.writeFile(path.join(env.paths.imagesTemp, filename), JPG_BYTES);
++  const result = await CapturaService.saveCapture(lote, gtin, 'COD-1', 'Produto local');
++  assert.equal(result.ok, true);
++}
++
++test('classifies AP and AT by moving files, then unclassifies without overwrite', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env);
++  const root = path.join(env.paths.finalizadas, 'LOTE 37', '000123');
++  const ap = await DeliveryService.classifyPhotoAP('37', '000123', 'a.jpg');
++  assert.equal(ap.ok, true);
++  assert.equal(ap.data.filename, 'a.jpg');
++  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), true);
++  await fs.promises.writeFile(path.join(root, 'a.jpg'), Buffer.from('root collision'));
++
++  const undo = await DeliveryService.unclassifyPhoto('37', '000123', 'a.jpg', 'AP');
++  assert.equal(undo.ok, true);
++  assert.equal(undo.data.filename, 'a_001.jpg');
++  assert.equal(fs.existsSync(path.join(root, 'a_001.jpg')), true);
++  assert.deepEqual(await fs.promises.readFile(path.join(root, 'a.jpg')), Buffer.from('root collision'));
++
++  const at = await DeliveryService.classifyPhotoAT('37', '000123', 'a_001.jpg');
++  assert.equal(at.ok, true);
++  assert.equal(fs.existsSync(path.join(root, 'AT', 'a_001.jpg')), true);
++});
++
++test('classifies into AP and AT without overwriting an existing destination', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '41');
++  const root = path.join(env.paths.finalizadas, 'LOTE 41', '000123');
++
++  await fs.promises.mkdir(path.join(root, 'AP'), { recursive: true });
++  await fs.promises.writeFile(path.join(root, 'AP', 'a.jpg'), Buffer.from('existing AP'));
++  const ap = await DeliveryService.classifyPhotoAP('41', '000123', 'a.jpg');
++  assert.equal(ap.ok, true);
++  assert.equal(ap.data.filename, 'a_001.jpg');
++  assert.deepEqual(await fs.promises.readFile(path.join(root, 'AP', 'a.jpg')), Buffer.from('existing AP'));
++  assert.equal(fs.existsSync(path.join(root, 'AP', 'a_001.jpg')), true);
++
++  await fs.promises.writeFile(path.join(root, 'a_001.jpg'), JPG_BYTES);
++  await fs.promises.mkdir(path.join(root, 'AT'), { recursive: true });
++  await fs.promises.writeFile(path.join(root, 'AT', 'a_001.jpg'), Buffer.from('existing AT'));
++  const at = await DeliveryService.classifyPhotoAT('41', '000123', 'a_001.jpg');
++  assert.equal(at.ok, true);
++  assert.equal(at.data.filename, 'a_001_001.jpg');
++  assert.deepEqual(await fs.promises.readFile(path.join(root, 'AT', 'a_001.jpg')), Buffer.from('existing AT'));
++  assert.equal(fs.existsSync(path.join(root, 'AT', 'a_001_001.jpg')), true);
++});
++
++test('rejects unsafe QA path inputs without changing files', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '42');
++  const root = path.join(env.paths.finalizadas, 'LOTE 42', '000123');
++  const source = path.join(root, 'a.jpg');
++  const escapedProduct = path.join(env.paths.finalizadas, 'outro');
++  const escapedLote = path.join(env.paths.finalizadas, 'outro', '000123');
++  await fs.promises.mkdir(escapedProduct, { recursive: true });
++  await fs.promises.mkdir(escapedLote, { recursive: true });
++  await fs.promises.writeFile(path.join(escapedProduct, 'a.jpg'), Buffer.from('other product'));
++  await fs.promises.writeFile(path.join(escapedLote, 'a.jpg'), Buffer.from('other lote'));
++  const invalidInputs = [
++    () => DeliveryService.classifyPhotoAP('42', '../outro', 'a.jpg'),
++    () => DeliveryService.classifyPhotoAP('42/../outro', '000123', 'a.jpg'),
++    () => DeliveryService.classifyPhotoAP('42', '000123', '../a.jpg'),
++    () => DeliveryService.deletePhoto('42', '000123', 'a.jpg', '../AP')
++  ];
++
++  for (const operation of invalidInputs) {
++    const result = await operation();
++    assert.equal(result.ok, false);
++    assert.equal(fs.existsSync(source), true);
++  }
++  assert.equal(fs.existsSync(path.join(escapedProduct, 'AP', 'a.jpg')), false);
++  assert.equal(fs.existsSync(path.join(escapedLote, 'AP', 'a.jpg')), false);
++  assert.deepEqual(await fs.promises.readFile(path.join(escapedProduct, 'a.jpg')), Buffer.from('other product'));
++  assert.deepEqual(await fs.promises.readFile(path.join(escapedLote, 'a.jpg')), Buffer.from('other lote'));
++});
++
++test('rejects an invalid delete location without changing the file or JSON history', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '51');
++  const root = path.join(env.paths.finalizadas, 'LOTE 51', '000123');
++  const jsonPath = path.join(env.paths.jsons, 'Lote_51.json');
++  const before = await fs.promises.readFile(jsonPath, 'utf8');
++
++  const result = await DeliveryService.deletePhoto('51', '000123', 'a.jpg', '../AP');
++
++  assert.equal(result.ok, false);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
++});
++
++test('does not mutate photos when the lote or product is absent from JSON', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  const root = path.join(env.paths.finalizadas, 'LOTE 43', '000123');
++  await fs.promises.mkdir(root, { recursive: true });
++  await fs.promises.writeFile(path.join(root, 'a.jpg'), JPG_BYTES);
++
++  const missingLote = await DeliveryService.classifyPhotoAP('43', '000123', 'a.jpg');
++  assert.equal(missingLote.ok, false);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++
++  await savePhoto(env, '44');
++  const missingProductRoot = path.join(env.paths.finalizadas, 'LOTE 44', '999999');
++  await fs.promises.mkdir(missingProductRoot, { recursive: true });
++  await fs.promises.writeFile(path.join(missingProductRoot, 'orphan.jpg'), JPG_BYTES);
++  const missingProduct = await DeliveryService.deletePhoto('44', '999999', 'orphan.jpg');
++  assert.equal(missingProduct.ok, false);
++  assert.equal(fs.existsSync(path.join(missingProductRoot, 'orphan.jpg')), true);
++});
++
++test('rejects an invalid unclassify source without moving the photo', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '45');
++  const root = path.join(env.paths.finalizadas, 'LOTE 45', '000123');
++
++  const result = await DeliveryService.unclassifyPhoto('45', '000123', 'a.jpg', 'invalid');
++  assert.equal(result.ok, false);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
++});
++
++test('compensates a classify move when saving its JSON history fails', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '48');
++  const root = path.join(env.paths.finalizadas, 'LOTE 48', '000123');
++  const originalSave = LoteRepository.save;
++  LoteRepository.save = async () => { throw new Error('forced save failure'); };
++  t.after(() => { LoteRepository.save = originalSave; });
++
++  const result = await DeliveryService.classifyPhotoAP('48', '000123', 'a.jpg');
++
++  assert.equal(result.ok, false);
++  assert.match(result.error, /forced save failure/);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
++});
++
++test('compensates an unclassify move when saving its JSON history fails', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '49');
++  const root = path.join(env.paths.finalizadas, 'LOTE 49', '000123');
++  const classified = await DeliveryService.classifyPhotoAP('49', '000123', 'a.jpg');
++  assert.equal(classified.ok, true);
++  const originalSave = LoteRepository.save;
++  LoteRepository.save = async () => { throw new Error('forced save failure'); };
++  t.after(() => { LoteRepository.save = originalSave; });
++
++  const result = await DeliveryService.unclassifyPhoto('49', '000123', 'a.jpg', 'AP');
++
++  assert.equal(result.ok, false);
++  assert.match(result.error, /forced save failure/);
++  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), true);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), false);
++});
++
++test('does not delete a photo when saving its deletion history fails', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '50');
++  const root = path.join(env.paths.finalizadas, 'LOTE 50', '000123');
++  const originalSave = LoteRepository.save;
++  LoteRepository.save = async () => { throw new Error('forced save failure'); };
++  t.after(() => { LoteRepository.save = originalSave; });
++
++  const result = await DeliveryService.deletePhoto('50', '000123', 'a.jpg');
++
++  assert.equal(result.ok, false);
++  assert.match(result.error, /forced save failure/);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_50.json'), 'utf8'));
++  assert.notEqual(lote.itens['000123'].historico.at(-1)?.evento, 'foto_excluida');
++});
++
++test('compensates a classify move when audit logging fails without persisting JSON history', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '52');
++  const root = path.join(env.paths.finalizadas, 'LOTE 52', '000123');
++  const jsonPath = path.join(env.paths.jsons, 'Lote_52.json');
++  const before = await fs.promises.readFile(jsonPath, 'utf8');
++  const originalLog = auditLogger.log;
++  auditLogger.log = async () => { throw new Error('forced audit failure'); };
++  t.after(() => { auditLogger.log = originalLog; });
++
++  const result = await DeliveryService.classifyPhotoAP('52', '000123', 'a.jpg');
++
++  assert.equal(result.ok, false);
++  assert.match(result.error, /forced audit failure/);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
++  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
++});
++
++test('does not persist deletion history or remove the file when audit logging fails', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '53');
++  const root = path.join(env.paths.finalizadas, 'LOTE 53', '000123');
++  const jsonPath = path.join(env.paths.jsons, 'Lote_53.json');
++  const before = await fs.promises.readFile(jsonPath, 'utf8');
++  const originalLog = auditLogger.log;
++  auditLogger.log = async () => { throw new Error('forced audit failure'); };
++  t.after(() => { auditLogger.log = originalLog; });
++
++  const result = await DeliveryService.deletePhoto('53', '000123', 'a.jpg');
++
++  assert.equal(result.ok, false);
++  assert.match(result.error, /forced audit failure/);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
++});
++
++test('deletes a classified photo with an audit trail and updates product history', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '38');
++  const root = path.join(env.paths.finalizadas, 'LOTE 38', '000123');
++  await DeliveryService.classifyPhotoAP('38', '000123', 'a.jpg');
++
++  const deleted = await DeliveryService.deletePhoto('38', '000123', 'a.jpg', 'AP');
++
++  assert.equal(deleted.ok, true);
++  assert.equal(fs.existsSync(path.join(root, 'AP', 'a.jpg')), false);
++  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_38.json'), 'utf8'));
++  assert.equal(lote.itens['000123'].quantidadeFotos, 0);
++  assert.equal(lote.itens['000123'].historico.at(-1).evento, 'foto_excluida');
++  const auditFiles = await fs.promises.readdir(env.paths.auditoria);
++  const auditLog = await fs.promises.readFile(path.join(env.paths.auditoria, auditFiles[0]), 'utf8');
++  assert.match(auditLog, /DELETE_PHOTO/);
++});
++
++test('completes QA from JSON, updates the control workbook, and does not deliver', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '39');
++
++  const complete = await DeliveryService.completeQa('39', '000123', DeliveryType.NORMAL);
++
++  assert.equal(complete.ok, true);
++  assert.equal(complete.data.status, 'pronto_para_entrega');
++  assert.equal(complete.data.quantidadeFotosElegiveis, 1);
++  const lote = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_39.json'), 'utf8'));
++  assert.equal(lote.itens['000123'].status, 'pronto_para_entrega');
++  assert.equal(lote.itens['000123'].historico.at(-1).evento, 'qa_concluido');
++  assert.equal(fs.existsSync(path.join(env.paths.entrega, '39')), false);
++
++  const workbook = new ExcelJS.Workbook();
++  await workbook.xlsx.readFile(path.join(env.paths.xlsx, 'controle-lotes.xlsx'));
++  assert.equal(workbook.getWorksheet('Lote 39').getCell('F2').value, 'pronto_para_entrega');
++});
++
++test('rejects an unknown QA delivery type without changing JSON', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '46');
++  const jsonPath = path.join(env.paths.jsons, 'Lote_46.json');
++  const before = await fs.promises.readFile(jsonPath, 'utf8');
++
++  const result = await DeliveryService.completeQa('46', '000123', 'express');
++
++  assert.equal(result.ok, false);
++  assert.equal(await fs.promises.readFile(jsonPath, 'utf8'), before);
++});
++
++test('QA routes use the global operationId envelope and expose all commands', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '40');
++  const app = createApp({ configOverrides: env.config });
++
++  const classified = await request(app, '/api/qa/classificar', {
++    lote: '40', gtin: '000123', filename: 'a.jpg', classification: 'AP'
++  }, 'qa-classify');
++  assert.equal(classified.status, 200);
++  assert.equal(classified.body.ok, true);
++  assert.equal(classified.body.data.classified, 'AP');
++
++  const unclassified = await request(app, '/api/qa/desclassificar', {
++    lote: '40', gtin: '000123', filename: 'a.jpg', fromClassification: 'AP'
++  }, 'qa-unclassify');
++  assert.equal(unclassified.status, 200);
++  assert.equal(unclassified.body.data.unclassified, true);
++
++  const deleted = await request(app, '/api/qa/excluir', {
++    lote: '40', gtin: '000123', filename: 'a.jpg', location: 'root'
++  }, 'qa-delete');
++  assert.equal(deleted.status, 200);
++  assert.equal(deleted.body.data.deleted, true);
++});
++
++test('QA routes reject invalid lote and GTIN before commands run', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  await savePhoto(env, '47');
++  const app = createApp({ configOverrides: env.config });
++  const root = path.join(env.paths.finalizadas, 'LOTE 47', '000123');
++
++  const invalidGtin = await request(app, '/api/qa/classificar', {
++    lote: '47', gtin: '../outro', filename: 'a.jpg', classification: 'AP'
++  }, 'qa-invalid-gtin');
++  assert.equal(invalidGtin.status, 400);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++
++  const invalidLote = await request(app, '/api/qa/excluir', {
++    lote: '47/../outro', gtin: '000123', filename: 'a.jpg', location: 'root'
++  }, 'qa-invalid-lote');
++  assert.equal(invalidLote.status, 400);
++  assert.equal(fs.existsSync(path.join(root, 'a.jpg')), true);
++});

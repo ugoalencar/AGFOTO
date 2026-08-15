@@ -408,9 +408,10 @@ export default {
 
     const loadAvailableLotes = async () => {
       try {
-        const response = await this.$api.request('/api/lotes');
+        const response = await this.$api.request('/api/lotes/finalizados/lista');
         if (response.ok) {
           availableLotes.value = response.data.lotes || [];
+          await loadQaLotes();
         }
       } catch (err) {
         availableLotes.value = [];
@@ -621,12 +622,10 @@ export default {
 
     const loadQaLotes = async () => {
       try {
-        const fs = require('fs');
-        const path = require('path');
-        const jsonDir = 'dados/jsons';
-
-        const files = fs.readdirSync(jsonDir).filter(f => f.startsWith('Lote_'));
-        qaAvailableLotes.value = files.map(f => f.replace('Lote_', '').replace('.json', ''));
+        const response = await this.$api.request('/api/lotes/finalizados/lista');
+        if (response.ok) {
+          qaAvailableLotes.value = response.data.lotes || [];
+        }
       } catch (err) {
         qaAvailableLotes.value = [];
       }

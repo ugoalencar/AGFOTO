@@ -1,0 +1,683 @@
+﻿# Review package: 70303a7..489ac22
+
+## Commits
+489ac22 feat: implement local spreadsheet lookup imports
+
+## Files changed
+ .superpowers/sdd/task-4-report.md            |  20 +++
+ domain/excel.js                              |  14 +-
+ routes/planilhas.js                          | 215 ++++-----------------------
+ services/excel-service.js                    | 145 ++++++++++++++++--
+ tests/integration/planilhas-products.test.js |  90 +++++++++++
+ 5 files changed, 285 insertions(+), 199 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/task-4-report.md b/.superpowers/sdd/task-4-report.md
+new file mode 100644
+index 0000000..9c22dbf
+--- /dev/null
++++ b/.superpowers/sdd/task-4-report.md
+@@ -0,0 +1,20 @@
++# Task 4 Report - Planilhas Import
++
++## Implemented
++
++- Added local workbook staging with preview, limits, and pending import sessions.
++- Added lookup conflict detection and confirmation that blocks conflicting sessions.
++- Added local-only path validation under `dados/xlsx`, including real-path validation to reject traversal and symlink escapes.
++- Added `lookupCodigo` and the `/api/planilhas/importar` and `/api/planilhas/confirmar` routes. Operation lifecycle remains owned by the app middleware.
++- Added integration coverage using temporary directories only.
++
++## Verification
++
++- `node --test tests/integration/planilhas-products.test.js`: 3 passed, 0 failed.
++- `npm.cmd test -- tests/integration/planilhas-products.test.js`: 138 passed, 0 failed, 1 skipped (Windows symlink permission).
++- `npm.cmd test`: 138 passed, 0 failed, 1 skipped (Windows symlink permission).
++- `npm.cmd run lint` could not run because this repository has no ESLint configuration file.
++
++## Scope
++
++No production spreadsheet data was read or written. No Redmine, Java, start.jar, external terminal, or Syndi integration was used.
+diff --git a/domain/excel.js b/domain/excel.js
+index a512e42..86a4562 100644
+--- a/domain/excel.js
++++ b/domain/excel.js
+@@ -179,19 +179,31 @@ export function sanitizeCellValue(value) {
+ 
+   // Bloqueia fórmulas que começam com =, +, -, @
+   if (/^[=+\-@]/.test(str)) {
+     console.warn(`Formula injection attempt blocked: ${str.substring(0, 20)}`);
+     return `'${str}`;
+   }
+ 
+   return str;
+ }
+ 
++export function toCellString(value) {
++  if (value === null || value === undefined) return null;
++  if (typeof value === 'object' && value.richText) {
++    return sanitizeCellValue(value.richText.map(part => part.text).join(''));
++  }
++  if (typeof value === 'object' && value.text !== undefined) {
++    return sanitizeCellValue(value.text);
++  }
++  return sanitizeCellValue(value);
++}
++
+ export default {
+   ExcelConflict,
+   ExcelItem,
+   ExcelImportResult,
+   EXCEL_HEADERS,
+   normalizeHeader,
+   findColumnIndex,
+-  sanitizeCellValue
++  sanitizeCellValue,
++  toCellString
+ };
+diff --git a/routes/planilhas.js b/routes/planilhas.js
+index 1608988..956a78c 100644
+--- a/routes/planilhas.js
++++ b/routes/planilhas.js
+@@ -1,218 +1,65 @@
+ import { Router } from 'express';
+ import ExcelService from '../services/excel-service.js';
+ import { Lote } from '../domain/lote.js';
++import { sendError, sendOk } from '../server/response.js';
+ 
+ const router = Router();
+ 
+-/**
+- * POST /api/planilhas/importar
+- * Upload e parse de arquivo Excel
+- *
+- * Form data:
+- * - file: arquivo .xlsx
+- * - lote: número do lote
+- */
+ router.post('/importar', async (req, res) => {
+   try {
+-    // Simples parsing sem upload (em produção, usar multer)
+-    const { lote } = req.body;
+-
+-    if (!lote || !Lote.isValid(lote)) {
+-      return res.status(400).json({
+-        ok: false,
+-        error: 'Invalid lote number',
+-        requestId: req.id
+-      });
+-    }
+-
+-    // Retorna instruções de upload
+-    res.json({
+-      ok: true,
+-      data: {
+-        message: 'Upload Excel via POST com form-data',
+-        supported_formats: ['.xlsx'],
+-        max_size: '50MB',
+-        max_rows: 100000
+-      },
+-      requestId: req.id
+-    });
+-  } catch (err) {
+-    res.status(400).json({
+-      ok: false,
+-      error: err.message,
+-      requestId: req.id
+-    });
++    const result = await ExcelService.importWorkbook(req.body || {});
++    return result.ok ? sendOk(res, result.data) : sendError(res, 400, result.error);
++  } catch (error) {
++    return sendError(res, 400, error);
+   }
+ });
+ 
+-/**
+- * POST /api/planilhas/unificar
+- * Unifica items no lookup-integrado.xlsx
+- *
+- * Body:
+- * {
+- *   "lote": "37",
+- *   "items": [
+- *     { "ean": "...", "codigo": "...", "descricao": "..." }
+- *   ]
+- * }
+- */
+-router.post('/unificar', async (req, res) => {
++router.post('/confirmar', async (req, res) => {
+   try {
+-    const { lote, items } = req.body;
+-
+-    if (!lote || !Lote.isValid(lote)) {
+-      return res.status(400).json({
+-        ok: false,
+-        error: 'Invalid lote',
+-        requestId: req.id
+-      });
+-    }
+-
+-    if (!Array.isArray(items) || items.length === 0) {
+-      return res.status(400).json({
+-        ok: false,
+-        error: 'Items required',
+-        requestId: req.id
+-      });
+-    }
+-
+-    const result = await ExcelService.mergeToLookup(lote, items);
+-
+-    if (result.ok) {
+-      res.json({
+-        ok: true,
+-        data: result.data,
+-        requestId: req.id
+-      });
+-    } else {
+-      res.status(400).json({
+-        ok: false,
+-        error: result.error,
+-        requestId: req.id
+-      });
+-    }
+-  } catch (err) {
+-    res.status(400).json({
+-      ok: false,
+-      error: err.message,
+-      requestId: req.id
+-    });
++    const result = await ExcelService.confirmImport(req.body?.importId);
++    return result.ok ? sendOk(res, result.data) : sendError(res, 400, result.error);
++  } catch (error) {
++    return sendError(res, 400, error);
+   }
+ });
+ 
+-/**
+- * GET /api/planilhas/conflitos
+- * Lista conflitos pendentes
+- *
+- * Query:
+- * - lote: número do lote (opcional)
+- */
+-router.get('/conflitos', (req, res) => {
++router.post('/unificar', async (req, res) => {
+   try {
+-    // Placeholder para sistema de conflitos
+-    res.json({
+-      ok: true,
+-      data: {
+-        message: 'Conflict resolution system placeholder',
+-        status: 'not_implemented'
+-      },
+-      requestId: req.id
+-    });
+-  } catch (err) {
+-    res.status(400).json({
+-      ok: false,
+-      error: err.message,
+-      requestId: req.id
+-    });
++    const { lote, items } = req.body || {};
++    if (!Lote.isValid(lote)) return sendError(res, 400, 'Invalid lote');
++    if (!Array.isArray(items) || items.length === 0) return sendError(res, 400, 'Items required');
++    const result = await ExcelService.mergeToLookup(lote, items);
++    return result.ok ? sendOk(res, result.data) : sendError(res, 400, result.error);
++  } catch (error) {
++    return sendError(res, 400, error);
+   }
+ });
+ 
+-/**
+- * GET /api/planilhas/controle
+- * Download controle-lotes.xlsx
+- *
+- * Query:
+- * - lote: número do lote
+- */
++router.get('/conflitos', (_req, res) => sendOk(res, {
++  message: 'Conflict resolution system placeholder',
++  status: 'not_implemented'
++}));
++
+ router.get('/controle', async (req, res) => {
+   try {
+     const { lote } = req.query;
+-
+-    if (!lote || !Lote.isValid(lote)) {
+-      return res.status(400).json({
+-        ok: false,
+-        error: 'Lote is required',
+-        requestId: req.id
+-      });
+-    }
+-
+-    // Gera controle sheet
++    if (!Lote.isValid(lote)) return sendError(res, 400, 'Lote is required');
+     const result = await ExcelService.generateBatchControlSheet(lote);
+-
+-    if (result.ok) {
+-      res.json({
+-        ok: true,
+-        data: result.data,
+-        requestId: req.id
+-      });
+-    } else {
+-      res.status(400).json({
+-        ok: false,
+-        error: result.error,
+-        requestId: req.id
+-      });
+-    }
+-  } catch (err) {
+-    res.status(400).json({
+-      ok: false,
+-      error: err.message,
+-      requestId: req.id
+-    });
++    return result.ok ? sendOk(res, result.data) : sendError(res, 400, result.error);
++  } catch (error) {
++    return sendError(res, 400, error);
+   }
+ });
+ 
+-/**
+- * GET /api/planilhas/reconciliar
+- * Reconcilia JSON com Excel
+- *
+- * Query:
+- * - lote: número do lote
+- */
+ router.get('/reconciliar', async (req, res) => {
+   try {
+     const { lote } = req.query;
+-
+-    if (!lote || !Lote.isValid(lote)) {
+-      return res.status(400).json({
+-        ok: false,
+-        error: 'Lote is required',
+-        requestId: req.id
+-      });
+-    }
+-
++    if (!Lote.isValid(lote)) return sendError(res, 400, 'Lote is required');
+     const result = await ExcelService.reconcile(lote);
+-
+-    if (result.ok) {
+-      res.json({
+-        ok: true,
+-        data: result.data,
+-        requestId: req.id
+-      });
+-    } else {
+-      res.status(400).json({
+-        ok: false,
+-        error: result.error,
+-        requestId: req.id
+-      });
+-    }
+-  } catch (err) {
+-    res.status(400).json({
+-      ok: false,
+-      error: err.message,
+-      requestId: req.id
+-    });
++    return result.ok ? sendOk(res, result.data) : sendError(res, 400, result.error);
++  } catch (error) {
++    return sendError(res, 400, error);
+   }
+ });
+ 
+ export default router;
+diff --git a/services/excel-service.js b/services/excel-service.js
+index 0669f15..295d14c 100644
+--- a/services/excel-service.js
++++ b/services/excel-service.js
+@@ -1,24 +1,47 @@
+ import ExcelJS from 'exceljs';
+ import path from 'path';
+ import fs from 'fs';
+ import {
+   ExcelItem,
+   ExcelConflict,
+   ExcelImportResult,
+   EXCEL_HEADERS,
+   findColumnIndex,
+-  sanitizeCellValue
++  sanitizeCellValue,
++  toCellString
+ } from '../domain/excel.js';
+ import { config } from '../server/config.js';
+ import { auditLogger } from '../server/audit-logger.js';
+ import LoteRepository from '../repositories/lote-repository.js';
++import { assertInsideRoot } from '../server/secure-filesystem.js';
++import { Lote } from '../domain/lote.js';
++
++const pendingImports = new Map();
++
++function makeImportId(lote, filePath) {
++  return `${lote}:${path.basename(filePath)}:${Date.now()}`;
++}
++
++async function resolveLocalWorkbook(filePath) {
++  if (typeof filePath !== 'string' || /^https?:\/\//i.test(filePath) || /^file:/i.test(filePath)) {
++    throw new Error('Workbook path must be a local path');
++  }
++  const candidate = path.resolve(filePath);
++  assertInsideRoot(candidate, config.paths.xlsx);
++  const [realRoot, realFile] = await Promise.all([
++    fs.promises.realpath(config.paths.xlsx),
++    fs.promises.realpath(candidate)
++  ]);
++  assertInsideRoot(realFile, realRoot);
++  return realFile;
++}
+ 
+ /**
+  * Serviço de Excel
+  * Gerencia importação, unificação e exportação de planilhas
+  */
+ export class ExcelService {
+   /**
+    * Rebuilds one lote sheet in the local control workbook from the JSON source.
+    */
+   static async updateControlFromLote(loteNumero) {
+@@ -67,21 +90,21 @@ export class ExcelService {
+       const workbook = new ExcelJS.Workbook();
+       await workbook.xlsx.readFile(filePath);
+ 
+       const worksheet = workbook.worksheets[0];
+       if (!worksheet) {
+         throw new Error('No worksheets found');
+       }
+ 
+       // Detecta headers (primeira linha)
+       const firstRow = worksheet.getRow(1);
+-      const headers = firstRow.values || [];
++      const headers = (firstRow.values || []).slice(1);
+ 
+       // Encontra colunas
+       const eanIdx = findColumnIndex(headers, EXCEL_HEADERS.ean);
+       const codigoIdx = findColumnIndex(headers, EXCEL_HEADERS.codigo);
+       const descricaoIdx = findColumnIndex(headers, EXCEL_HEADERS.descricao);
+ 
+       if (eanIdx < 0) {
+         throw new Error('EAN/GTIN column not found');
+       }
+ 
+@@ -110,20 +133,113 @@ export class ExcelService {
+       return {
+         ok: false,
+         error: `Cannot parse Excel: ${err.message}`
+       };
+     }
+   }
+ 
+   /**
+    * Importa items e detecta conflitos
+    */
++  static async parseWorkbook(filePath, lote) {
++    const parsed = await this.parseExcelFile(filePath);
++    if (!parsed.ok) return parsed;
++    if (parsed.data.count > config.validation.maxSheetRows) {
++      return { ok: false, error: 'Spreadsheet exceeds row limit' };
++    }
++    return { ok: true, data: parsed.data.items };
++  }
++
++  static async detectLookupConflicts(lote, items) {
++    const existing = new Map();
++    const lookupPath = path.join(config.paths.xlsx, 'lookup-integrado.xlsx');
++    try {
++      await fs.promises.access(lookupPath);
++      const workbook = new ExcelJS.Workbook();
++      await workbook.xlsx.readFile(lookupPath);
++      const worksheet = workbook.getWorksheet('Lookup') || workbook.worksheets[0];
++      worksheet?.eachRow((row, rowNumber) => {
++        if (rowNumber === 1) return;
++        const rowLote = toCellString(row.getCell(1).value);
++        const ean = toCellString(row.getCell(2).value);
++        if (rowLote === String(lote) && ean) {
++          existing.set(ean, { codigo: toCellString(row.getCell(3).value), descricao: toCellString(row.getCell(4).value) });
++        }
++      });
++    } catch (error) {
++      if (error.code !== 'ENOENT') throw error;
++    }
++
++    const conflicts = [];
++    const staged = new Map();
++    for (const item of items) {
++      const current = staged.get(item.ean) || existing.get(item.ean);
++      if (current) {
++        for (const field of ['codigo', 'descricao']) {
++          if (current[field] !== item[field]) {
++            conflicts.push(new ExcelConflict(lote, item.ean, field, current[field], item[field], 'lookup'));
++          }
++        }
++      }
++      staged.set(item.ean, { codigo: item.codigo, descricao: item.descricao });
++    }
++    return conflicts;
++  }
++
++  static async importWorkbook({ lote, filePath }) {
++    try {
++      if (!Lote.isValid(lote)) return { ok: false, error: 'Invalid lote' };
++      const safePath = await resolveLocalWorkbook(filePath);
++      const ext = path.extname(safePath).toLowerCase();
++      if (!['.xlsx', '.xls'].includes(ext)) return { ok: false, error: 'Only .xlsx and .xls are accepted' };
++      const stats = await fs.promises.stat(safePath);
++      if (!stats.isFile()) return { ok: false, error: 'Workbook path must be a file' };
++      if (stats.size > config.validation.maxSheetSize) return { ok: false, error: 'Spreadsheet exceeds size limit' };
++
++      const parsed = await this.parseWorkbook(safePath, lote);
++      if (!parsed.ok) return parsed;
++      const conflicts = await this.detectLookupConflicts(lote, parsed.data);
++      const importId = makeImportId(lote, safePath);
++      pendingImports.set(importId, { lote: String(lote), filePath: safePath, items: parsed.data, conflicts });
++      return { ok: true, data: { importId, preview: parsed.data.slice(0, 20), total: parsed.data.length, conflicts } };
++    } catch (error) {
++      return { ok: false, error: error.message };
++    }
++  }
++
++  static async confirmImport(importId) {
++    const session = pendingImports.get(importId);
++    if (!session) return { ok: false, error: 'Import session not found' };
++    if (session.conflicts.length) {
++      return { ok: false, error: 'Resolve conflicts before confirming', data: { conflicts: session.conflicts } };
++    }
++    const result = await this.mergeToLookup(session.lote, session.items);
++    if (result.ok) pendingImports.delete(importId);
++    return result;
++  }
++
++  static async lookupCodigo(lote, ean) {
++    try {
++      const workbook = new ExcelJS.Workbook();
++      await workbook.xlsx.readFile(path.join(config.paths.xlsx, 'lookup-integrado.xlsx'));
++      const worksheet = workbook.getWorksheet('Lookup') || workbook.worksheets[0];
++      for (const row of worksheet?.getRows(2, Math.max(0, worksheet.rowCount - 1)) || []) {
++        if (toCellString(row.getCell(1).value) === String(lote) && toCellString(row.getCell(2).value) === String(ean)) {
++          return { ok: true, data: { codigo: toCellString(row.getCell(3).value) || '', descricao: toCellString(row.getCell(4).value) || '' } };
++        }
++      }
++      return { ok: false, error: `Codigo not found for lote ${lote} EAN ${ean}` };
++    } catch (error) {
++      return { ok: false, error: `Cannot lookup codigo: ${error.message}` };
++    }
++  }
++
+   static async importItems(lote, items, source = 'upload') {
+     try {
+       const loteObj = await LoteRepository.load(lote);
+       const result = new ExcelImportResult(source, lote);
+ 
+       // Chave de deduplicação: lote + EAN
+       const dedup = new Map();
+ 
+       for (const item of items) {
+         const key = `${lote}-${item.ean}`;
+@@ -214,52 +330,53 @@ export class ExcelService {
+           { header: 'Código', key: 'codigo' },
+           { header: 'Descrição', key: 'descricao' },
+           { header: 'Importado em', key: 'importedAt' }
+         ];
+       }
+ 
+       // Mapeia dados existentes
+       const existingMap = new Map();
+       worksheet.eachRow((row, rowNumber) => {
+         if (rowNumber === 1) return;
+-        const ean = row.getCell('ean').value;
+-        if (ean) {
+-          existingMap.set(`${lote}-${ean}`, rowNumber);
++        const rowLote = toCellString(row.getCell(1).value);
++        const ean = toCellString(row.getCell(2).value);
++        if (rowLote && ean) {
++          existingMap.set(`${rowLote}-${ean}`, rowNumber);
+         }
+       });
+ 
+       // Adiciona ou atualiza items
+-      let added = 0;
++      let inserted = 0;
++      let unchanged = 0;
+       for (const item of items) {
+         const key = `${lote}-${item.ean}`;
+         const rowIdx = existingMap.get(key);
+-        const timestamp = new Date().toISOString();
+-
+         if (rowIdx) {
+-          // Atualiza existente
+-          const row = worksheet.getRow(rowIdx);
+-          row.assign({ lote, ean: item.ean, codigo: item.codigo, descricao: item.descricao, importedAt: timestamp });
++          unchanged++;
+         } else {
+           // Novo
+-          worksheet.addRow({ lote, ean: item.ean, codigo: item.codigo, descricao: item.descricao, importedAt: timestamp });
+-          added++;
++          worksheet.addRow({ lote, ean: item.ean, codigo: item.codigo, descricao: item.descricao, importedAt: new Date().toISOString() });
++          inserted++;
+         }
+       }
+ 
+       // Salva
+       await workbook.xlsx.writeFile(lookupPath);
+ 
+       return {
+         ok: true,
+         data: {
+           path: lookupPath,
+-          added,
++          added: inserted,
++          inserted,
++          unchanged,
++          conflicts: [],
+           total: worksheet.rowCount - 1
+         }
+       };
+     } catch (err) {
+       return {
+         ok: false,
+         error: `Cannot merge to lookup: ${err.message}`
+       };
+     }
+   }
+diff --git a/tests/integration/planilhas-products.test.js b/tests/integration/planilhas-products.test.js
+new file mode 100644
+index 0000000..5ca0d5e
+--- /dev/null
++++ b/tests/integration/planilhas-products.test.js
+@@ -0,0 +1,90 @@
++import test from 'node:test';
++import assert from 'node:assert/strict';
++import path from 'path';
++import ExcelJS from 'exceljs';
++import { createTestEnv } from '../helpers/test-env.js';
++import { applyConfigOverrides } from '../../server/config.js';
++import { createApp } from '../../server/app.js';
++import ExcelService from '../../services/excel-service.js';
++
++async function makeWorkbook(filePath, rows) {
++  const workbook = new ExcelJS.Workbook();
++  const worksheet = workbook.addWorksheet('Entrada');
++  rows.forEach(row => worksheet.addRow(row));
++  await workbook.xlsx.writeFile(filePath);
++}
++
++async function request(app, requestPath, body, operationId) {
++  const server = app.listen(0, '127.0.0.1');
++  await new Promise(resolve => server.once('listening', resolve));
++  const { port } = server.address();
++
++  try {
++    const response = await fetch(`http://127.0.0.1:${port}${requestPath}`, {
++      method: 'POST',
++      headers: {
++        'Content-Type': 'application/json',
++        'X-Operation-Id': operationId
++      },
++      body: JSON.stringify({ operationId, ...body })
++    });
++    return { status: response.status, body: await response.json() };
++  } finally {
++    await new Promise(resolve => server.close(resolve));
++  }
++}
++
++test('imports lookup workbook and blocks silent conflicts', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  const entrada = path.join(env.paths.xlsx, 'entrada.xlsx');
++  await makeWorkbook(entrada, [['EAN', 'Codigo', 'Descricao'], ['000123', 'COD-1', 'Produto 1']]);
++
++  const imported = await ExcelService.importWorkbook({ lote: '37', filePath: entrada });
++  assert.equal(imported.ok, true);
++  assert.equal(imported.data.preview.length, 1);
++
++  const confirmed = await ExcelService.confirmImport(imported.data.importId);
++  assert.equal(confirmed.ok, true);
++  assert.equal(confirmed.data.inserted, 1);
++  assert.equal((await ExcelService.lookupCodigo('37', '000123')).data.codigo, 'COD-1');
++
++  const conflictFile = path.join(env.paths.xlsx, 'entrada-conflict.xlsx');
++  await makeWorkbook(conflictFile, [['EAN', 'Codigo', 'Descricao'], ['000123', 'COD-2', 'Produto 1']]);
++  const conflict = await ExcelService.importWorkbook({ lote: '37', filePath: conflictFile });
++  assert.equal(conflict.ok, true);
++  assert.equal(conflict.data.conflicts.length, 1);
++  const blocked = await ExcelService.confirmImport(conflict.data.importId);
++  assert.equal(blocked.ok, false);
++  assert.match(blocked.error, /resolve conflicts/i);
++});
++
++test('only accepts local workbooks inside the configured xlsx directory', async t => {
++  const env = await createTestEnv(t);
++  applyConfigOverrides(env.config);
++  const outside = path.join(env.root, 'outside.xlsx');
++  await makeWorkbook(outside, [['EAN'], ['000123']]);
++
++  const traversal = await ExcelService.importWorkbook({ lote: '37', filePath: outside });
++  const internet = await ExcelService.importWorkbook({ lote: '37', filePath: 'https://example.test/entrada.xlsx' });
++
++  assert.equal(traversal.ok, false);
++  assert.match(traversal.error, /path traversal|outside/i);
++  assert.equal(internet.ok, false);
++  assert.match(internet.error, /path/i);
++});
++
++test('spreadsheet import routes stage then confirm an import', async t => {
++  const env = await createTestEnv(t);
++  const entrada = path.join(env.paths.xlsx, 'rota.xlsx');
++  await makeWorkbook(entrada, [['EAN', 'Codigo', 'Descricao'], ['000124', 'COD-2', 'Produto 2']]);
++  const app = createApp({ configOverrides: env.config });
++
++  const imported = await request(app, '/api/planilhas/importar', { lote: '37', filePath: entrada }, 'import-route');
++  assert.equal(imported.status, 200);
++  assert.equal(imported.body.ok, true);
++
++  const confirmed = await request(app, '/api/planilhas/confirmar', { importId: imported.body.data.importId }, 'confirm-route');
++  assert.equal(confirmed.status, 200);
++  assert.equal(confirmed.body.data.inserted, 1);
++});

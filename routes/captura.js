@@ -4,6 +4,8 @@ import CapturaService from '../services/captura-service.js';
 import { Lote, Produto } from '../domain/lote.js';
 import { PreviewService } from '../services/preview-service.js';
 import { sendError } from '../server/response.js';
+import { config } from '../server/config.js';
+import fs from 'fs';
 
 const router = Router();
 
@@ -53,6 +55,30 @@ const listLotesHandler = async (req, res) => {
 
 router.get('/', listLotesHandler);
 router.get('/lotes', listLotesHandler);
+
+/**
+ * GET /api/lotes/finalizados/lista
+ * Lista apenas lotes com imagens finalizadas
+ */
+router.get('/finalizados/lista', (req, res) => {
+  try {
+    const finalDir = config.paths.finalizadas;
+    const dirs = fs.readdirSync(finalDir).filter(f => f.startsWith('LOTE '));
+    const lotes = dirs.map(d => d.replace('LOTE ', ''));
+
+    res.json({
+      ok: true,
+      data: { lotes },
+      requestId: req.id
+    });
+  } catch (err) {
+    res.status(400).json({
+      ok: false,
+      error: err.message,
+      requestId: req.id
+    });
+  }
+});
 
 /**
  * GET /api/lotes/:numero

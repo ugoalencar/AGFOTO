@@ -1,0 +1,760 @@
+﻿# Review package: 45e8d75..HEAD
+
+## Commits
+7a53be1 fix: prevent mobile capture stage clipping
+5d7427d fix: correct capture stage layout
+a1ec208 feat: redesign product capture view
+
+## Files changed
+ .superpowers/sdd/layout-task-2-report.md   |  49 ++++++
+ frontend/public/App.vue                    | 171 +++++++++------------
+ frontend/public/css/main.css               | 229 +++++++++++++++++++++++++++++
+ frontend/src/App.vue                       | 171 +++++++++------------
+ tests/integration/captura-products.test.js |  10 ++
+ 5 files changed, 432 insertions(+), 198 deletions(-)
+
+## Diff
+diff --git a/.superpowers/sdd/layout-task-2-report.md b/.superpowers/sdd/layout-task-2-report.md
+new file mode 100644
+index 0000000..9f77a00
+--- /dev/null
++++ b/.superpowers/sdd/layout-task-2-report.md
+@@ -0,0 +1,49 @@
++# Relatorio - Task 2: Capture View Three-Column Layout
++
++## Escopo executado
++
++- Substituida a view Captura por uma grade de tres colunas: entrada, palco de imagens e GTINs do lote.
++- Mantidos os bindings e metodos existentes para lote, GTIN, imagens TEMP/anteriores, salvar, limpar, ampliar e excluir.
++- Adicionados os estilos especificos da captura em `frontend/public/css/main.css`.
++- Sincronizados `frontend/src/App.vue` e `frontend/public/App.vue`, sendo o ultimo o runtime servido.
++
++## Escopo intencionalmente nao executado
++
++- Nenhuma alteracao nas views Entregar, QA ou Relatorios.
++- Nenhuma mudanca em contratos de API, operationId, fluxos offline, Carros, ADSET, OCR, FTP ou Java.
++
++## Validacao
++
++- Checagem de sintaxe dos scripts de `frontend/src/App.vue` e `frontend/public/App.vue`: aprovadas.
++- `node --test tests/integration/captura-products.test.js tests/integration/qa-products.test.js`: 44 aprovados, 0 falhas, 1 ignorado (symlink do Windows sem permissao).
++- `git diff --check`: sem erros de whitespace.
++- Varredura de `frontend/public` (exceto vendor local): sem referencias remotas ou CDN.
++
++## Correcao de revisao
++
++- Corrigido o posicionamento do palco de captura: cada cabecalho agora ocupa a coluna diretamente acima da respectiva grade de imagens, com divisores entre os palcos preservados.
++- Adicionado fallback responsivo para a tela Captura: duas colunas com a lista de GTINs abaixo em larguras medias, uma coluna em telas estreitas e palcos empilhados em telefones pequenos.
++
++### Arquivos alterados
++
++- `frontend/public/css/main.css`
++- `.superpowers/sdd/layout-task-2-report.md`
++
++### Evidencias de verificacao
++
++- Checagem estatica aprovada para as areas explicitas do grid dos palcos e para o breakpoint responsivo.
++- Checagem de sintaxe dos scripts de `frontend/src/App.vue` e `frontend/public/App.vue`: aprovadas.
++- `node --test tests/integration/captura-products.test.js tests/integration/qa-products.test.js`: 33 aprovados, 0 falhas, 1 ignorado (symlink do Windows sem permissao).
++- `git diff --check`: sem erros de whitespace.
++- Varredura de referencias de runtime em `frontend/public` (exceto `vendor`): sem referencias remotas ou CDN novas.
++
++## Correcao responsiva adicional
++
++- Em telas de ate 560px, a linha do palco de captura agora usa altura baseada no conteudo. Os dois grids empilhados ficam acessiveis pelo scroll existente da view, sem clipping pelo `overflow: hidden` do card.
++- As regras de layout desktop e medio nao foram alteradas.
++
++### Verificacao da correcao
++
++- Adicionado teste de regressao que confirma a linha de palco com tamanho automatico no breakpoint de telefone.
++- `node --test tests/integration/captura-products.test.js tests/integration/qa-products.test.js`: 34 aprovados, 0 falhas, 1 ignorado (symlink do Windows sem permissao) apos a correcao.
++- `git diff --check`: sem erros de whitespace.
+diff --git a/frontend/public/App.vue b/frontend/public/App.vue
+index 8306906..a0f6c39 100644
+--- a/frontend/public/App.vue
++++ b/frontend/public/App.vue
+@@ -26,128 +26,101 @@
+         <div class="ag-wordmark"><b>AG</b> Foto</div>
+         <div class="ag-chip">Produtos</div>
+         <div class="ag-context">
+           <span v-if="selectedLote" class="ag-chip">Lote {{ selectedLote }}</span>
+           <span class="ag-chip">Entrega local/mock</span>
+         </div>
+       </header>
+ 
+       <div class="ag-content">
+ 
+-    <main v-if="activePage === 'captura'">
+-      <div class="panel-inputs">
+-        <div class="input-group-wrapper">
+-          <label>Lote</label>
+-          <input
+-            v-model="selectedLote"
+-            @keydown.enter="onLoteSelected"
+-            type="text"
+-            placeholder="Digite o número do lote"
+-            autocomplete="off">
+-          <button
+-            @click="onLoteSelected"
+-            :disabled="!selectedLote"
+-            style="padding: 0.75rem; background: #FF8800; color: #000; border: none; font-weight: bold; cursor: pointer;">
+-            Ir
+-          </button>
+-        </div>
+-
+-        <div v-if="selectedLote && loteItems.length > 0" class="input-group-wrapper">
+-          <label>GTINs no Lote</label>
+-          <ul class="lote-list">
+-            <li
+-              v-for="item in loteItems"
+-              :key="item.gtin"
+-              class="lote-item"
+-              @click="selectedGtin = item.gtin">
+-              {{ item.gtin }}
+-              <small>({{ item.quantidadeFotos }})</small>
+-            </li>
+-          </ul>
+-        </div>
++<main v-if="activePage === 'captura'" class="ag-view capture-view">
++  <section class="ag-card capture-entry">
++    <header class="ag-card-header">
++      <h2 class="ag-card-title">Entrada</h2>
++    </header>
++    <div class="ag-card-body" style="display:flex;flex-direction:column;gap:18px">
++      <div>
++        <label class="ag-label">Lote</label>
++        <input class="ag-field is-large" v-model="selectedLote" @keydown.enter="onLoteSelected" type="text" placeholder="Numero do lote" autocomplete="off">
++        <button class="ag-btn is-warning" style="width:100%;margin-top:8px" @click="onLoteSelected" :disabled="!selectedLote">Selecionar lote</button>
++      </div>
+ 
+-        <div class="input-group-wrapper">
+-          <label>GTIN/EAN</label>
+-          <input
+-            v-model="inputGtin"
+-            @keydown.enter="onGtinEnter"
+-            type="text"
+-            placeholder="Leitor ou digite"
+-            autocomplete="off">
+-        </div>
++      <div>
++        <label class="ag-label">GTIN / EAN</label>
++        <input class="ag-field is-large" v-model="inputGtin" @keydown.enter="onGtinEnter" type="text" placeholder="Leitor ou digitacao" autocomplete="off">
++      </div>
+ 
+-        <div v-if="selectedGtin" class="input-group-wrapper">
+-          <label>Status</label>
+-          <div style="padding: 0.75rem; background: var(--ag-dark-gray); border: 1px solid var(--ag-border);">
+-            <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span>
+-          </div>
+-        </div>
++      <div v-if="selectedGtin">
++        <label class="ag-label">Status</label>
++        <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span>
++      </div>
+ 
+-        <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--ag-border);">
+-          <button
+-            @click="onSaveCapture"
+-            :disabled="!selectedLote || !selectedGtin || tempImages.length === 0"
+-            class="btn-action primary"
+-            style="width: 100%;">
+-            Salvar ({{ tempImages.length }})
+-          </button>
+-          <button
+-            @click="onClearTemp"
+-            :disabled="tempImages.length === 0"
+-            class="btn-action secondary"
+-            style="width: 100%; margin-top: 0.5rem;">
+-            Limpar TEMP
+-          </button>
+-        </div>
++      <div class="capture-actions">
++        <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedLote || !selectedGtin || tempImages.length === 0">
++          Salvar ({{ tempImages.length }})
++        </button>
++        <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0">
++          Limpar TEMP
++        </button>
+       </div>
++    </div>
++  </section>
+ 
+-      <div class="stages-container">
+-        <div class="stage">
+-          <div class="stage-header">🎬 ATUAL (TEMP)</div>
+-          <div v-if="tempImages.length === 0" class="stage-content empty">
+-            Aguardando imagens da câmera...
+-          </div>
+-          <div v-else class="stage-content">
+-            <div
+-              v-for="img in tempImages"
+-              :key="img.name"
+-              class="thumbnail"
+-              @click="openModal(img)">
+-              <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
+-              <div class="thumbnail-overlay">
+-                <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">🔍</button>
+-                <button @click.stop="onImageDelete(img)" class="btn-thumbnail" title="Excluir">❌</button>
+-              </div>
+-            </div>
+-          </div>
++  <section class="ag-card capture-stage">
++    <div class="stage-head">
++      <h3 class="stage-title">Palco atual</h3>
++      <span class="ag-chip">TEMP monitorando</span>
++      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ tempImages.length }} imagens</span>
++    </div>
++    <div v-if="tempImages.length === 0" class="stage-grid stage-empty">Aguardando imagens da camera</div>
++    <div v-else class="stage-grid">
++      <div v-for="img in tempImages" :key="img.name" class="thumbnail" @click="openModal(img)">
++        <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
++        <div class="thumbnail-overlay">
++          <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
++          <button @click.stop="onImageDelete(img)" class="btn-thumbnail" title="Excluir">x</button>
+         </div>
++      </div>
++    </div>
+ 
+-        <div class="stage">
+-          <div class="stage-header">📁 ANTERIOR ({{ selectedGtin || '—' }})</div>
+-          <div v-if="!selectedGtin || previousImages.length === 0" class="stage-content empty">
+-            {{ selectedGtin ? 'Nenhuma imagem anterior' : 'Selecione um GTIN' }}
+-          </div>
+-          <div v-else class="stage-content">
+-            <div
+-              v-for="img in previousImages"
+-              :key="img.name"
+-              class="thumbnail"
+-              @click="openModal(img)">
+-              <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
+-              <div class="thumbnail-overlay">
+-                <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">🔍</button>
+-              </div>
+-            </div>
+-          </div>
++    <div class="stage-head">
++      <h3 class="stage-title">Palco anterior</h3>
++      <span class="ag-chip">{{ selectedGtin || 'sem GTIN' }}</span>
++      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
++    </div>
++    <div v-if="!selectedGtin || previousImages.length === 0" class="stage-grid stage-empty">
++      {{ selectedGtin ? 'Nenhuma imagem anterior' : 'Selecione um GTIN' }}
++    </div>
++    <div v-else class="stage-grid">
++      <div v-for="img in previousImages" :key="img.name" class="thumbnail" @click="openModal(img)">
++        <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
++        <div class="thumbnail-overlay">
++          <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
+         </div>
+       </div>
+-    </main>
++    </div>
++  </section>
++
++  <section class="ag-card">
++    <header class="ag-card-header">
++      <h2 class="ag-card-title">GTINs do lote</h2>
++      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ loteItems.length }} itens</span>
++    </header>
++    <ul class="capture-lote-list">
++      <li v-for="item in loteItems" :key="item.gtin" @click="selectedGtin = item.gtin">
++        <span>{{ item.gtin }}</span>
++        <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
++      </li>
++    </ul>
++  </section>
++</main>
+ 
+     <!-- Planilhas Page -->
+     <main v-if="activePage === 'planilhas'" style="padding: 2rem; overflow-y: auto;">
+       <div style="max-width: 900px;">
+         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">📊 Importação de Planilhas</h2>
+         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Upload Excel com EAN, Código e Descrição para unificar no master catalog.</p>
+ 
+         <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+           <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+           <input
+diff --git a/frontend/public/css/main.css b/frontend/public/css/main.css
+index 881d437..848df73 100644
+--- a/frontend/public/css/main.css
++++ b/frontend/public/css/main.css
+@@ -641,10 +641,239 @@ select {
+ }
+ 
+ .ag-topbar {
+   box-shadow: none;
+ }
+ 
+ .ag-content {
+   display: flex;
+   flex-direction: column;
+ }
++
++.capture-view {
++  display: grid;
++  grid-template-columns: 270px minmax(0, 1fr) 300px;
++}
++
++.ag-label {
++  display: block;
++  font-family: var(--ag-display);
++  font-size: 12px;
++  letter-spacing: .14em;
++  text-transform: uppercase;
++  color: var(--ag-muted);
++  margin-bottom: 5px;
++}
++
++.ag-field {
++  width: 100%;
++  background: var(--ag-panel-2);
++  border: 1px solid var(--ag-line);
++  border-radius: var(--ag-radius);
++  padding: 9px 11px;
++  color: var(--ag-text);
++  font-family: var(--ag-mono);
++  font-size: 14px;
++}
++
++.ag-field.is-large {
++  font-size: 19px;
++  padding: 11px;
++}
++
++.ag-field:focus {
++  border-color: var(--ag-orange);
++  outline: none;
++}
++
++.ag-btn {
++  border: 1px solid var(--ag-line);
++  background: var(--ag-panel-2);
++  border-radius: var(--ag-radius);
++  padding: 8px 14px;
++  cursor: pointer;
++  color: var(--ag-text);
++  font-family: var(--ag-display);
++  font-size: 14px;
++  letter-spacing: .09em;
++  text-transform: uppercase;
++}
++
++.ag-btn.is-primary {
++  background: linear-gradient(180deg, var(--ag-red), #B81216);
++  border-color: #8E0F13;
++  color: #fff;
++}
++
++.ag-btn.is-warning {
++  background: transparent;
++  border-color: #4A3A12;
++  color: var(--ag-yellow);
++}
++
++.ag-btn:disabled {
++  opacity: .45;
++  cursor: not-allowed;
++}
++
++.capture-actions {
++  display: flex;
++  flex-direction: column;
++  gap: 8px;
++  margin-top: auto;
++  padding-top: 14px;
++  border-top: 1px solid var(--ag-line);
++}
++
++.capture-stage {
++  display: grid;
++  grid-template-columns: 1fr 1fr;
++  grid-template-rows: auto minmax(0, 1fr);
++  grid-template-areas:
++    "current-head previous-head"
++    "current-grid previous-grid";
++  padding: 0;
++}
++
++.stage-head {
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  padding: 10px 14px;
++  border-bottom: 1px solid var(--ag-line);
++  background: var(--ag-panel);
++}
++
++.capture-stage > .stage-head:first-child {
++  grid-area: current-head;
++}
++
++.capture-stage > .stage-grid:nth-child(2) {
++  grid-area: current-grid;
++}
++
++.capture-stage > .stage-head:nth-child(3) {
++  grid-area: previous-head;
++  border-left: 1px solid var(--ag-line);
++}
++
++.capture-stage > .stage-grid:nth-child(4) {
++  grid-area: previous-grid;
++  border-left: 1px solid var(--ag-line);
++}
++
++.stage-title {
++  margin: 0;
++  font-family: var(--ag-display);
++  font-size: 14px;
++  letter-spacing: .12em;
++  text-transform: uppercase;
++}
++
++.stage-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
++  gap: 8px;
++  padding: 10px;
++  overflow: auto;
++  align-content: start;
++}
++
++.stage-empty {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  padding: 34px 16px;
++  color: var(--ag-muted);
++  text-align: center;
++}
++
++.capture-lote-list {
++  list-style: none;
++  margin: 0;
++  padding: 0;
++  overflow: auto;
++}
++
++.capture-lote-list li {
++  padding: 9px 12px;
++  border-bottom: 1px solid var(--ag-line);
++  display: flex;
++  align-items: center;
++  gap: 10px;
++  cursor: pointer;
++  font-family: var(--ag-mono);
++  font-size: 12.5px;
++}
++
++@media (max-width: 1100px) {
++  .capture-view {
++    grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
++    grid-template-rows: minmax(0, 1fr) minmax(160px, .5fr);
++    overflow: auto;
++  }
++
++  .capture-entry {
++    grid-column: 1;
++    grid-row: 1;
++  }
++
++  .capture-stage {
++    grid-column: 2;
++    grid-row: 1;
++  }
++
++  .capture-view > .ag-card:nth-child(3) {
++    grid-column: 1 / -1;
++    grid-row: 2;
++  }
++}
++
++@media (max-width: 760px) {
++  .capture-view {
++    grid-template-columns: minmax(0, 1fr);
++    grid-template-rows: auto minmax(320px, 1fr) minmax(160px, .5fr);
++  }
++
++  .capture-entry,
++  .capture-stage,
++  .capture-view > .ag-card:nth-child(3) {
++    grid-column: 1;
++  }
++
++  .capture-entry {
++    grid-row: 1;
++  }
++
++  .capture-stage {
++    grid-row: 2;
++  }
++
++  .capture-view > .ag-card:nth-child(3) {
++    grid-row: 3;
++  }
++}
++
++@media (max-width: 560px) {
++  .capture-view {
++    grid-template-rows: auto auto minmax(160px, .5fr);
++  }
++
++  .capture-stage {
++    grid-template-columns: minmax(0, 1fr);
++    grid-template-rows: auto minmax(180px, 1fr) auto minmax(180px, 1fr);
++    grid-template-areas:
++      "current-head"
++      "current-grid"
++      "previous-head"
++      "previous-grid";
++  }
++
++  .capture-stage > .stage-head:nth-child(3) {
++    border-top: 1px solid var(--ag-line);
++    border-left: 0;
++  }
++
++  .capture-stage > .stage-grid:nth-child(4) {
++    border-left: 0;
++  }
++}
+diff --git a/frontend/src/App.vue b/frontend/src/App.vue
+index 8306906..a0f6c39 100644
+--- a/frontend/src/App.vue
++++ b/frontend/src/App.vue
+@@ -26,128 +26,101 @@
+         <div class="ag-wordmark"><b>AG</b> Foto</div>
+         <div class="ag-chip">Produtos</div>
+         <div class="ag-context">
+           <span v-if="selectedLote" class="ag-chip">Lote {{ selectedLote }}</span>
+           <span class="ag-chip">Entrega local/mock</span>
+         </div>
+       </header>
+ 
+       <div class="ag-content">
+ 
+-    <main v-if="activePage === 'captura'">
+-      <div class="panel-inputs">
+-        <div class="input-group-wrapper">
+-          <label>Lote</label>
+-          <input
+-            v-model="selectedLote"
+-            @keydown.enter="onLoteSelected"
+-            type="text"
+-            placeholder="Digite o número do lote"
+-            autocomplete="off">
+-          <button
+-            @click="onLoteSelected"
+-            :disabled="!selectedLote"
+-            style="padding: 0.75rem; background: #FF8800; color: #000; border: none; font-weight: bold; cursor: pointer;">
+-            Ir
+-          </button>
+-        </div>
+-
+-        <div v-if="selectedLote && loteItems.length > 0" class="input-group-wrapper">
+-          <label>GTINs no Lote</label>
+-          <ul class="lote-list">
+-            <li
+-              v-for="item in loteItems"
+-              :key="item.gtin"
+-              class="lote-item"
+-              @click="selectedGtin = item.gtin">
+-              {{ item.gtin }}
+-              <small>({{ item.quantidadeFotos }})</small>
+-            </li>
+-          </ul>
+-        </div>
++<main v-if="activePage === 'captura'" class="ag-view capture-view">
++  <section class="ag-card capture-entry">
++    <header class="ag-card-header">
++      <h2 class="ag-card-title">Entrada</h2>
++    </header>
++    <div class="ag-card-body" style="display:flex;flex-direction:column;gap:18px">
++      <div>
++        <label class="ag-label">Lote</label>
++        <input class="ag-field is-large" v-model="selectedLote" @keydown.enter="onLoteSelected" type="text" placeholder="Numero do lote" autocomplete="off">
++        <button class="ag-btn is-warning" style="width:100%;margin-top:8px" @click="onLoteSelected" :disabled="!selectedLote">Selecionar lote</button>
++      </div>
+ 
+-        <div class="input-group-wrapper">
+-          <label>GTIN/EAN</label>
+-          <input
+-            v-model="inputGtin"
+-            @keydown.enter="onGtinEnter"
+-            type="text"
+-            placeholder="Leitor ou digite"
+-            autocomplete="off">
+-        </div>
++      <div>
++        <label class="ag-label">GTIN / EAN</label>
++        <input class="ag-field is-large" v-model="inputGtin" @keydown.enter="onGtinEnter" type="text" placeholder="Leitor ou digitacao" autocomplete="off">
++      </div>
+ 
+-        <div v-if="selectedGtin" class="input-group-wrapper">
+-          <label>Status</label>
+-          <div style="padding: 0.75rem; background: var(--ag-dark-gray); border: 1px solid var(--ag-border);">
+-            <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span>
+-          </div>
+-        </div>
++      <div v-if="selectedGtin">
++        <label class="ag-label">Status</label>
++        <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span>
++      </div>
+ 
+-        <div style="margin-top: auto; padding-top: 1rem; border-top: 1px solid var(--ag-border);">
+-          <button
+-            @click="onSaveCapture"
+-            :disabled="!selectedLote || !selectedGtin || tempImages.length === 0"
+-            class="btn-action primary"
+-            style="width: 100%;">
+-            Salvar ({{ tempImages.length }})
+-          </button>
+-          <button
+-            @click="onClearTemp"
+-            :disabled="tempImages.length === 0"
+-            class="btn-action secondary"
+-            style="width: 100%; margin-top: 0.5rem;">
+-            Limpar TEMP
+-          </button>
+-        </div>
++      <div class="capture-actions">
++        <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedLote || !selectedGtin || tempImages.length === 0">
++          Salvar ({{ tempImages.length }})
++        </button>
++        <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0">
++          Limpar TEMP
++        </button>
+       </div>
++    </div>
++  </section>
+ 
+-      <div class="stages-container">
+-        <div class="stage">
+-          <div class="stage-header">🎬 ATUAL (TEMP)</div>
+-          <div v-if="tempImages.length === 0" class="stage-content empty">
+-            Aguardando imagens da câmera...
+-          </div>
+-          <div v-else class="stage-content">
+-            <div
+-              v-for="img in tempImages"
+-              :key="img.name"
+-              class="thumbnail"
+-              @click="openModal(img)">
+-              <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
+-              <div class="thumbnail-overlay">
+-                <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">🔍</button>
+-                <button @click.stop="onImageDelete(img)" class="btn-thumbnail" title="Excluir">❌</button>
+-              </div>
+-            </div>
+-          </div>
++  <section class="ag-card capture-stage">
++    <div class="stage-head">
++      <h3 class="stage-title">Palco atual</h3>
++      <span class="ag-chip">TEMP monitorando</span>
++      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ tempImages.length }} imagens</span>
++    </div>
++    <div v-if="tempImages.length === 0" class="stage-grid stage-empty">Aguardando imagens da camera</div>
++    <div v-else class="stage-grid">
++      <div v-for="img in tempImages" :key="img.name" class="thumbnail" @click="openModal(img)">
++        <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
++        <div class="thumbnail-overlay">
++          <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
++          <button @click.stop="onImageDelete(img)" class="btn-thumbnail" title="Excluir">x</button>
+         </div>
++      </div>
++    </div>
+ 
+-        <div class="stage">
+-          <div class="stage-header">📁 ANTERIOR ({{ selectedGtin || '—' }})</div>
+-          <div v-if="!selectedGtin || previousImages.length === 0" class="stage-content empty">
+-            {{ selectedGtin ? 'Nenhuma imagem anterior' : 'Selecione um GTIN' }}
+-          </div>
+-          <div v-else class="stage-content">
+-            <div
+-              v-for="img in previousImages"
+-              :key="img.name"
+-              class="thumbnail"
+-              @click="openModal(img)">
+-              <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
+-              <div class="thumbnail-overlay">
+-                <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">🔍</button>
+-              </div>
+-            </div>
+-          </div>
++    <div class="stage-head">
++      <h3 class="stage-title">Palco anterior</h3>
++      <span class="ag-chip">{{ selectedGtin || 'sem GTIN' }}</span>
++      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
++    </div>
++    <div v-if="!selectedGtin || previousImages.length === 0" class="stage-grid stage-empty">
++      {{ selectedGtin ? 'Nenhuma imagem anterior' : 'Selecione um GTIN' }}
++    </div>
++    <div v-else class="stage-grid">
++      <div v-for="img in previousImages" :key="img.name" class="thumbnail" @click="openModal(img)">
++        <img :src="`blob:${img.path}`" :alt="img.name" @error="onImageError">
++        <div class="thumbnail-overlay">
++          <button @click.stop="onImageZoom(img)" class="btn-thumbnail" title="Ampliar">+</button>
+         </div>
+       </div>
+-    </main>
++    </div>
++  </section>
++
++  <section class="ag-card">
++    <header class="ag-card-header">
++      <h2 class="ag-card-title">GTINs do lote</h2>
++      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ loteItems.length }} itens</span>
++    </header>
++    <ul class="capture-lote-list">
++      <li v-for="item in loteItems" :key="item.gtin" @click="selectedGtin = item.gtin">
++        <span>{{ item.gtin }}</span>
++        <small style="margin-left:auto;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</small>
++      </li>
++    </ul>
++  </section>
++</main>
+ 
+     <!-- Planilhas Page -->
+     <main v-if="activePage === 'planilhas'" style="padding: 2rem; overflow-y: auto;">
+       <div style="max-width: 900px;">
+         <h2 style="color: #FF0000; margin-bottom: 1.5rem;">📊 Importação de Planilhas</h2>
+         <p style="color: var(--ag-border); margin-bottom: 1.5rem;">Upload Excel com EAN, Código e Descrição para unificar no master catalog.</p>
+ 
+         <div style="background: var(--ag-dark-gray); padding: 1.5rem; border: 2px solid var(--ag-border); margin-bottom: 2rem;">
+           <label style="display: block; font-weight: bold; margin-bottom: 0.5rem;">Lote:</label>
+           <input
+diff --git a/tests/integration/captura-products.test.js b/tests/integration/captura-products.test.js
+index 7a4d81e..0e56746 100644
+--- a/tests/integration/captura-products.test.js
++++ b/tests/integration/captura-products.test.js
+@@ -22,20 +22,30 @@ async function request(app, requestPath, options = {}) {
+   const { port } = server.address();
+ 
+   try {
+     const response = await fetch(`http://127.0.0.1:${port}${requestPath}`, options);
+     return { status: response.status, body: Buffer.from(await response.arrayBuffer()), contentType: response.headers.get('content-type') };
+   } finally {
+     await new Promise(resolve => server.close(resolve));
+   }
+ }
+ 
++test('phone capture layout allows the stacked stage to size to its contents', async () => {
++  const css = await fs.promises.readFile(path.resolve('frontend/public/css/main.css'), 'utf8');
++  const phoneBreakpoint = css.match(/@media \(max-width: 560px\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
++
++  assert.match(
++    phoneBreakpoint,
++    /\.capture-view\s*\{\s*grid-template-rows:\s*auto\s+auto\s+minmax\(160px,\s*\.5fr\);\s*\}/
++  );
++});
++
+ test('TEMP listing includes only valid image signatures with stable state', async t => {
+   const env = await createTestEnv(t);
+   applyConfigOverrides(env.config);
+   await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'foto1.jpg'), JPG_BYTES);
+   await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'fake.jpg'), 'not an image');
+ 
+   const images = await FileRepository.listTempImages();
+ 
+   assert.deepEqual(images.map(image => image.name), ['foto1.jpg']);
+   assert.equal(images[0].signatureOk, true);
