@@ -14,6 +14,10 @@
         <span>QA</span>
         <small>QA</small>
       </button>
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros' }" @click="activePage = 'carros'">
+        <span>CAR</span>
+        <small>Carros</small>
+      </button>
       <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'">
         <span>REL</span>
         <small>Relat.</small>
@@ -444,6 +448,93 @@
         </div>
       </section>
     </main>
+    <main v-if="activePage === 'carros'" class="ag-view two-column-view">
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Origem</h2></header>
+        <div class="ag-card-body">
+          <label class="ag-label">Lote</label>
+          <input class="ag-field" v-model="carrosLote" type="text" placeholder="Numero do lote">
+
+          <label class="ag-label" style="margin-top:12px">Pasta das fotos</label>
+          <input class="ag-field" v-model="carrosPasta" type="text"
+                 placeholder="E:/DCIM/100CANON" @keydown.enter="onLerPastaCarros">
+          <div style="font-size:11px;color:var(--ag-muted);margin-top:6px">
+            Caminho do cartao de memoria ou de qualquer pasta com as fotos.
+          </div>
+          <button class="ag-btn is-primary" style="width:100%;margin-top:10px"
+                  @click="onLerPastaCarros" :disabled="!carrosPasta || carrosLendo">
+            {{ carrosLendo ? 'Lendo...' : 'Ler pasta' }}
+          </button>
+
+          <div v-if="carrosFotos.length > 0" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--ag-line)">
+            <div style="font-size:12px;color:var(--ag-muted);margin-bottom:8px">
+              {{ carrosFotos.length }} fotos · {{ carrosPlacasInformadas }} placa(s) marcada(s)
+            </div>
+            <div class="entrega-alerta" v-if="carrosFotosAntesDaPlaca > 0">
+              As {{ carrosFotosAntesDaPlaca }} primeira(s) foto(s) estao antes de qualquer placa
+              e nao entram em nenhum veiculo.
+            </div>
+            <button class="ag-btn is-ok" style="width:100%;margin-top:10px"
+                    @click="onImportarCarros"
+                    :disabled="!carrosLote || carrosPlacasInformadas === 0 || carrosImportando">
+              {{ carrosImportando ? 'Importando...' : `Importar ${carrosPlacasInformadas} veiculo(s)` }}
+            </button>
+          </div>
+
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line);color:var(--ag-muted);font-size:12px">
+            <p style="margin:0 0 6px">A sequencia separa os veiculos: a foto da placa abre um
+            veiculo e as seguintes pertencem a ele.</p>
+            <p style="margin:0">Marque a foto da placa e digite a placa. A leitura automatica
+            ainda nao esta ligada.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="ag-card">
+        <header class="ag-card-header">
+          <h2 class="ag-card-title">{{ carrosFotos.length ? 'Fotos na sequencia' : 'Veiculos do lote' }}</h2>
+          <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">
+            {{ carrosFotos.length ? carrosPasta : `${carrosVeiculos.length} veiculo(s)` }}
+          </span>
+        </header>
+
+        <div class="ag-card-body">
+          <div v-if="carrosFotos.length === 0 && carrosVeiculos.length === 0" class="grid-empty">
+            Informe a pasta e leia as fotos, ou digite um lote ja importado.
+          </div>
+
+          <!-- Sequencia lida da pasta, para marcar as placas -->
+          <div v-if="carrosFotos.length > 0" class="carros-sequencia">
+            <div v-for="(foto, i) in carrosFotos" :key="foto.name"
+                 class="carro-foto" :class="{ 'e-placa': !!foto.placa }">
+              <div class="carro-foto-seq">{{ i + 1 }}</div>
+              <img :src="`/api/carros/pasta/imagem/${encodeURIComponent(foto.name)}`"
+                   :alt="foto.name" @click="openModal({ name: foto.name }, 'carros')">
+              <input class="ag-field carro-placa" v-model="foto.placa"
+                     type="text" maxlength="8" placeholder="placa"
+                     @input="foto.placa = foto.placa.toUpperCase()">
+              <div class="carro-foto-nome">{{ foto.name }}</div>
+            </div>
+          </div>
+
+          <!-- Veiculos ja importados -->
+          <div v-else-if="carrosVeiculos.length > 0" class="ag-table-wrap">
+            <table class="ag-table">
+              <thead><tr><th>Placa</th><th>Fotos</th><th>OCR</th><th>Status</th></tr></thead>
+              <tbody>
+                <tr v-for="v in carrosVeiculos" :key="v.placa">
+                  <td style="font-family:var(--ag-mono)">{{ v.placa }}</td>
+                  <td>{{ v.fotos }}</td>
+                  <td>{{ v.ocrConfidence ? v.ocrConfidence + '%' : 'manual' }}</td>
+                  <td><span :class="`badge-status ${v.status}`">{{ v.status }}</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
     <main v-if="activePage === 'relatorios'" class="ag-view report-view">
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Filtros e totais</h2></header><div class="ag-card-body"><label class="ag-label">Status</label><select class="ag-field" v-model="reportStatus"><option value="">Todos</option><option value="pendente_qa">Pendente QA</option><option value="pronto_para_entrega">Pronto para Entrega</option><option value="entregue">Entregue</option><option value="erro_entrega">Erro na Entrega</option><option value="retrabalho">Retrabalho</option></select><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadReport">Gerar relatorio</button><div v-if="reportStats" class="kpi-grid" style="margin-top:14px"><div class="kpi-card"><strong>{{ reportStats.totalItens ?? reportStats.totalItems ?? 0 }}</strong><span>Itens</span></div><div class="kpi-card"><strong>{{ reportStats.entregues ?? reportStats.entregue ?? 0 }}</strong><span>Entregues</span></div><div class="kpi-card"><strong>{{ reportStats.prontos ?? reportStats.pronto_para_entrega ?? 0 }}</strong><span>Prontos</span></div><div class="kpi-card"><strong>{{ reportStats.retrabalho ?? 0 }}</strong><span>Retrabalho</span></div></div></div></section>
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Detalhamento</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ reportItems.length }} linhas</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>Lote</th><th>GTIN</th><th>Codigo</th><th>Descricao</th><th>Fotos</th><th>Status</th></tr></thead><tbody><tr v-for="item in reportItems" :key="`${item.lote}:${item.gtin}`"><td>{{ rotuloLote(item.lote) }}</td><td>{{ item.gtin }}</td><td>{{ item.codigo }}</td><td>{{ item.descricao }}</td><td>{{ item.quantidadeFotos }}</td><td><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td></tr></tbody></table></div></section>
@@ -605,6 +696,14 @@ export default {
     const planilhaSelecionada = ref('');
     const planilhaEmCurso = ref(false);
     const planilhasConflitos = ref([]);
+
+    // Carros
+    const carrosLote = ref('');
+    const carrosPasta = ref('');
+    const carrosFotos = ref([]);
+    const carrosVeiculos = ref([]);
+    const carrosLendo = ref(false);
+    const carrosImportando = ref(false);
     const reportStatus = ref('');
     const reportItems = ref([]);
     const reportStats = ref(null);
@@ -647,6 +746,16 @@ export default {
     const entregaSemCodigo = computed(() => (
       qaProducts.value.filter(p => !p.codigo || p.codigo === p.gtin)
     ));
+
+    const carrosPlacasInformadas = computed(() => (
+      carrosFotos.value.filter(f => (f.placa || '').trim()).length
+    ));
+
+    // Foto antes da primeira placa nao pertence a veiculo nenhum.
+    const carrosFotosAntesDaPlaca = computed(() => {
+      const primeira = carrosFotos.value.findIndex(f => (f.placa || '').trim());
+      return primeira < 0 ? 0 : primeira;
+    });
 
     const qaClassificadas = computed(() => qaPhotos.value.filter(photo => photo.classification).length);
 
@@ -1016,6 +1125,68 @@ export default {
       if (pagina === 'qa' || pagina === 'entregar') {
         await onCarregarPlanilhas();
         await sincronizarPlanilhas();
+      }
+    };
+
+    const onLerPastaCarros = async () => {
+      if (!carrosPasta.value || carrosLendo.value) return;
+      carrosLendo.value = true;
+      try {
+        const response = await this.$api.request('/api/carros/pasta', {
+          query: { caminho: carrosPasta.value }
+        });
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+        carrosFotos.value = (response.data.fotos || []).map(f => ({ ...f, placa: '' }));
+        carrosVeiculos.value = [];
+        showStatus(`✓ ${carrosFotos.value.length} fotos lidas`, 'success');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        carrosLendo.value = false;
+      }
+    };
+
+    const onCarregarVeiculos = async () => {
+      if (!carrosLote.value) return;
+      try {
+        const response = await this.$api.request(`/api/carros/${encodeURIComponent(carrosLote.value)}`);
+        carrosVeiculos.value = response.ok ? (response.data.vehicles || []) : [];
+      } catch {
+        carrosVeiculos.value = [];
+      }
+    };
+
+    const onImportarCarros = async () => {
+      if (!carrosLote.value || carrosImportando.value) return;
+      carrosImportando.value = true;
+      try {
+        const response = await this.$api.request('/api/carros/importar-pasta', {
+          method: 'POST',
+          data: {
+            lote: carrosLote.value,
+            fotos: carrosFotos.value.map(f => ({ name: f.name, placa: f.placa })),
+            operationId: makeOperationId('carros-importar')
+          }
+        });
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+        const d = response.data;
+        showStatus(
+          `✓ ${d.vehiclesImported} veiculo(s), ${d.totalPhotos} fotos`
+            + (d.ignoradas.length ? ` · ${d.ignoradas.length} ignorada(s)` : ''),
+          'success'
+        );
+        carrosFotos.value = [];
+        await onCarregarVeiculos();
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        carrosImportando.value = false;
       }
     };
 
@@ -1645,6 +1816,17 @@ export default {
       planilhaSelecionada,
       planilhaEmCurso,
       onCarregarPlanilhas,
+      carrosLote,
+      carrosPasta,
+      carrosFotos,
+      carrosVeiculos,
+      carrosLendo,
+      carrosImportando,
+      carrosPlacasInformadas,
+      carrosFotosAntesDaPlaca,
+      onLerPastaCarros,
+      onCarregarVeiculos,
+      onImportarCarros,
       sincronizarPlanilhas,
       planilhasConflitos,
       irPara,

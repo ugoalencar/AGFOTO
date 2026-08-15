@@ -5,6 +5,52 @@ import { VehicleRepository } from '../repositories/vehicle-repository.js';
 const router = express.Router();
 
 /**
+ * GET /api/carros/pasta?caminho=E:/DCIM/100CANON
+ * Le a pasta de origem (cartao de memoria ou outra) e devolve as fotos na
+ * sequencia em que foram tiradas.
+ *
+ * Declarada antes de /:lote para nao ser capturada por ela.
+ */
+router.get('/pasta', async (req, res, next) => {
+  try {
+    const result = await VehicleService.scanFolder(req.query.caminho);
+    if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+    return res.json({ ok: true, data: result.data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/carros/pasta/imagem/:filename
+ * Serve uma foto da pasta lida, para a conferencia antes de importar.
+ */
+router.get('/pasta/imagem/:filename', async (req, res) => {
+  try {
+    return res.sendFile(await VehicleService.resolveFolderPhoto(req.params.filename));
+  } catch (error) {
+    return res.status(error.code === 'ENOENT' ? 404 : 400).json({ ok: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/carros/importar-pasta
+ * Importa a pasta lida agrupando pelas placas informadas na tela.
+ *
+ * Body: { lote, fotos: [{ name, placa? }] }
+ */
+router.post('/importar-pasta', express.json(), async (req, res, next) => {
+  try {
+    const { lote, fotos } = req.body;
+    const result = await VehicleService.importFromFolder(lote, fotos);
+    if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
+    return res.json({ ok: true, data: result.data });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/carros/importar
  * Importa fotos de cartão de memória e processa com OCR
  */

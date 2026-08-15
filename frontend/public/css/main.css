@@ -1600,3 +1600,71 @@ select {
 .entrega-resumo-linha:last-child { border-bottom: 0; }
 .entrega-ok { color: var(--ag-ok); font-weight: 700; }
 .entrega-erro { color: var(--ag-red); font-weight: 700; }
+
+/* ============================================================
+   Carros - sequencia lida do cartao
+   ============================================================ */
+.carros-sequencia {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.carro-foto {
+  position: relative;
+  width: 150px;
+  border: 2px solid var(--ag-line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--ag-panel);
+}
+
+/* Foto com placa preenchida abre um veiculo novo. */
+.carro-foto.e-placa {
+  border-color: var(--ag-ok);
+  box-shadow: 0 0 0 2px var(--ag-ok);
+}
+
+.carro-foto img {
+  width: 150px;
+  height: 110px;
+  object-fit: cover;
+  display: block;
+  cursor: pointer;
+}
+
+.carro-foto-seq {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  min-width: 20px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-family: var(--ag-mono);
+  font-size: 11px;
+  text-align: center;
+  z-index: 2;
+}
+
+.carro-placa {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--ag-line);
+  border-radius: 0;
+  height: 30px;
+  font-family: var(--ag-mono);
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.carro-foto-nome {
+  padding: 3px 5px;
+  font-size: 10px;
+  color: var(--ag-muted);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
