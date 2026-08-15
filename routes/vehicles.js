@@ -33,18 +33,85 @@ router.get('/pasta/imagem/:filename', async (req, res) => {
   }
 });
 
+const responder = (res, result) => res
+  .status(result.ok ? 200 : 400)
+  .json(result.ok ? { ok: true, data: result.data } : { ok: false, error: result.error });
+
+/**
+ * GET /api/carros/datas
+ * Dias que ja tem fotos importadas.
+ */
+router.get('/datas', async (_req, res, next) => {
+  try {
+    responder(res, await VehicleService.listarDatas());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/carros/dia/:data
+ * Placas do dia, com as fotos de cada uma - lidas do disco.
+ */
+router.get('/dia/:data', async (req, res, next) => {
+  try {
+    responder(res, await VehicleService.listarPorData(req.params.data));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/carros/foto/:data/:placa/:filename
+ */
+router.get('/foto/:data/:placa/:filename', async (req, res) => {
+  try {
+    const { data, placa, filename } = req.params;
+    return res.sendFile(await VehicleService.resolveVehiclePhoto(data, placa, filename));
+  } catch (error) {
+    return res.status(error.code === 'ENOENT' ? 404 : 400).json({ ok: false, error: error.message });
+  }
+});
+
 /**
  * POST /api/carros/importar-pasta
- * Importa a pasta lida agrupando pelas placas informadas na tela.
+ * Copia a pasta lida para Carros/DD-MM-AAAA, agrupando pelas placas informadas.
  *
- * Body: { lote, fotos: [{ name, placa? }] }
+ * Body: { data, fotos: [{ name, placa? }] }
  */
 router.post('/importar-pasta', express.json(), async (req, res, next) => {
   try {
-    const { lote, fotos } = req.body;
-    const result = await VehicleService.importFromFolder(lote, fotos);
-    if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
-    return res.json({ ok: true, data: result.data });
+    const { data, fotos } = req.body;
+    responder(res, await VehicleService.importarParaData(data, fotos));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/placa
+ * Cria uma placa vazia no dia, para receber fotos que ficaram no carro errado.
+ *
+ * Body: { data, placa }
+ */
+router.post('/placa', express.json(), async (req, res, next) => {
+  try {
+    responder(res, await VehicleService.criarPlaca(req.body?.data, req.body?.placa));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/mover-foto
+ * Move uma foto de uma placa para outra dentro do mesmo dia.
+ *
+ * Body: { data, de, para, arquivo }
+ */
+router.post('/mover-foto', express.json(), async (req, res, next) => {
+  try {
+    const { data, de, para, arquivo } = req.body || {};
+    responder(res, await VehicleService.moverFoto(data, de, para, arquivo));
   } catch (err) {
     next(err);
   }

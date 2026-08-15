@@ -14,13 +14,13 @@
         <span>QA</span>
         <small>QA</small>
       </button>
-      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros' }" @click="activePage = 'carros'">
-        <span>CAR</span>
-        <small>Carros</small>
-      </button>
       <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'">
         <span>REL</span>
         <small>Relat.</small>
+      </button>
+      <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros' }" @click="activePage = 'carros'">
+        <span>CAR</span>
+        <small>Carros</small>
       </button>
       <div class="ag-rail-foot">Fase 1<br>Produtos</div>
     </nav>
@@ -450,25 +450,26 @@
     </main>
     <main v-if="activePage === 'carros'" class="ag-view two-column-view">
       <section class="ag-card">
-        <header class="ag-card-header"><h2 class="ag-card-title">Origem</h2></header>
+        <header class="ag-card-header"><h2 class="ag-card-title">Carregar</h2></header>
         <div class="ag-card-body">
-          <label class="ag-label">Lote</label>
-          <input class="ag-field" v-model="carrosLote" type="text" placeholder="Numero do lote">
+          <label class="ag-label">Dia</label>
+          <input class="ag-field" v-model="carrosData" type="text" placeholder="DD-MM-AAAA"
+                 @change="onCarregarDia">
+          <div style="font-size:11px;color:var(--ag-muted);margin-top:6px">
+            As fotos vao para <code style="font-family:var(--ag-mono)">Carros/{{ carrosData || 'DD-MM-AAAA' }}/PLACA</code>
+          </div>
 
-          <label class="ag-label" style="margin-top:12px">Pasta das fotos</label>
+          <label class="ag-label" style="margin-top:14px">Pasta das fotos</label>
           <input class="ag-field" v-model="carrosPasta" type="text"
                  placeholder="E:/DCIM/100CANON" @keydown.enter="onLerPastaCarros">
-          <div style="font-size:11px;color:var(--ag-muted);margin-top:6px">
-            Caminho do cartao de memoria ou de qualquer pasta com as fotos.
-          </div>
           <button class="ag-btn is-primary" style="width:100%;margin-top:10px"
                   @click="onLerPastaCarros" :disabled="!carrosPasta || carrosLendo">
-            {{ carrosLendo ? 'Lendo...' : 'Ler pasta' }}
+            {{ carrosLendo ? 'Lendo...' : 'Carregar' }}
           </button>
 
           <div v-if="carrosFotos.length > 0" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--ag-line)">
             <div style="font-size:12px;color:var(--ag-muted);margin-bottom:8px">
-              {{ carrosFotos.length }} fotos · {{ carrosPlacasInformadas }} placa(s) marcada(s)
+              {{ carrosFotos.length }} fotos · {{ carrosPlacasInformadas }} placa(s)
             </div>
             <div class="entrega-alerta" v-if="carrosFotosAntesDaPlaca > 0">
               As {{ carrosFotosAntesDaPlaca }} primeira(s) foto(s) estao antes de qualquer placa
@@ -476,34 +477,39 @@
             </div>
             <button class="ag-btn is-ok" style="width:100%;margin-top:10px"
                     @click="onImportarCarros"
-                    :disabled="!carrosLote || carrosPlacasInformadas === 0 || carrosImportando">
-              {{ carrosImportando ? 'Importando...' : `Importar ${carrosPlacasInformadas} veiculo(s)` }}
+                    :disabled="!carrosData || carrosPlacasInformadas === 0 || carrosImportando">
+              {{ carrosImportando ? 'Importando...' : `Importar ${carrosPlacasInformadas} placa(s)` }}
             </button>
           </div>
 
-          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line);color:var(--ag-muted);font-size:12px">
-            <p style="margin:0 0 6px">A sequencia separa os veiculos: a foto da placa abre um
-            veiculo e as seguintes pertencem a ele.</p>
-            <p style="margin:0">Marque a foto da placa e digite a placa. A leitura automatica
-            ainda nao esta ligada.</p>
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
+            <label class="ag-label">Criar placa</label>
+            <div style="display:flex;gap:8px">
+              <input class="ag-field" v-model="carrosNovaPlaca" type="text" placeholder="ABC1234"
+                     maxlength="8" style="flex:1;text-transform:uppercase"
+                     @keydown.enter="onCriarPlaca">
+              <button class="ag-btn" @click="onCriarPlaca" :disabled="!carrosData || !carrosNovaPlaca">
+                Criar
+              </button>
+            </div>
+            <div style="font-size:11px;color:var(--ag-muted);margin-top:6px">
+              Quando faltou a foto da placa e dois carros ficaram juntos: crie a placa
+              e arraste para ela as fotos que sao dela.
+            </div>
           </div>
         </div>
       </section>
 
       <section class="ag-card">
         <header class="ag-card-header">
-          <h2 class="ag-card-title">{{ carrosFotos.length ? 'Fotos na sequencia' : 'Veiculos do lote' }}</h2>
+          <h2 class="ag-card-title">{{ carrosFotos.length ? 'Fotos na sequencia' : 'Placas do dia' }}</h2>
           <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">
-            {{ carrosFotos.length ? carrosPasta : `${carrosVeiculos.length} veiculo(s)` }}
+            {{ carrosFotos.length ? carrosPasta : `${carrosPlacas.length} placa(s) · ${carrosTotalFotos} fotos` }}
           </span>
         </header>
 
         <div class="ag-card-body">
-          <div v-if="carrosFotos.length === 0 && carrosVeiculos.length === 0" class="grid-empty">
-            Informe a pasta e leia as fotos, ou digite um lote ja importado.
-          </div>
-
-          <!-- Sequencia lida da pasta, para marcar as placas -->
+          <!-- Sequencia recem-carregada: marcar as placas -->
           <div v-if="carrosFotos.length > 0" class="carros-sequencia">
             <div v-for="(foto, i) in carrosFotos" :key="foto.name"
                  class="carro-foto" :class="{ 'e-placa': !!foto.placa }">
@@ -517,19 +523,32 @@
             </div>
           </div>
 
-          <!-- Veiculos ja importados -->
-          <div v-else-if="carrosVeiculos.length > 0" class="ag-table-wrap">
-            <table class="ag-table">
-              <thead><tr><th>Placa</th><th>Fotos</th><th>OCR</th><th>Status</th></tr></thead>
-              <tbody>
-                <tr v-for="v in carrosVeiculos" :key="v.placa">
-                  <td style="font-family:var(--ag-mono)">{{ v.placa }}</td>
-                  <td>{{ v.fotos }}</td>
-                  <td>{{ v.ocrConfidence ? v.ocrConfidence + '%' : 'manual' }}</td>
-                  <td><span :class="`badge-status ${v.status}`">{{ v.status }}</span></td>
-                </tr>
-              </tbody>
-            </table>
+          <div v-else-if="carrosPlacas.length === 0" class="grid-empty">
+            Nenhuma placa neste dia. Aponte a pasta das fotos e carregue.
+          </div>
+
+          <!-- QA: placas do dia, com arrastar foto entre elas -->
+          <div v-else>
+            <div v-for="placa in carrosPlacas" :key="placa.placa"
+                 class="placa-bloco" :class="{ alvo: carrosPlacaAlvo === placa.placa }"
+                 @dragover.prevent="carrosPlacaAlvo = placa.placa"
+                 @dragleave="carrosPlacaAlvo = ''"
+                 @drop.prevent="onSoltarNaPlaca(placa.placa)">
+              <div class="placa-cabecalho">
+                <span class="placa-nome">{{ placa.placa }}</span>
+                <span class="placa-contagem">{{ placa.total }} foto(s)</span>
+                <span v-if="placa.total === 0" class="placa-vazia">arraste fotos para ca</span>
+              </div>
+              <div class="placa-fotos">
+                <div v-for="foto in placa.fotos" :key="foto.name"
+                     class="carro-foto arrastavel" draggable="true"
+                     @dragstart="onArrastarFoto(placa.placa, foto.name)">
+                  <img :src="foto.url" :alt="foto.name"
+                       @click="openModal({ name: foto.name, url: foto.url }, 'carros')">
+                  <div class="carro-foto-nome">{{ foto.name }}</div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -698,10 +717,13 @@ export default {
     const planilhasConflitos = ref([]);
 
     // Carros
-    const carrosLote = ref('');
+    const carrosData = ref('');
+    const carrosPlacas = ref([]);
+    const carrosNovaPlaca = ref('');
+    const carrosPlacaAlvo = ref('');
+    const carrosArrastando = ref(null);
     const carrosPasta = ref('');
     const carrosFotos = ref([]);
-    const carrosVeiculos = ref([]);
     const carrosLendo = ref(false);
     const carrosImportando = ref(false);
     const reportStatus = ref('');
@@ -746,6 +768,8 @@ export default {
     const entregaSemCodigo = computed(() => (
       qaProducts.value.filter(p => !p.codigo || p.codigo === p.gtin)
     ));
+
+    const carrosTotalFotos = computed(() => carrosPlacas.value.reduce((s, p) => s + p.total, 0));
 
     const carrosPlacasInformadas = computed(() => (
       carrosFotos.value.filter(f => (f.placa || '').trim()).length
@@ -1140,7 +1164,6 @@ export default {
           return;
         }
         carrosFotos.value = (response.data.fotos || []).map(f => ({ ...f, placa: '' }));
-        carrosVeiculos.value = [];
         showStatus(`✓ ${carrosFotos.value.length} fotos lidas`, 'success');
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
@@ -1149,24 +1172,24 @@ export default {
       }
     };
 
-    const onCarregarVeiculos = async () => {
-      if (!carrosLote.value) return;
+    const onCarregarDia = async () => {
+      if (!carrosData.value) { carrosPlacas.value = []; return; }
       try {
-        const response = await this.$api.request(`/api/carros/${encodeURIComponent(carrosLote.value)}`);
-        carrosVeiculos.value = response.ok ? (response.data.vehicles || []) : [];
+        const response = await this.$api.request(`/api/carros/dia/${encodeURIComponent(carrosData.value)}`);
+        carrosPlacas.value = response.ok ? (response.data.placas || []) : [];
       } catch {
-        carrosVeiculos.value = [];
+        carrosPlacas.value = [];
       }
     };
 
     const onImportarCarros = async () => {
-      if (!carrosLote.value || carrosImportando.value) return;
+      if (!carrosData.value || carrosImportando.value) return;
       carrosImportando.value = true;
       try {
         const response = await this.$api.request('/api/carros/importar-pasta', {
           method: 'POST',
           data: {
-            lote: carrosLote.value,
+            data: carrosData.value,
             fotos: carrosFotos.value.map(f => ({ name: f.name, placa: f.placa })),
             operationId: makeOperationId('carros-importar')
           }
@@ -1177,16 +1200,73 @@ export default {
         }
         const d = response.data;
         showStatus(
-          `✓ ${d.vehiclesImported} veiculo(s), ${d.totalPhotos} fotos`
+          `✓ ${d.placas} placa(s), ${d.fotos} fotos em ${d.data}`
             + (d.ignoradas.length ? ` · ${d.ignoradas.length} ignorada(s)` : ''),
           'success'
         );
         carrosFotos.value = [];
-        await onCarregarVeiculos();
+        await onCarregarDia();
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
       } finally {
         carrosImportando.value = false;
+      }
+    };
+
+    const onCriarPlaca = async () => {
+      if (!carrosData.value || !carrosNovaPlaca.value) return;
+      try {
+        const response = await this.$api.request('/api/carros/placa', {
+          method: 'POST',
+          data: {
+            data: carrosData.value,
+            placa: carrosNovaPlaca.value,
+            operationId: makeOperationId('carros-placa')
+          }
+        });
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+        showStatus(`✓ Placa ${response.data.placa} criada`, 'success');
+        carrosNovaPlaca.value = '';
+        await onCarregarDia();
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onArrastarFoto = (placa, arquivo) => {
+      carrosArrastando.value = { placa, arquivo };
+    };
+
+    // Soltar numa placa move o arquivo de pasta; a foto e renomeada para a placa
+    // de destino, senao o nome diria uma placa e ela estaria dentro de outra.
+    const onSoltarNaPlaca = async placaDestino => {
+      const arrastada = carrosArrastando.value;
+      carrosPlacaAlvo.value = '';
+      carrosArrastando.value = null;
+      if (!arrastada || arrastada.placa === placaDestino) return;
+
+      try {
+        const response = await this.$api.request('/api/carros/mover-foto', {
+          method: 'POST',
+          data: {
+            data: carrosData.value,
+            de: arrastada.placa,
+            para: placaDestino,
+            arquivo: arrastada.arquivo,
+            operationId: makeOperationId('carros-mover')
+          }
+        });
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+        showStatus(`✓ ${arrastada.arquivo} movida para ${placaDestino}`, 'success');
+        await onCarregarDia();
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
       }
     };
 
@@ -1685,6 +1765,12 @@ export default {
       await loadQaLotes();
       await onCarregarPlanilhas();
 
+      // Carros agrupa por dia, nao por lote; o padrao e hoje.
+      const hoje = new Date();
+      const dois = n => String(n).padStart(2, '0');
+      carrosData.value = `${dois(hoje.getDate())}-${dois(hoje.getMonth() + 1)}-${hoje.getFullYear()}`;
+      await onCarregarDia();
+
       // Refresh temp images every 2 seconds
       refreshInterval = setInterval(loadTempImages, 2000);
 
@@ -1816,16 +1902,22 @@ export default {
       planilhaSelecionada,
       planilhaEmCurso,
       onCarregarPlanilhas,
-      carrosLote,
+      carrosData,
+      carrosPlacas,
+      carrosNovaPlaca,
+      carrosPlacaAlvo,
+      carrosTotalFotos,
       carrosPasta,
       carrosFotos,
-      carrosVeiculos,
       carrosLendo,
       carrosImportando,
       carrosPlacasInformadas,
       carrosFotosAntesDaPlaca,
       onLerPastaCarros,
-      onCarregarVeiculos,
+      onCarregarDia,
+      onCriarPlaca,
+      onArrastarFoto,
+      onSoltarNaPlaca,
       onImportarCarros,
       sincronizarPlanilhas,
       planilhasConflitos,
