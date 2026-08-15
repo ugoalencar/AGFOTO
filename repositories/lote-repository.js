@@ -113,12 +113,104 @@ export class LoteRepository {
   }
 
   /**
+   * Sincroniza lotes do diretório Finalizadas com JSONs
+   * Cria/atualiza JSONs para cada lote encontrado
+   */
+  static async syncFinalizadasLotes() {
+    try {
+      const fs = await import('fs');
+      await createSecureDirectory(config.paths.jsons, config.paths.root);
+
+      const finalDir = config.paths.finalizadas;
+
+      // Cria o diretório Finalizadas se não existir (sem validação de segurança, pois está configurado explicitamente)
+      try {
+        await fs.promises.mkdir(finalDir, { recursive: true });
+      } catch (err) {
+        console.warn(`[SYNC] Cannot create/access Finalizadas directory: ${err.message}`);
+        return [];
+      }
+
+      let entries;
+      try {
+        entries = await fs.promises.readdir(finalDir, { withFileTypes: true });
+      } catch (err) {
+        console.warn(`[SYNC] Cannot read Finalizadas directory: ${err.message}`);
+        return [];
+      }
+
+      const syncedLotes = [];
+
+      for (const entry of entries) {
+
+        if (entry.isDirectory() && entry.name.startsWith('LOTE ')) {
+          const numero = entry.name.replace(/^LOTE /, '');
+          const jsonPath = this.getLoteJsonPath(numero);
+
+          try {
+            // Verifica se JSON existe
+            let lote;
+            let needsUpdate = false;
+            try {
+              const data = await readJsonSafe(jsonPath);
+              lote = Lote.fromJSON(data);
+            } catch (err) {
+              // Cria novo lote se JSON não existir
+              lote = new Lote(numero);
+              needsUpdate = true;
+            }
+
+            // Escaneia os GTINs no diretório do lote
+            const loteFinalDir = path.join(finalDir, `LOTE ${numero}`);
+            try {
+              const gtinEntries = await fs.promises.readdir(loteFinalDir, { withFileTypes: true });
+              for (const gtinEntry of gtinEntries) {
+                if (gtinEntry.isDirectory()) {
+                  const gtin = gtinEntry.name;
+                  // Valida se é GTIN válido (aceita qualquer sequência de dígitos)
+                  if (!/^\d{1,64}$/.test(gtin)) continue;
+
+                  if (!lote.itens[gtin]) {
+                    // Usa getOrCreateItem para criar produtos corretamente
+                    lote.getOrCreateItem(gtin, gtin, gtin);
+                    needsUpdate = true;
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn(`[SYNC] Cannot read GTINs for lote ${numero}: ${err.message}`);
+            }
+
+            if (needsUpdate) {
+              await writeJsonAtomic(jsonPath, lote.toJSON(), { backupDir: config.paths.backups });
+            }
+
+            syncedLotes.push(lote);
+          } catch (err) {
+            console.warn(`[SYNC] Cannot sync lote ${numero}: ${err.message}`);
+          }
+        }
+      }
+
+      return syncedLotes.sort((a, b) => a.numero.localeCompare(b.numero));
+    } catch (err) {
+      console.warn(`[SYNC] Failed to sync Finalizadas lotes: ${err.message}`);
+      return [];
+    }
+  }
+
+  /**
    * Lista todos os lotes existentes
+   * Sincroniza com Finalizadas primeiro, depois carrega JSONs
    */
   static async listAll() {
     try {
       await createSecureDirectory(config.paths.jsons, config.paths.root);
 
+      // Sincroniza lotes do diretório Finalizadas
+      await this.syncFinalizadasLotes();
+
+      // Lista todos os JSONs
       const fs = await import('fs');
       const entries = await fs.promises.readdir(config.paths.jsons);
 
