@@ -211,7 +211,24 @@
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Produtos prontos para entrega</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaProducts.length }} itens</span></header><div class="ag-table-wrap"><table class="ag-table"><thead><tr><th>GTIN</th><th>Codigo</th><th>Fotos</th><th>Acao</th></tr></thead><tbody><tr v-for="product in qaProducts" :key="`${product.gtin}:${product.codigo}`"><td>{{ product.gtin }}</td><td>{{ product.codigo }}</td><td>{{ product.quantidadeFotos }}</td><td><button class="ag-btn is-warning" @click="onPrepareDelivery(product)" :disabled="deliveryProductKey === `${product.gtin}:${product.codigo}`">{{ deliveryProductKey === `${product.gtin}:${product.codigo}` ? 'Entregando' : 'Entregar' }}</button></td></tr></tbody></table></div></section>
     </main>
     <main v-if="activePage === 'qa'" class="ag-view qa-view">
-      <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Navegar</h2></header><div class="ag-card-body"><label class="ag-label">Lote</label><input class="ag-field" v-model="qaPhotoLote" type="text" placeholder="Lote"><label class="ag-label" style="margin-top:12px">GTIN</label><input class="ag-field" v-model="qaPhotoGtin" type="text" placeholder="GTIN"><button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadQaPhotos" :disabled="!qaPhotoLote || !qaPhotoGtin">Carregar fotos</button></div></section>
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Navegar</h2></header>
+        <div class="ag-card-body">
+          <label class="ag-label">Lote</label>
+          <select class="ag-field" v-model="qaPhotoLote" @change="onQaLoteChange">
+            <option value="">Selecione um lote</option>
+            <option v-for="lote in qaAvailableLotes" :key="lote" :value="lote">{{ lote }}</option>
+          </select>
+
+          <label class="ag-label" style="margin-top:12px">GTIN</label>
+          <select class="ag-field" v-model="qaPhotoGtin" :disabled="!qaPhotoLote">
+            <option value="">Selecione um GTIN</option>
+            <option v-for="gtin in qaAvailableGtins" :key="gtin" :value="gtin">{{ gtin }}</option>
+          </select>
+
+          <button class="ag-btn is-primary" style="width:100%;margin-top:12px" @click="onLoadQaPhotos" :disabled="!qaPhotoLote || !qaPhotoGtin">Carregar fotos</button>
+        </div>
+      </section>
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">{{ qaPhotoGtin || 'Fotos para QA' }}</h2><span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ qaPhotos.length }} imagens</span></header><div class="stage-grid"><div v-for="photo in qaPhotos" :key="photo.filename" class="qa-photo-card"><div style="height:74px;display:grid;place-items:center;background:var(--ag-panel);margin-bottom:8px">Foto</div><div style="font-family:var(--ag-mono);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ photo.filename }}</div><div style="display:flex;gap:4px;margin-top:8px"><button class="ag-btn" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AP')">AP</button><button class="ag-btn is-warning" style="flex:1;padding:5px 6px" @click="onClassifyPhoto(photo, 'AT')">AT</button></div></div></div><div style="padding:10px 14px;border-top:1px solid var(--ag-line)"><button class="ag-btn is-primary" @click="onCompleteQa" :disabled="qaPhotos.length === 0">Concluir QA</button></div></section>
       <section class="ag-card"><header class="ag-card-header"><h2 class="ag-card-title">Marcacoes</h2></header><div class="ag-card-body" style="color:var(--ag-muted);font-size:13px"><p><b style="color:var(--ag-yellow)">AP</b> fica fora da entrega normal.</p><p><b style="color:var(--ag-orange)">AT</b> entra na entrega de atualizacao.</p><p>Desfazer e exclusao continuam registrados por auditoria.</p></div></section>
     </main>
@@ -343,6 +360,8 @@ export default {
     const qaPhotoLote = ref('');
     const qaPhotoGtin = ref('');
     const qaPhotos = ref([]);
+    const qaAvailableLotes = ref([]);
+    const qaAvailableGtins = ref([]);
     const reportStatus = ref('');
     const reportItems = ref([]);
     const reportStats = ref(null);
@@ -586,6 +605,39 @@ export default {
       }
     };
 
+    const loadQaLotes = async () => {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const jsonDir = 'dados/jsons';
+
+        const files = fs.readdirSync(jsonDir).filter(f => f.startsWith('Lote_'));
+        qaAvailableLotes.value = files.map(f => f.replace('Lote_', '').replace('.json', ''));
+      } catch (err) {
+        qaAvailableLotes.value = [];
+      }
+    };
+
+    const onQaLoteChange = async () => {
+      qaAvailableGtins.value = [];
+      qaPhotoGtin.value = '';
+      qaPhotos.value = [];
+
+      if (!qaPhotoLote.value) return;
+
+      try {
+        const response = await this.$api.request(
+          `/api/lotes/${qaPhotoLote.value}/itens`
+        );
+        if (response.ok) {
+          qaAvailableGtins.value = response.data.itens || [];
+          showStatus(`✓ ${qaAvailableGtins.value.length} GTINs carregados`, 'success');
+        }
+      } catch (err) {
+        showStatus(`✗ Erro ao carregar GTINs`, 'error');
+      }
+    };
+
     const onLoadQaPhotos = async () => {
       if (!qaPhotoLote.value || !qaPhotoGtin.value) return;
 
@@ -773,6 +825,7 @@ export default {
     onMounted(async () => {
       // Load initial data
       await loadTempImages();
+      await loadQaLotes();
 
       // Refresh temp images every 2 seconds
       refreshInterval = setInterval(loadTempImages, 2000);
@@ -806,6 +859,8 @@ export default {
       qaPhotoLote,
       qaPhotoGtin,
       qaPhotos,
+      qaAvailableLotes,
+      qaAvailableGtins,
       reportStatus,
       reportItems,
       reportStats,
@@ -824,6 +879,8 @@ export default {
       onExcelFileSelected,
       onImportExcel,
       onLoadQaProducts,
+      loadQaLotes,
+      onQaLoteChange,
       onLoadQaPhotos,
       onClassifyPhoto,
       onCompleteQa,
