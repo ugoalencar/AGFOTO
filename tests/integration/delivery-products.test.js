@@ -17,6 +17,15 @@ async function saveReadyProduct(env, lote = '37', gtin = '000123', codigo = 'COD
   await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'root.jpg'), JPG_BYTES);
   const saved = await CapturaService.saveCapture(lote, gtin, codigo, 'Produto local');
   assert.equal(saved.ok, true);
+
+  // Salvar renomeia no padrao do sphoto (GTIN_data_hora_indice). Estes testes tratam
+  // de staging/manifesto, nao de nomenclatura, entao a fixture volta pro nome fixo.
+  const dir = path.join(env.paths.finalizadas, `LOTE ${lote}`, gtin);
+  const salvo = saved.data.detalhes.moved[0].dest;
+  if (salvo !== 'root.jpg') {
+    await fs.promises.rename(path.join(dir, salvo), path.join(dir, 'root.jpg'));
+  }
+
   const qa = await DeliveryService.completeQa(lote, gtin, DeliveryType.NORMAL);
   assert.equal(qa.ok, true);
 }

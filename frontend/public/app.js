@@ -5,8 +5,10 @@ async function loadComponent() {
     if (!response.ok) throw new Error(`Unable to load application: ${response.status}`);
     return response.text();
   });
-  const template = source.match(/<template>([\s\S]*?)<\/template>/)?.[1];
-  const script = source.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+  // Guloso de proposito: o template do componente pode conter <template v-if> aninhado.
+  // Com match nao-guloso o primeiro </template> interno cortava metade da interface fora.
+  const template = source.match(/<template>([\s\S]*)<\/template>/)?.[1];
+  const script = source.match(/<script>([\s\S]*)<\/script>/)?.[1];
 
   if (!template || !script) throw new Error('Application component is invalid');
 

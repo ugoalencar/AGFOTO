@@ -56,11 +56,11 @@ export class ApiClient {
   /**
    * POST /api/captura/salvar
    */
-  async saveCaptureCapture(lote, gtin, codigo = null, descricao = null) {
+  async saveCaptureCapture(lote, gtin, codigo = null, descricao = null, obs = null) {
     const operationId = `capture-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     return this.request('/api/captura/salvar', {
       method: 'POST',
-      data: { lote, gtin, codigo, descricao, operationId }
+      data: { lote, gtin, codigo, descricao, obs, operationId }
     });
   }
 

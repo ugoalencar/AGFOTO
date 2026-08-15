@@ -13,6 +13,27 @@ import { createTestEnv } from '../helpers/test-env.js';
 import { applyConfigOverrides } from '../../server/config.js';
 
 const JPG_BYTES = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]);
+
+// Salvar renomeia no padrao do sphoto: GTIN_dd_MM_yyyy_HH_mm_ss_indice[_sufixos].ext
+// O timestamp e do momento da gravacao, entao os testes casam por padrao.
+function padraoCapturado(gtin, indice = 0, extras = '') {
+  return new RegExp(`^${gtin}_\\d{2}_\\d{2}_\\d{4}_\\d{2}_\\d{2}_\\d{2}_${indice}${extras}\\.jpg$`);
+}
+
+function pastaProduto(env, lote, gtin, subpasta = null) {
+  const base = path.join(env.paths.finalizadas, `LOTE ${lote}`, gtin);
+  return subpasta ? path.join(base, subpasta) : base;
+}
+
+async function listarPasta(env, lote, gtin, subpasta = null) {
+  return fs.promises.readdir(pastaProduto(env, lote, gtin, subpasta)).catch(() => []);
+}
+
+async function acharCapturado(env, lote, gtin, { indice = 0, extras = '', subpasta = null } = {}) {
+  const padrao = padraoCapturado(gtin, indice, extras);
+  const arquivos = await listarPasta(env, lote, gtin, subpasta);
+  return arquivos.find(nome => padrao.test(nome)) || null;
+}
 const RIFF_WAV_BYTES = Buffer.from([
   0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00,
   0x57, 0x41, 0x56, 0x45, 0x66, 0x6d, 0x74, 0x20
@@ -211,7 +232,6 @@ test('save capture moves snapshot, updates JSON and control workbook without ove
   applyConfigOverrides(env.config);
   const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
   const finalPhoto = path.join(env.paths.finalizadas, 'LOTE 37', '000123', 'foto.jpg');
-  const suffixedPhoto = path.join(env.paths.finalizadas, 'LOTE 37', '000123', 'foto_001.jpg');
   await fs.promises.writeFile(tempPhoto, JPG_BYTES);
   await fs.promises.mkdir(path.dirname(finalPhoto), { recursive: true });
   await fs.promises.writeFile(finalPhoto, Buffer.from('existing photo'));
@@ -221,8 +241,12 @@ test('save capture moves snapshot, updates JSON and control workbook without ove
   assert.equal(result.ok, true);
   assert.equal(result.data.fotosMovidas, 1);
   assert.equal(await fs.promises.stat(tempPhoto).then(() => true, () => false), false);
+  // Arquivo que ja estava na pasta nao pode ser tocado pela captura nova.
   assert.deepEqual(await fs.promises.readFile(finalPhoto), Buffer.from('existing photo'));
-  assert.deepEqual(await fs.promises.readFile(suffixedPhoto), JPG_BYTES);
+
+  const capturado = await acharCapturado(env, '37', '000123');
+  assert.ok(capturado, 'foto salva deve usar o nome GTIN_data_hora_indice');
+  assert.deepEqual(await fs.promises.readFile(pastaProduto(env, '37', '000123', null) + path.sep + capturado), JPG_BYTES);
 
   const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_37.json'), 'utf8'));
   assert.equal(loteJson.itens['000123'].status, 'pendente_qa');
@@ -246,10 +270,7 @@ test('save capture uses the normalized GTIN as the JSON key and final folder', a
 
   assert.equal(result.ok, true);
   assert.equal(result.data.gtin, '000123');
-  assert.equal(
-    await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 38', '000123', 'foto.jpg')).then(() => true, () => false),
-    true
-  );
+  assert.ok(await acharCapturado(env, '38', '000123'), 'foto deve cair na pasta do GTIN normalizado');
   const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_38.json'), 'utf8'));
   assert.ok(loteJson.itens['000123']);
 });
@@ -290,14 +311,111 @@ test('save capture recaptures the same GTIN with a deterministic suffix and cumu
   assert.equal(firstCapture.ok, true);
   assert.equal(secondCapture.ok, true);
   assert.equal(secondCapture.data.fotosMovidas, 1);
-  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 39', '000123', 'foto.jpg')).then(() => true, () => false), true);
-  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 39', '000123', 'foto_001.jpg')).then(() => true, () => false), true);
+  // Recaptura no mesmo segundo geraria o mesmo nome: uniqueDestPath preserva as duas.
+  const salvas = await listarPasta(env, '39', '000123');
+  assert.equal(salvas.filter(nome => nome.endsWith('.jpg')).length, 2, `esperava 2 fotos, veio ${salvas}`);
 
   const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_39.json'), 'utf8'));
   const produto = loteJson.itens['000123'];
   assert.equal(produto.status, 'pendente_qa');
   assert.equal(produto.quantidadeFotos, 2);
   assert.equal(produto.historico.filter(evento => evento.evento === 'captura_salva').length, 2);
+});
+
+test('save capture turns TEMP tags into subfolders and keeps other suffixes in the name', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  // Nomes crus da camera ja marcados no palco Atual.
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_2_coding.jpg'), JPG_BYTES);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_3_RT.jpg'), JPG_BYTES);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_4_IS.jpg'), JPG_BYTES);
+
+  const result = await CapturaService.saveCapture('50', '000123', '', '', 'observacao do produto');
+
+  assert.equal(result.ok, true);
+  assert.equal(result.data.fotosMovidas, 4);
+
+  const raiz = await listarPasta(env, '50', '000123');
+  // _coding fica no nome; _RT e _IS saem do nome e viram pasta.
+  assert.ok(raiz.some(nome => padraoCapturado('000123', 0).test(nome)), `raiz sem a foto 0: ${raiz}`);
+  assert.ok(raiz.some(nome => padraoCapturado('000123', 1, '_coding').test(nome)), `_coding perdido: ${raiz}`);
+  assert.ok(await acharCapturado(env, '50', '000123', { indice: 2, subpasta: 'RT' }), 'foto _RT deve ir para RT/');
+  assert.ok(await acharCapturado(env, '50', '000123', { indice: 3, subpasta: 'IS' }), 'foto _IS deve ir para IS/');
+  assert.equal(raiz.filter(nome => nome.endsWith('.jpg')).length, 2, `so 2 fotos ficam na raiz: ${raiz}`);
+
+  // Observacoes viram um .txt na pasta do produto.
+  const txt = raiz.find(nome => nome.endsWith('.txt'));
+  assert.ok(txt, `observacao nao gravada: ${raiz}`);
+  assert.equal(
+    await fs.promises.readFile(path.join(pastaProduto(env, '50', '000123'), txt), 'utf8'),
+    'observacao do produto'
+  );
+});
+
+test('marking toggles a suffix on saved photos without losing the file', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('51', '000123');
+
+  const original = await acharCapturado(env, '51', '000123');
+  assert.ok(original);
+
+  const marcado = await CapturaService.markPhotos({
+    location: 'finalizadas', lote: '51', gtin: '000123', filenames: [original], suffix: '_coding'
+  });
+  assert.equal(marcado.ok, true);
+  assert.ok(await acharCapturado(env, '51', '000123', { extras: '_coding' }), 'sufixo nao aplicado');
+
+  // Segunda chamada e um toggle: volta ao nome sem sufixo.
+  const desmarcado = await CapturaService.markPhotos({
+    location: 'finalizadas', lote: '51', gtin: '000123', filenames: [`${original.slice(0, -4)}_coding.jpg`], suffix: '_coding'
+  });
+  assert.equal(desmarcado.ok, true);
+  const arquivos = await listarPasta(env, '51', '000123');
+  assert.deepEqual(arquivos, [original], `toggle deveria restaurar o nome: ${arquivos}`);
+});
+
+test('subfolder tagging moves between folders and never leaves a copy behind', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('52', '000123');
+  const nome = await acharCapturado(env, '52', '000123');
+
+  await CapturaService.tagSubfolder({ lote: '52', gtin: '000123', filenames: [nome], pasta: 'RT' });
+  assert.deepEqual(await listarPasta(env, '52', '000123', 'RT'), [nome]);
+  assert.equal((await listarPasta(env, '52', '000123')).filter(n => n.endsWith('.jpg')).length, 0);
+
+  // RT -> IS: troca direta, sem duplicar.
+  await CapturaService.tagSubfolder({ lote: '52', gtin: '000123', filenames: [nome], pasta: 'IS' });
+  assert.deepEqual(await listarPasta(env, '52', '000123', 'RT'), []);
+  assert.deepEqual(await listarPasta(env, '52', '000123', 'IS'), [nome]);
+
+  // Mesma pasta de novo: volta pra raiz.
+  await CapturaService.tagSubfolder({ lote: '52', gtin: '000123', filenames: [nome], pasta: 'IS' });
+  assert.deepEqual(await listarPasta(env, '52', '000123', 'IS'), []);
+  assert.deepEqual((await listarPasta(env, '52', '000123')).filter(n => n.endsWith('.jpg')), [nome]);
+
+  const subpastas = await CapturaService.getSubfolderImages('52', '000123');
+  assert.deepEqual(subpastas.data.subpastas, {});
+});
+
+test('subfolder tagging rejects a folder outside RT/IS/AP', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await fs.promises.writeFile(path.join(env.paths.imagesTemp, 'IMG_1.jpg'), JPG_BYTES);
+  await CapturaService.saveCapture('53', '000123');
+  const nome = await acharCapturado(env, '53', '000123');
+
+  const result = await CapturaService.tagSubfolder({
+    lote: '53', gtin: '000123', filenames: [nome], pasta: '../fora'
+  });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /RT, IS ou AP/i);
+  assert.deepEqual((await listarPasta(env, '53', '000123')).filter(n => n.endsWith('.jpg')), [nome]);
 });
 
 test('save capture does not persist a lote, product, or workbook when no files move', async t => {
@@ -342,7 +460,7 @@ test('save capture persists only moved files when a later move fails', async t =
   assert.equal(result.data.fotosFalhadas, 1);
   const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_41.json'), 'utf8'));
   assert.equal(loteJson.itens['000123'].quantidadeFotos, 1);
-  assert.equal(await fs.promises.stat(path.join(env.paths.finalizadas, 'LOTE 41', '000123', 'a.jpg')).then(() => true, () => false), true);
+  assert.ok(await acharCapturado(env, '41', '000123'), 'a.jpg deve ter sido salva e renomeada');
   assert.equal(await fs.promises.stat(path.join(env.paths.imagesTemp, 'b.jpg')).then(() => true, () => false), true);
 });
 
@@ -371,7 +489,6 @@ test('save capture records an exclusive copy when TEMP cleanup fails', async t =
   const env = await createTestEnv(t);
   applyConfigOverrides(env.config);
   const tempPhoto = path.join(env.paths.imagesTemp, 'foto.jpg');
-  const finalPhoto = path.join(env.paths.finalizadas, 'LOTE 43', '000123', 'foto.jpg');
   await fs.promises.writeFile(tempPhoto, JPG_BYTES);
   const originalUnlink = fs.promises.unlink;
   fs.promises.unlink = async filePath => {
@@ -386,7 +503,7 @@ test('save capture records an exclusive copy when TEMP cleanup fails', async t =
 
   assert.equal(result.ok, true);
   assert.equal(result.data.fotosMovidas, 1);
-  assert.equal(await fs.promises.stat(finalPhoto).then(() => true, () => false), true);
+  assert.ok(await acharCapturado(env, '43', '000123'), 'copia exclusiva deve existir no destino');
   assert.equal(await fs.promises.stat(tempPhoto).then(() => true, () => false), true);
   assert.match(result.warnings[0].error, /TEMP cleanup failed/i);
   const loteJson = JSON.parse(await fs.promises.readFile(path.join(env.paths.jsons, 'Lote_43.json'), 'utf8'));

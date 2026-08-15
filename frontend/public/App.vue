@@ -33,133 +33,151 @@
 
       <div class="ag-content">
 
-<main v-if="activePage === 'captura'" class="ag-view capture-view" style="display:grid;grid-template-columns:1fr auto 1fr;gap:12px;grid-auto-rows:max-content">
-  <!-- Row 1: GTIN Search + Description -->
-  <section class="ag-card" style="grid-column:1/-1;margin-bottom:12px">
-    <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;align-items:flex-start">
-      <div>
-        <label class="ag-label">GTIN / EAN</label>
-        <div style="display:flex;gap:8px">
-          <input class="ag-field" v-model="inputGtin" @keydown.enter="onGtinSearch" type="text" placeholder="Digite ou leia o GTIN" autocomplete="off" style="flex:1">
-          <button class="ag-btn is-primary" @click="onGtinSearch" :disabled="!inputGtin">Buscar</button>
+<main v-if="activePage === 'captura'" class="ag-view capture-view">
+  <!-- Row 1: busca do GTIN + descricao do produto -->
+  <div class="capture-row-topo">
+    <div class="capture-busca">
+      <span class="capture-busca-icone">#</span>
+      <input class="ag-field" v-model="inputGtin" @keydown.enter="onGtinSearch" type="text" placeholder="Digite o GTIN" autocomplete="off">
+      <button class="ag-btn is-primary" @click="onGtinSearch" :disabled="!inputGtin">Buscar</button>
+    </div>
+    <div class="capture-info-box">
+      <span class="capture-info-label">Produto:</span>
+      <span class="capture-info-value">{{ descricaoProduto }}</span>
+      <span v-if="selectedGtin" :class="`badge-status ${currentStatus}`" style="margin-left:auto">{{ currentStatusLabel }}</span>
+    </div>
+  </div>
+
+  <!-- Row 2: coluna esquerda (palcos) + coluna direita (lote/GTINs) -->
+  <div class="capture-row-principal">
+    <!-- Coluna esquerda -->
+    <div class="capture-coluna-esq">
+      <section class="ag-card">
+        <header class="ag-card-header">
+          <h3 class="ag-card-title">Atual</h3>
+          <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ tempImages.length }} imagens</span>
+        </header>
+        <div class="ag-card-body">
+          <div v-if="tempImages.length === 0" class="grid-empty">Nenhuma imagem nesta sessao</div>
+          <div v-else class="grid-miniaturas">
+            <div v-for="img in tempImages" :key="img.name" class="miniatura" :class="classesMiniatura(img.name, 'temp')" @click="openModal(img, 'temp')">
+              <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @error="onImageError">
+              <button class="btn-deletar" @click.stop="onImageDelete(img)" title="Excluir">&times;</button>
+              <button class="btn-marcar" @click.stop="toggleMarcacao(img.name, 'temp')" title="Marcar">&check;</button>
+            </div>
+          </div>
         </div>
-      </div>
-      <div v-if="selectedGtin" style="padding:8px 12px;background:var(--ag-panel);border-radius:4px;border:1px solid var(--ag-line)">
-        <div style="font-size:12px;color:var(--ag-muted);margin-bottom:4px">Produto</div>
-        <div style="font-weight:bold">{{ selectedGtin }}</div>
-        <div style="font-size:12px;color:var(--ag-muted)">Status: <span :class="`badge-status ${currentStatus}`">{{ currentStatusLabel }}</span></div>
-      </div>
-    </div>
-  </section>
+      </section>
 
-  <!-- Left Column: Imagens -->
-  <section class="ag-card" style="grid-column:1;grid-row:2">
-    <header class="ag-card-header">
-      <h3 class="ag-card-title">Atual (TEMP)</h3>
-      <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ tempImages.length }} imagens</span>
-    </header>
-    <div class="ag-card-body">
-      <div v-if="tempImages.length === 0" style="text-align:center;padding:20px;color:var(--ag-muted)">
-        Aguardando imagens da câmera
-      </div>
-      <div v-else style="display:grid;grid-template-columns:repeat(3, 1fr);gap:8px">
-        <div v-for="img in tempImages" :key="img.name" class="thumbnail-item" :class="{ marked: imagensMarcadasTemp.includes(img.name) }">
-          <img :src="`/api/captura/imagem/temp/${img.name}`" :alt="img.name" @click="openModal(img)" @error="onImageError" style="cursor:pointer;width:100%;height:100px;object-fit:cover">
-          <button class="btn-delete-thumb" @click="onImageDelete(img)" title="Deletar"><i>×</i></button>
-          <button class="btn-mark-thumb" @click="toggleMarcacao(img.name, 'temp')" title="Marcar"><i>✓</i></button>
+      <section class="ag-card">
+        <header class="ag-card-header">
+          <h3 class="ag-card-title">Anterior</h3>
+          <span style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
+        </header>
+        <div class="ag-card-body">
+          <div class="legenda-cores">
+            <span class="legenda-cores-item"><span class="legenda-cores-cor coding"></span> _coding (pos-producao)</span>
+            <span class="legenda-cores-item"><span class="legenda-cores-cor rt"></span> RT - Rotulo</span>
+            <span class="legenda-cores-item"><span class="legenda-cores-cor is"></span> IS - Insumos</span>
+            <span class="legenda-cores-item"><span class="legenda-cores-cor ap"></span> AP - Apoio</span>
+          </div>
+          <div v-if="!selectedGtin" class="grid-empty">Selecione um GTIN</div>
+          <div v-else-if="previousImages.length === 0" class="grid-empty">Nenhuma imagem anterior</div>
+          <div v-else class="grid-miniaturas">
+            <div v-for="img in previousImages" :key="img.name" class="miniatura" :class="classesMiniatura(img.name, 'anterior')" @click="openModal(img, 'anterior')">
+              <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @error="onImageError">
+              <button class="btn-deletar" @click.stop="onDeletePrevious(img)" title="Excluir">&times;</button>
+              <button class="btn-marcar" @click.stop="toggleMarcacao(img.name, 'anterior')" title="Marcar">&check;</button>
+            </div>
+          </div>
+
+          <!-- Subpastas RT/IS/AP ja movidas -->
+          <div v-for="tag in ['RT','IS','AP']" :key="tag" v-show="subpastasAnterior[tag] && subpastasAnterior[tag].length">
+            <div class="subpasta-preview-titulo">{{ tag }} ({{ (subpastasAnterior[tag] || []).length }})</div>
+            <div class="subpasta-preview-grid">
+              <div v-for="img in (subpastasAnterior[tag] || [])" :key="img.name" class="subpasta-preview-item" :class="tag.toLowerCase()">
+                <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${tag}/${img.name}`" :title="img.name" @error="onImageError">
+                <button class="btn-voltar" @click="onVoltarDeSubpasta(img.name, tag)">Voltar</button>
+              </div>
+            </div>
+          </div>
         </div>
+      </section>
+
+      <!-- Obs + checkboxes de marcacao -->
+      <div class="capture-obs-bar">
+        <span class="capture-obs-label">Obs</span>
+        <textarea class="ag-field" v-model="observacoes" rows="1" placeholder="Observacoes sobre o GTIN"></textarea>
+        <label class="check-wrapper coding" :class="{ 'is-busy': marcacaoEmCurso }">
+          <input type="checkbox" v-model="checkCoding" @change="aplicarSufixo('_coding')"> _coding
+        </label>
+        <label class="check-wrapper rt" :class="{ 'is-busy': marcacaoEmCurso }">
+          <input type="checkbox" v-model="checkRT" @change="aplicarSubpasta('RT')"> RT
+        </label>
+        <label class="check-wrapper is" :class="{ 'is-busy': marcacaoEmCurso }">
+          <input type="checkbox" v-model="checkIS" @change="aplicarSubpasta('IS')"> IS
+        </label>
+        <label class="check-wrapper ap" :class="{ 'is-busy': marcacaoEmCurso }">
+          <input type="checkbox" v-model="checkAP" @change="aplicarSubpasta('AP')"> AP
+        </label>
       </div>
-    </div>
-  </section>
 
-  <!-- Center Column: Buttons + Obs -->
-  <section class="ag-card" style="grid-column:2;grid-row:2;width:120px">
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedGtin || tempImages.length === 0" style="width:100%;height:40px;font-size:12px;flex:1" title="Salvar ({{ tempImages.length }})">
-        <div style="font-size:18px">↓</div>
-        <div>Salvar</div>
-      </button>
-      <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0" style="width:100%;height:40px;font-size:12px;flex:1" title="Limpar TEMP">
-        <div style="font-size:18px">🗑</div>
-        <div>Limpar</div>
-      </button>
-    </div>
-  </section>
-
-  <!-- Right Column: Lote + Imagens Anteriores -->
-  <section class="ag-card" style="grid-column:3;grid-row:2">
-    <div style="margin-bottom:12px">
-      <label class="ag-label">Lote</label>
-      <select class="ag-field" v-model="selectedLote" @change="onLoteSelected">
-        <option value="">Selecione um lote</option>
-        <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ lote }}</option>
-      </select>
-    </div>
-
-    <div style="margin-bottom:12px">
-      <label class="ag-label">GTINs ({{ loteItems.length }})</label>
-      <div style="max-height:150px;overflow-y:auto;border:1px solid var(--ag-line);border-radius:4px">
-        <button v-for="item in loteItems" :key="item.gtin"
-                @click="inputGtin = item.gtin; onGtinSearch()"
-                style="display:block;width:100%;text-align:left;padding:8px;border:none;background:none;border-bottom:1px solid var(--ag-line);cursor:pointer;color:var(--ag-fg)"
-                :style="{ background: selectedGtin === item.gtin ? 'var(--ag-orange)' : 'transparent', color: selectedGtin === item.gtin ? '#000' : 'var(--ag-fg)' }">
-          <div style="font-weight:bold">{{ item.gtin }}</div>
-          <div style="font-size:11px;color:var(--ag-muted)">{{ item.quantidadeFotos }} fotos</div>
+      <!-- Botoes de acao -->
+      <div class="capture-acoes">
+        <button class="ag-btn is-primary" @click="onSaveCapture" :disabled="!selectedLote || !selectedGtin || tempImages.length === 0">
+          Salvar ({{ tempImages.length }})
+        </button>
+        <button class="ag-btn is-ok" @click="onFinalizar" :disabled="!selectedLote || !selectedGtin">
+          Finalizar
+        </button>
+        <button class="ag-btn is-warning" @click="onClearTemp" :disabled="tempImages.length === 0">
+          Limpar TEMP
         </button>
       </div>
     </div>
-  </section>
 
-  <!-- Row 3: Palco Anterior (Full Width) -->
-  <section class="ag-card" style="grid-column:1/-1">
-    <header class="ag-card-header">
-      <h3 class="ag-card-title">Anterior (Finalizadas)</h3>
-      <span v-if="selectedGtin" style="margin-left:auto;color:var(--ag-muted);font-size:12px">{{ previousImages.length }} imagens</span>
-    </header>
-    <div class="ag-card-body">
-      <div v-if="!selectedGtin" style="text-align:center;padding:20px;color:var(--ag-muted)">
-        Selecione um GTIN para ver as imagens anteriores
-      </div>
-      <div v-else-if="previousImages.length === 0" style="text-align:center;padding:20px;color:var(--ag-muted)">
-        Nenhuma imagem anterior
-      </div>
-      <div v-else style="display:grid;grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));gap:8px">
-        <div v-for="img in previousImages" :key="img.name" class="thumbnail-item" :class="{ marked: imagensMarcadasAnterior.includes(img.name) }">
-          <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @click="openModal(img)" @error="onImageError" style="cursor:pointer;width:100%;height:100px;object-fit:cover">
-          <button class="btn-delete-thumb" @click="onImageDelete(img)" title="Deletar"><i>×</i></button>
-          <button class="btn-mark-thumb" @click="toggleMarcacao(img.name, 'anterior')" title="Marcar"><i>✓</i></button>
+    <!-- Coluna direita -->
+    <div class="capture-coluna-dir">
+      <div class="capture-lote-head">
+        <div class="capture-campo">
+          <span class="capture-campo-label">Lote</span>
+          <select class="ag-field" v-model="selectedLote" @change="onLoteSelected">
+            <option value="">Selecione</option>
+            <option v-for="lote in availableLotes" :key="lote" :value="lote">{{ lote }}</option>
+          </select>
+        </div>
+        <div class="capture-campo">
+          <span class="capture-campo-label">Qtde</span>
+          <input class="ag-field" :value="loteItems.length" readonly>
         </div>
       </div>
-    </div>
-  </section>
 
-  <!-- Row 4: Obs + Checkboxes -->
-  <section class="ag-card" style="grid-column:1/-1" v-if="selectedGtin">
-    <div style="display:flex;gap:12px;align-items:flex-start">
-      <div style="flex:1">
-        <label class="ag-label">Obs</label>
-        <textarea class="ag-field" v-model="observacoes" rows="2" placeholder="Observações sobre o GTIN" style="resize:none;width:100%"></textarea>
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;padding-top:24px">
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
-          <input type="checkbox" v-model="checkCoding">
-          <span style="font-size:12px">_coding</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
-          <input type="checkbox" v-model="checkRT">
-          <span style="font-size:12px">_RT</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
-          <input type="checkbox" v-model="checkIS">
-          <span style="font-size:12px">_IS</span>
-        </label>
-        <label style="display:flex;align-items:center;gap:4px;cursor:pointer;user-select:none">
-          <input type="checkbox" v-model="checkAP">
-          <span style="font-size:12px">_AP</span>
-        </label>
-      </div>
+      <section class="ag-card">
+        <header class="ag-card-header">
+          <h3 class="ag-card-title">GTINs do Lote</h3>
+        </header>
+        <div class="ag-table-wrap" style="max-height:400px;overflow-y:auto">
+          <table class="ag-table">
+            <thead>
+              <tr><th>GTIN</th><th>Descricao</th><th>Status</th></tr>
+            </thead>
+            <tbody>
+              <tr v-for="item in loteItems" :key="item.gtin"
+                  class="linha-gtin" :class="{ ativa: selectedGtin === item.gtin }"
+                  @click="selecionarGtinDaLista(item)">
+                <td>{{ item.gtin }}</td>
+                <td>{{ item.descricao }}</td>
+                <td><span :class="`badge-status ${item.status}`">{{ item.status }}</span></td>
+              </tr>
+              <tr v-if="loteItems.length === 0">
+                <td colspan="3" style="color:var(--ag-muted)">Selecione um lote</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
-  </section>
+  </div>
 </main>
 
     <!-- Planilhas Page -->
@@ -438,10 +456,13 @@ export default {
     const vehiclesLote = ref('');
     const vehicles = ref([]);
 
-    // Thumbnail & marking state (sphoto-style)
+    // Miniaturas e marcacao (mesma mecanica do sphoto)
     const imagensMarcadasTemp = ref([]);
     const imagensMarcadasAnterior = ref([]);
     const observacoes = ref('');
+    const descricaoProduto = ref('...');
+    const subpastasAnterior = ref({});
+    const marcacaoEmCurso = ref(false);
     const checkCoding = ref(false);
     const checkRT = ref(false);
     const checkIS = ref(false);
@@ -538,8 +559,10 @@ export default {
           const item = loteItems.value.find(i => i.gtin === selectedGtin.value);
           if (item) {
             currentStatus.value = item.status;
+            descricaoProduto.value = item.descricao || item.gtin;
           }
         }
+        await loadSubpastas();
       } catch (err) {
         console.error('Error loading previous images:', err);
       }
@@ -577,14 +600,16 @@ export default {
           selectedLote.value,
           selectedGtin.value,
           '',
-          ''
+          '',
+          observacoes.value
         );
 
         if (response.ok) {
-          showStatus(`✓ ${response.data.fotosCopidas} fotos salvas`, 'success');
-          selectedGtin.value = '';
-          inputGtin.value = '';
-          currentStatus.value = '';
+          showStatus(`✓ ${response.data.fotosMovidas} fotos salvas`, 'success');
+          // O GTIN continua selecionado: as fotos que sairam da TEMP tem que aparecer
+          // agora no palco Anterior, igual no sphoto.
+          observacoes.value = '';
+          imagensMarcadasTemp.value = [];
           await loadTempImages();
           await loadLote();
           await loadPreviousImages();
@@ -941,6 +966,206 @@ export default {
       }
     };
 
+    // Sufixo ja gravado no nome do arquivo (sem a extensao) - vira contorno colorido.
+    const temSufixo = (nome, sufixo) => {
+      const idx = nome.lastIndexOf('.');
+      const semExt = idx >= 0 ? nome.slice(0, idx) : nome;
+      return semExt.endsWith(sufixo);
+    };
+
+    const classesMiniatura = (nome, tipo) => {
+      const marcadas = tipo === 'anterior' ? imagensMarcadasAnterior.value : imagensMarcadasTemp.value;
+      return {
+        marcada: marcadas.includes(nome),
+        'tem-coding': temSufixo(nome, '_coding'),
+        'tem-rt': temSufixo(nome, '_RT'),
+        'tem-is': temSufixo(nome, '_IS'),
+        'tem-ap': temSufixo(nome, '_AP')
+      };
+    };
+
+    const loadSubpastas = async () => {
+      if (!selectedLote.value || !selectedGtin.value) {
+        subpastasAnterior.value = {};
+        return;
+      }
+      try {
+        const response = await this.$api.request('/api/captura/imagens/subpastas', {
+          query: { lote: selectedLote.value, gtin: selectedGtin.value }
+        });
+        subpastasAnterior.value = response.ok ? (response.data.subpastas || {}) : {};
+      } catch {
+        subpastasAnterior.value = {};
+      }
+    };
+
+    // _coding e marcacao de nome nos dois palcos: renomeia o arquivo onde ele esta.
+    const aplicarSufixo = async sufixo => {
+      if (imagensMarcadasTemp.value.length === 0 && imagensMarcadasAnterior.value.length === 0) {
+        checkCoding.value = false;
+        showStatus('Marque ao menos uma imagem antes', 'error');
+        return;
+      }
+
+      marcacaoEmCurso.value = true;
+      try {
+        if (imagensMarcadasTemp.value.length > 0) {
+          await this.$api.request('/api/captura/marcar', {
+            method: 'POST',
+            data: {
+              location: 'temp',
+              filenames: [...imagensMarcadasTemp.value],
+              suffix: sufixo,
+              operationId: makeOperationId('marcar-temp')
+            }
+          });
+        }
+        if (imagensMarcadasAnterior.value.length > 0) {
+          await this.$api.request('/api/captura/marcar', {
+            method: 'POST',
+            data: {
+              location: 'finalizadas',
+              lote: selectedLote.value,
+              gtin: selectedGtin.value,
+              filenames: [...imagensMarcadasAnterior.value],
+              suffix: sufixo,
+              operationId: makeOperationId('marcar-final')
+            }
+          });
+        }
+        imagensMarcadasTemp.value = [];
+        imagensMarcadasAnterior.value = [];
+        await loadTempImages();
+        await loadPreviousImages();
+        showStatus(`✓ Imagens atualizadas com ${sufixo}`, 'success');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        checkCoding.value = false;
+        marcacaoEmCurso.value = false;
+      }
+    };
+
+    // RT/IS/AP: no palco Atual vira sufixo no nome (salvar cria a subpasta depois);
+    // no palco Anterior move a foto de fato para a subpasta.
+    const aplicarSubpasta = async pasta => {
+      const resetCheck = () => {
+        if (pasta === 'RT') checkRT.value = false;
+        if (pasta === 'IS') checkIS.value = false;
+        if (pasta === 'AP') checkAP.value = false;
+      };
+
+      if (imagensMarcadasTemp.value.length === 0 && imagensMarcadasAnterior.value.length === 0) {
+        resetCheck();
+        showStatus('Marque ao menos uma imagem antes', 'error');
+        return;
+      }
+
+      marcacaoEmCurso.value = true;
+      try {
+        if (imagensMarcadasTemp.value.length > 0) {
+          await this.$api.request('/api/captura/marcar', {
+            method: 'POST',
+            data: {
+              location: 'temp',
+              filenames: [...imagensMarcadasTemp.value],
+              suffix: `_${pasta}`,
+              operationId: makeOperationId('subpasta-temp')
+            }
+          });
+        }
+        if (imagensMarcadasAnterior.value.length > 0) {
+          await this.$api.request('/api/captura/tag-subpasta', {
+            method: 'POST',
+            data: {
+              lote: selectedLote.value,
+              gtin: selectedGtin.value,
+              filenames: [...imagensMarcadasAnterior.value],
+              pasta,
+              operationId: makeOperationId('subpasta-final')
+            }
+          });
+        }
+        imagensMarcadasTemp.value = [];
+        imagensMarcadasAnterior.value = [];
+        await loadTempImages();
+        await loadPreviousImages();
+        await loadSubpastas();
+        showStatus(`✓ Imagens marcadas para ${pasta}`, 'success');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        resetCheck();
+        marcacaoEmCurso.value = false;
+      }
+    };
+
+    const onVoltarDeSubpasta = async (nome, tag) => {
+      try {
+        await this.$api.request('/api/captura/tag-subpasta', {
+          method: 'POST',
+          data: {
+            lote: selectedLote.value,
+            gtin: selectedGtin.value,
+            filenames: [nome],
+            pasta: tag,
+            operationId: makeOperationId('subpasta-voltar')
+          }
+        });
+        await loadPreviousImages();
+        await loadSubpastas();
+        showStatus('✓ Imagem devolvida para a raiz', 'success');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onDeletePrevious = async img => {
+      if (!confirm(`Remover ${img.name}?`)) return;
+      try {
+        await this.$api.request('/api/captura/imagem/finalizadas', {
+          method: 'DELETE',
+          data: {
+            lote: selectedLote.value,
+            gtin: selectedGtin.value,
+            filename: img.name,
+            operationId: makeOperationId('delete-final')
+          }
+        });
+        await loadPreviousImages();
+        showStatus('✓ Imagem removida', 'success');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const selecionarGtinDaLista = item => {
+      inputGtin.value = item.gtin;
+      descricaoProduto.value = item.descricao || item.gtin;
+      onGtinSearch();
+    };
+
+    // Finalizar = garantir que o que esta em TEMP foi salvo e liberar o palco pro
+    // proximo GTIN. Salvar ja move o produto para pendente_qa, entao aqui nao ha
+    // chamada extra - no sphoto este botao avisa o Redmine, que aqui nao existe.
+    const onFinalizar = async () => {
+      if (!selectedLote.value || !selectedGtin.value) return;
+
+      if (tempImages.value.length > 0) {
+        await onSaveCapture();
+      }
+
+      await loadLote();
+      selectedGtin.value = '';
+      inputGtin.value = '';
+      descricaoProduto.value = '...';
+      previousImages.value = [];
+      subpastasAnterior.value = {};
+      observacoes.value = '';
+      imagensMarcadasAnterior.value = [];
+      showStatus('✓ GTIN finalizado - pendente de QA', 'success');
+    };
+
     onUnmounted(() => {
       if (refreshInterval) {
         clearInterval(refreshInterval);
@@ -964,11 +1189,21 @@ export default {
       imagensMarcadasTemp,
       imagensMarcadasAnterior,
       observacoes,
+      descricaoProduto,
+      subpastasAnterior,
+      marcacaoEmCurso,
       checkCoding,
       checkRT,
       checkIS,
       checkAP,
       toggleMarcacao,
+      classesMiniatura,
+      aplicarSufixo,
+      aplicarSubpasta,
+      onVoltarDeSubpasta,
+      onDeletePrevious,
+      selecionarGtinDaLista,
+      onFinalizar,
       excelFile,
       excelItems,
       excelConflicts,

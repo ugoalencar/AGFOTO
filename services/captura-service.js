@@ -121,13 +121,13 @@ export class CapturaService {
    * 5. Atualiza JSON com novo status
    * 6. Registra auditoria
    */
-  static async saveCapture(loteNumero, gtin, codigo = null, descricao = null) {
+  static async saveCapture(loteNumero, gtin, codigo = null, descricao = null, obs = null) {
     return this.withCaptureLock(loteNumero, () => (
-      this.saveCaptureLocked(loteNumero, gtin, codigo, descricao)
+      this.saveCaptureLocked(loteNumero, gtin, codigo, descricao, obs)
     ));
   }
 
-  static async saveCaptureLocked(loteNumero, gtin, codigo = null, descricao = null) {
+  static async saveCaptureLocked(loteNumero, gtin, codigo = null, descricao = null, obs = null) {
     let snapshot;
     let normalizedGtin = gtin;
 
@@ -184,6 +184,14 @@ export class CapturaService {
       await LoteRepository.save(lote);
 
       const warnings = [...moveResult.warnings];
+
+      // Observacoes viram um .txt na pasta do GTIN, igual o sphoto faz.
+      try {
+        await FileRepository.writeObservacoes(loteNumero, normalizedGtin, obs);
+      } catch (err) {
+        warnings.push({ code: 'OBS_WRITE_FAILED', error: err.message });
+      }
+
       try {
         await ExcelService.updateControlFromLote(loteNumero);
       } catch (err) {
@@ -289,6 +297,97 @@ export class CapturaService {
         ok: false,
         error: err.message
       };
+    }
+  }
+
+  /**
+   * Toggle de sufixo (_coding, _RT, ...) nos arquivos marcados.
+   */
+  static async markPhotos({ location, filenames, suffix, lote = null, gtin = null }) {
+    try {
+      const result = await FileRepository.toggleSuffix({
+        location,
+        filenames,
+        suffix,
+        loteNumero: lote,
+        gtin
+      });
+
+      await auditLogger.log('FOTOS_MARCADAS', {
+        location,
+        lote,
+        gtin,
+        sufixo: suffix,
+        renomeados: result.renamed.length,
+        falhados: result.failed.length
+      });
+
+      return { ok: result.failed.length === 0, data: result, error: result.failed.length ? 'Some files failed to rename' : undefined };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Toggle de subpasta RT/IS/AP no palco Anterior.
+   */
+  static async tagSubfolder({ lote, gtin, filenames, pasta }) {
+    try {
+      const result = await FileRepository.toggleSubfolderTag({
+        loteNumero: lote,
+        gtin,
+        filenames,
+        pasta
+      });
+
+      await auditLogger.log('FOTOS_SUBPASTA', {
+        lote,
+        gtin,
+        pasta,
+        movidos: result.moved.length,
+        falhados: result.failed.length
+      });
+
+      return { ok: result.failed.length === 0, data: result, error: result.failed.length ? 'Some files failed to move' : undefined };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Lista imagens que estao nas subpastas RT/IS/AP
+   */
+  static async getSubfolderImages(lote, gtin) {
+    try {
+      const subpastas = await FileRepository.listSubfolderImages(lote, gtin);
+      return { ok: true, data: { lote, gtin, subpastas } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Remove uma foto ja salva em Finalizadas
+   */
+  static async deleteFinalizadaPhoto({ lote, gtin, filename, location = null }) {
+    try {
+      const photo = await FileRepository.deleteFinalizadaPhoto({
+        loteNumero: lote,
+        gtin,
+        filename,
+        location
+      });
+
+      await auditLogger.log('FOTO_FINALIZADA_REMOVIDA', {
+        lote,
+        gtin,
+        filename,
+        location: photo.location
+      });
+
+      return { ok: true, data: { filename: photo.filename, location: photo.location } };
+    } catch (err) {
+      return { ok: false, error: err.message };
     }
   }
 

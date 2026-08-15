@@ -137,7 +137,7 @@ router.get('/lotes/:numero', getLoteHandler);
  * }
  */
 router.post('/salvar', express.json(), async (req, res) => {
-  const { lote, gtin, codigo, descricao } = req.body;
+  const { lote, gtin, codigo, descricao, obs } = req.body;
 
   // Validações
   if (!lote || typeof lote !== 'string') {
@@ -172,7 +172,7 @@ router.post('/salvar', express.json(), async (req, res) => {
     });
   }
 
-  const result = await CapturaService.saveCapture(lote, gtin, codigo, descricao);
+  const result = await CapturaService.saveCapture(lote, gtin, codigo, descricao, obs);
 
   if (result.ok) {
     res.json({
@@ -304,6 +304,115 @@ router.get('/imagem/finalizadas/:lote/:gtin/:subfolder/:filename', async (req, r
   } catch (error) {
     return sendError(res, error.code === 'ENOENT' ? 404 : 400, error);
   }
+});
+
+/**
+ * POST /api/captura/marcar
+ * Toggle de sufixo (_coding, _RT, _IS, _AP) no nome dos arquivos marcados.
+ *
+ * Body: { location: 'temp'|'finalizadas', filenames: [], suffix: '_coding', lote?, gtin? }
+ */
+router.post('/marcar', express.json(), async (req, res) => {
+  const { location, filenames, suffix, lote, gtin } = req.body;
+
+  if (!['temp', 'finalizadas'].includes(location)) {
+    return res.status(400).json({ ok: false, error: 'location must be temp or finalizadas', requestId: req.id });
+  }
+  if (!Array.isArray(filenames) || filenames.length === 0) {
+    return res.status(400).json({ ok: false, error: 'filenames must be a non-empty array', requestId: req.id });
+  }
+  if (location === 'finalizadas') {
+    if (!Lote.isValid(lote)) {
+      return res.status(400).json({ ok: false, error: `Invalid lote: ${lote}`, requestId: req.id });
+    }
+    if (!Produto.isValid(gtin)) {
+      return res.status(400).json({ ok: false, error: `Invalid GTIN: ${gtin}`, requestId: req.id });
+    }
+  }
+
+  const result = await CapturaService.markPhotos({ location, filenames, suffix, lote, gtin });
+  return res.status(result.ok ? 200 : 400).json({
+    ok: result.ok,
+    data: result.data,
+    error: result.error,
+    requestId: req.id
+  });
+});
+
+/**
+ * POST /api/captura/tag-subpasta
+ * Move (ou desfaz) a marcacao RT/IS/AP de fotos ja salvas.
+ *
+ * Body: { lote, gtin, filenames: [], pasta: 'RT'|'IS'|'AP' }
+ */
+router.post('/tag-subpasta', express.json(), async (req, res) => {
+  const { lote, gtin, filenames, pasta } = req.body;
+
+  if (!Lote.isValid(lote)) {
+    return res.status(400).json({ ok: false, error: `Invalid lote: ${lote}`, requestId: req.id });
+  }
+  if (!Produto.isValid(gtin)) {
+    return res.status(400).json({ ok: false, error: `Invalid GTIN: ${gtin}`, requestId: req.id });
+  }
+  if (!Array.isArray(filenames) || filenames.length === 0) {
+    return res.status(400).json({ ok: false, error: 'filenames must be a non-empty array', requestId: req.id });
+  }
+
+  const result = await CapturaService.tagSubfolder({ lote, gtin, filenames, pasta });
+  return res.status(result.ok ? 200 : 400).json({
+    ok: result.ok,
+    data: result.data,
+    error: result.error,
+    requestId: req.id
+  });
+});
+
+/**
+ * GET /api/captura/imagens/subpastas?lote=&gtin=
+ * Lista as fotos que estao em RT/IS/AP
+ */
+router.get('/imagens/subpastas', async (req, res) => {
+  const { lote, gtin } = req.query;
+
+  if (!Lote.isValid(lote) || !Produto.isValid(gtin)) {
+    return res.status(400).json({ ok: false, error: 'Invalid lote or GTIN', requestId: req.id });
+  }
+
+  const result = await CapturaService.getSubfolderImages(lote, gtin);
+  return res.status(result.ok ? 200 : 400).json({
+    ok: result.ok,
+    data: result.data,
+    error: result.error,
+    requestId: req.id
+  });
+});
+
+/**
+ * DELETE /api/captura/imagem/finalizadas
+ * Remove uma foto ja salva (raiz ou subpasta).
+ *
+ * Body: { lote, gtin, filename, location? }
+ */
+router.delete('/imagem/finalizadas', express.json(), async (req, res) => {
+  const { lote, gtin, filename, location } = req.body;
+
+  if (!Lote.isValid(lote)) {
+    return res.status(400).json({ ok: false, error: `Invalid lote: ${lote}`, requestId: req.id });
+  }
+  if (!Produto.isValid(gtin)) {
+    return res.status(400).json({ ok: false, error: `Invalid GTIN: ${gtin}`, requestId: req.id });
+  }
+  if (!filename || typeof filename !== 'string') {
+    return res.status(400).json({ ok: false, error: 'filename is required', requestId: req.id });
+  }
+
+  const result = await CapturaService.deleteFinalizadaPhoto({ lote, gtin, filename, location });
+  return res.status(result.ok ? 200 : 400).json({
+    ok: result.ok,
+    data: result.data,
+    error: result.error,
+    requestId: req.id
+  });
 });
 
 router.get('/:numero/itens', getLoteHandler);

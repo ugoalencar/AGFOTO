@@ -35,6 +35,15 @@ async function savePhoto(env, lote = '37', gtin = '000123', filename = 'a.jpg') 
   await fs.promises.writeFile(path.join(env.paths.imagesTemp, filename), JPG_BYTES);
   const result = await CapturaService.saveCapture(lote, gtin, 'COD-1', 'Produto local');
   assert.equal(result.ok, true);
+
+  // Salvar renomeia no padrao do sphoto (GTIN_data_hora_indice). Estes testes tratam
+  // de classificacao/entrega, nao de nomenclatura, entao a fixture volta pro nome
+  // fixo pra manter as asserções legiveis e deterministicas.
+  const dir = path.join(env.paths.finalizadas, `LOTE ${lote}`, gtin);
+  const salvo = result.data.detalhes.moved[0].dest;
+  if (salvo !== filename) {
+    await fs.promises.rename(path.join(dir, salvo), path.join(dir, filename));
+  }
 }
 
 test('classifies AP and AT by moving files, then unclassifies without overwrite', async t => {
