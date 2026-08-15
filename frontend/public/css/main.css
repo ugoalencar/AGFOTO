@@ -1821,3 +1821,21 @@ select {
   font-size: 11px;
   color: var(--ag-muted);
 }
+
+.carros-destino {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--ag-line);
+  font-size: 11px;
+  color: var(--ag-muted);
+}
+
+.carros-destino code {
+  font-family: var(--ag-mono);
+  color: var(--ag-text);
+}
+
+/* Aviso de erro fica ate 15s e pode ser dispensado no clique. */
+.ag-status { cursor: pointer; }

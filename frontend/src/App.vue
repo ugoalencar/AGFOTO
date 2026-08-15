@@ -513,6 +513,13 @@
                     :disabled="!carrosData || carrosPlacasInformadas === 0 || carrosImportando">
               {{ carrosImportando ? 'Importando...' : `Importar ${carrosPlacasInformadas} placa(s)` }}
             </button>
+            <div v-if="carrosPlacasInformadas === 0" style="font-size:11px;color:var(--ag-yellow);margin-top:6px">
+              Digite a placa na foto da placa de cada carro para liberar a importacao.
+            </div>
+            <div v-else style="font-size:11px;color:var(--ag-muted);margin-top:6px">
+              Copia as fotos para <code style="font-family:var(--ag-mono)">Carros/{{ carrosData }}/PLACA</code>.
+              O cartao nao e apagado.
+            </div>
           </div>
 
           <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--ag-line)">
@@ -540,6 +547,12 @@
             {{ carrosFotos.length ? carrosPasta : `${carrosPlacas.length} placa(s) · ${carrosTotalFotos} fotos` }}
           </span>
         </header>
+
+        <!-- Onde os arquivos foram parar, para nao precisar adivinhar. -->
+        <div v-if="!carrosFotos.length && carrosPastaDestino" class="carros-destino">
+          <span>Gravado em</span>
+          <code>{{ carrosPastaDestino }}</code>
+        </div>
 
         <div class="ag-card-body">
           <!-- Sequencia recem-carregada: marcar as placas -->
@@ -709,7 +722,8 @@
       </div>
 
       <footer class="ag-footer">
-        <span v-if="status" class="ag-status" :class="statusType">{{ status }}</span>
+        <span v-if="status" class="ag-status" :class="statusType"
+              @click="dispensarStatus" title="Clique para dispensar">{{ status }}</span>
       </footer>
     </div>
   </div>
@@ -772,6 +786,7 @@ export default {
     const explorerPastas = ref([]);
     const explorerFotos = ref(0);
     const explorerErro = ref('');
+    const carrosPastaDestino = ref('');
     const carrosArrastando = ref(null);
     const carrosPasta = ref('');
     const carrosFotos = ref([]);
@@ -850,13 +865,25 @@ export default {
     });
 
     // Methods
+    let statusTimer = null;
+
+    // Erro fica bem mais tempo que confirmacao: sumindo em 3 segundos como
+    // antes, uma falha de importacao passava despercebida e parecia que o
+    // clique nao tinha feito nada. Clicar no aviso dispensa.
     const showStatus = (message, type = 'success') => {
       status.value = message;
       statusType.value = type;
-      setTimeout(() => {
+      clearTimeout(statusTimer);
+      statusTimer = setTimeout(() => {
         status.value = '';
         statusType.value = '';
-      }, 3000);
+      }, type === 'error' ? 15000 : 3000);
+    };
+
+    const dispensarStatus = () => {
+      clearTimeout(statusTimer);
+      status.value = '';
+      statusType.value = '';
     };
 
     const makeOperationId = prefix => {
@@ -1264,6 +1291,7 @@ export default {
       try {
         const response = await this.$api.request(`/api/carros/dia/${encodeURIComponent(carrosData.value)}`);
         carrosPlacas.value = response.ok ? (response.data.placas || []) : [];
+        carrosPastaDestino.value = response.ok ? (response.data.pasta || '') : '';
       } catch {
         carrosPlacas.value = [];
       }
@@ -2048,6 +2076,7 @@ export default {
       modalImage,
       status,
       statusType,
+      dispensarStatus,
       currentStatus,
       currentStatusLabel,
       observacoes,
@@ -2095,6 +2124,7 @@ export default {
       explorerPastas,
       explorerFotos,
       explorerErro,
+      carrosPastaDestino,
       onAbrirExplorador,
       onExplorar,
       onExplorarPai,

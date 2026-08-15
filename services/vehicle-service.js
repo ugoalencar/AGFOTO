@@ -377,7 +377,14 @@ export class VehicleService {
       placas.sort((a, b) => a.placa.localeCompare(b.placa));
       return {
         ok: true,
-        data: { data: dia, placas, total: placas.reduce((s, p) => s + p.total, 0) }
+        data: {
+          data: dia,
+          // A tela mostra a pasta real: assim nao e preciso adivinhar para onde
+          // as fotos foram.
+          pasta: raiz,
+          placas,
+          total: placas.reduce((s, p) => s + p.total, 0)
+        }
       };
     } catch (err) {
       return { ok: false, error: err.message };
