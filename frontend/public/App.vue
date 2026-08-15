@@ -47,7 +47,7 @@
 
       <div>
         <label class="ag-label">GTIN / EAN</label>
-        <input class="ag-field is-large" v-model="inputGtin" @keydown.enter="onGtinEnter" type="text" placeholder="Leitor ou digitacao" autocomplete="off">
+        <input class="ag-field is-large" v-model="inputGtin" @keydown.enter="onGtinEnter" type="text" placeholder="Leitor ou digitação" autocomplete="off">
       </div>
 
       <div v-if="selectedGtin">
@@ -66,7 +66,7 @@
     </div>
   </section>
 
-  <section class="ag-card capture-stage">
+  <section id="capture-stage" class="ag-card capture-stage">
     <div class="stage-head">
       <h3 class="stage-title">Palco atual</h3>
       <span class="ag-chip">TEMP monitorando</span>
@@ -91,7 +91,7 @@
     <div v-if="!selectedGtin || previousImages.length === 0" class="stage-grid stage-empty">
       {{ selectedGtin ? 'Nenhuma imagem anterior' : 'Selecione um GTIN' }}
     </div>
-    <div v-else class="stage-grid">
+    <div v-else id="previous-grid" class="stage-grid">
       <div v-for="img in previousImages" :key="img.name" class="thumbnail" @click="openModal(img)">
         <img :src="`/api/captura/imagem/finalizadas/${selectedLote}/${selectedGtin}/${img.name}`" :alt="img.name" @error="onImageError">
         <div class="thumbnail-overlay">
