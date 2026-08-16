@@ -2027,3 +2027,10 @@ select {
 
 .badge-status.organizado { background: var(--ag-panel-3); color: var(--ag-text); }
 .badge-status.pronto_para_entrega { background: var(--ag-ok); color: #fff; }
+
+/* Marca a foto cuja hora veio do arquivo, nao do EXIF. */
+.hora-arquivo {
+  color: var(--ag-yellow);
+  font-weight: 700;
+  margin-left: 2px;
+}

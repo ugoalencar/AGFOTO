@@ -405,3 +405,90 @@ test('a situacao sobrevive a releitura do disco', async t => {
   const relido = await VehicleService.listarPorData(DIA);
   assert.equal(relido.data.placas[0].status, 'pronto_para_entrega');
 });
+
+// --- Ordem pela hora do disparo (EXIF) -------------------------------------
+
+// JPEG minimo com DateTimeOriginal, montado na mao para nao trazer dependencia
+// so para o teste.
+function jpegComExif(dataStr, marca) {
+  const valor = Buffer.concat([Buffer.from(dataStr, 'ascii'), Buffer.from([0])]);
+
+  const tiff = Buffer.alloc(8 + 18 + 18 + valor.length);
+  tiff.write('II', 0, 'ascii');
+  tiff.writeUInt16LE(0x2a, 2);
+  tiff.writeUInt32LE(8, 4);
+
+  // IFD0: ponteiro para o Exif IFD
+  let o = 8;
+  tiff.writeUInt16LE(1, o); o += 2;
+  tiff.writeUInt16LE(0x8769, o); tiff.writeUInt16LE(4, o + 2);
+  tiff.writeUInt32LE(1, o + 4); tiff.writeUInt32LE(26, o + 8); o += 12;
+  tiff.writeUInt32LE(0, o); o += 4;
+
+  // Exif IFD: DateTimeOriginal
+  tiff.writeUInt16LE(1, o); o += 2;
+  tiff.writeUInt16LE(0x9003, o); tiff.writeUInt16LE(2, o + 2);
+  tiff.writeUInt32LE(valor.length, o + 4); tiff.writeUInt32LE(44, o + 8); o += 12;
+  tiff.writeUInt32LE(0, o); o += 4;
+  valor.copy(tiff, o);
+
+  const corpo = Buffer.concat([Buffer.from('Exif\0\0', 'ascii'), tiff]);
+  const app1 = Buffer.concat([Buffer.from([0xff, 0xe1]), Buffer.alloc(2), corpo]);
+  app1.writeUInt16BE(corpo.length + 2, 2);
+
+  // SOI + APP1 + assinatura JFIF que a validacao aceita + marca de conteudo
+  return Buffer.concat([
+    Buffer.from([0xff, 0xd8]),
+    app1,
+    Buffer.from([0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01]),
+    Buffer.from([marca])
+  ]);
+}
+
+test('a sequencia segue a hora do disparo, nao o nome nem a data do arquivo', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const origem = path.join(env.root, 'cartao-exif');
+  await fs.promises.mkdir(origem, { recursive: true });
+
+  // Nomes fora de ordem e mtime invertido: so o EXIF esta certo.
+  const fotos = [
+    ['IMG_900.jpg', '2026:08:15 09:00:00', 1],
+    ['IMG_100.jpg', '2026:08:15 09:01:00', 2],
+    ['IMG_500.jpg', '2026:08:15 09:02:00', 3]
+  ];
+  for (let i = 0; i < fotos.length; i++) {
+    const [nome, quando, marca] = fotos[i];
+    const arquivo = path.join(origem, nome);
+    await fs.promises.writeFile(arquivo, jpegComExif(quando, marca));
+    const mtime = new Date(2026, 7, 15, 20, fotos.length - i); // ordem inversa
+    await fs.promises.utimes(arquivo, mtime, mtime);
+  }
+
+  const scan = await VehicleService.scanFolder(origem);
+
+  assert.equal(scan.ok, true, scan.error);
+  assert.deepEqual(scan.data.fotos.map(f => f.name), ['IMG_900.jpg', 'IMG_100.jpg', 'IMG_500.jpg']);
+  assert.equal(scan.data.semExif, 0);
+  assert.ok(scan.data.fotos.every(f => f.origemDaHora === 'exif'));
+});
+
+test('sem EXIF a hora cai para a do arquivo e a tela e avisada', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const origem = path.join(env.root, 'cartao-sem-exif');
+  await fs.promises.mkdir(origem, { recursive: true });
+
+  for (let i = 0; i < 2; i++) {
+    const arquivo = path.join(origem, `foto${i}.jpg`);
+    await fs.promises.writeFile(arquivo, bytesDaFoto(i));
+    const quando = new Date(2026, 7, 15, 10, i);
+    await fs.promises.utimes(arquivo, quando, quando);
+  }
+
+  const scan = await VehicleService.scanFolder(origem);
+
+  assert.equal(scan.data.semExif, 2);
+  assert.ok(scan.data.fotos.every(f => f.origemDaHora === 'arquivo'));
+  assert.deepEqual(scan.data.fotos.map(f => f.name), ['foto0.jpg', 'foto1.jpg']);
+});

@@ -7,6 +7,7 @@ const execFileAsync = promisify(execFile);
 import { VehicleBatch, Vehicle } from '../domain/vehicle.js';
 import { config } from '../server/config.js';
 import { createSecureDirectory, assertInsideRoot, validateImageSignature } from '../server/secure-filesystem.js';
+import { lerDataDeCaptura } from '../server/exif-data.js';
 import { PlateOcrService, MockPlateOcrProvider } from './plate-ocr-service.js';
 import { VehicleRepository } from '../repositories/vehicle-repository.js';
 import { auditLogger } from '../server/audit-logger.js';
@@ -125,26 +126,38 @@ export class VehicleService {
         }
 
         const info = await fs.promises.stat(filePath);
+
+        // A hora que vale e a do disparo, guardada no EXIF. O mtime do arquivo
+        // e so o plano B: copiar do cartao, sincronizar ou passar por um editor
+        // reescreve o mtime e embaralharia a sequencia das placas.
+        const capturaExif = await lerDataDeCaptura(filePath);
+
         fotos.push({
           name: entry.name,
           path: filePath,
           size: info.size,
-          modified: info.mtime.toISOString(),
-          mtimeMs: info.mtimeMs
+          capturadaEm: (capturaExif || info.mtime).toISOString(),
+          origemDaHora: capturaExif ? 'exif' : 'arquivo',
+          ordenacaoMs: (capturaExif || info.mtime).getTime()
         });
       }
 
-      // A sequencia e o que separa um veiculo do outro, entao a ordem importa:
-      // hora da foto primeiro, nome como desempate para cartao que zera o mtime.
-      fotos.sort((a, b) => (a.mtimeMs - b.mtimeMs) || a.name.localeCompare(b.name));
+      // A sequencia e o que separa um veiculo do outro, entao a ordem importa.
+      // Nome como desempate para fotos do mesmo segundo (rajada).
+      fotos.sort((a, b) => (a.ordenacaoMs - b.ordenacaoMs)
+        || a.name.localeCompare(b.name, undefined, { numeric: true }));
       fotos.forEach((foto, i) => {
         foto.sequencia = i + 1;
-        delete foto.mtimeMs;
+        // A tela ja recebe pronto o que precisa exibir.
+        foto.modified = foto.capturadaEm;
+        delete foto.ordenacaoMs;
       });
+
+      const semExif = fotos.filter(f => f.origemDaHora === 'arquivo').length;
 
       pastaOrigemAtual = pasta;
 
-      return { ok: true, data: { pasta, fotos, total: fotos.length } };
+      return { ok: true, data: { pasta, fotos, total: fotos.length, semExif } };
     } catch (err) {
       return { ok: false, error: `Nao foi possivel ler a pasta: ${err.message}` };
     }

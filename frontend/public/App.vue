@@ -529,6 +529,11 @@
             <div style="font-size:12px;color:var(--ag-muted);margin-bottom:8px">
               {{ carrosFotos.length }} fotos · {{ carrosPlacasInformadas }} placa(s)
             </div>
+            <div v-if="carrosSemExif > 0" class="entrega-alerta">
+              {{ carrosSemExif }} foto(s) sem a hora do disparo no EXIF: nelas a ordem
+              usa a data do arquivo, que copiar ou editar pode ter mudado. Confira a
+              sequencia antes de importar.
+            </div>
             <div class="entrega-alerta" v-if="carrosFotosAntesDaPlaca > 0">
               As {{ carrosFotosAntesDaPlaca }} primeira(s) foto(s) estao antes de qualquer placa
               e nao entram em nenhum veiculo.
@@ -610,7 +615,10 @@
               <input class="ag-field carro-placa" v-model="foto.placa"
                      type="text" maxlength="8" placeholder="placa"
                      @input="foto.placa = foto.placa.toUpperCase()">
-              <div class="carro-foto-nome">{{ foto.name }}</div>
+              <div class="carro-foto-nome" :title="foto.name">
+                {{ formatarHora(foto.capturadaEm) }}
+                <span v-if="foto.origemDaHora === 'arquivo'" class="hora-arquivo" title="Sem EXIF: hora do arquivo">~</span>
+              </div>
             </div>
           </div>
 
@@ -994,6 +1002,7 @@ export default {
     const carrosPastaDestino = ref('');
     const carrosPlacaSelecionada = ref('');
     const carrosEmCurso = ref(false);
+    const carrosSemExif = ref(0);
     const carrosRelData = ref('');
     const carrosRelStatus = ref('');
     const carrosRelItens = ref([]);
@@ -1515,12 +1524,21 @@ export default {
           return;
         }
         carrosFotos.value = (response.data.fotos || []).map(f => ({ ...f, placa: '' }));
+        carrosSemExif.value = response.data.semExif || 0;
         showStatus(`✓ ${carrosFotos.value.length} fotos lidas`, 'success');
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
       } finally {
         carrosLendo.value = false;
       }
+    };
+
+    const formatarHora = iso => {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return Number.isNaN(d.getTime())
+        ? ''
+        : d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     };
 
     const rotuloStatusCarro = status => ({
@@ -2455,6 +2473,8 @@ export default {
       carrosPastaDestino,
       carrosPlacaSelecionada,
       carrosEmCurso,
+      carrosSemExif,
+      formatarHora,
       carrosProntas,
       carrosRelData,
       carrosRelStatus,
