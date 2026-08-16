@@ -2021,7 +2021,6 @@ export default {
     };
 
     const onAtualizarSistema = async () => {
-      await onCarregarVersao();
       await onVerificarAtualizacao({ silencioso: true });
 
       if (!atualizacao.value.temNovidade) {
@@ -2994,6 +2993,8 @@ export default {
       const dois = n => String(n).padStart(2, '0');
       carrosData.value = `${dois(hoje.getDate())}-${dois(hoje.getMonth() + 1)}-${hoje.getFullYear()}`;
       await onCarregarDia();
+
+      await onCarregarVersao();
 
       // Uma checada silenciosa ao abrir: o aviso de novidade precisa aparecer
       // sem o usuario ir procurar. Nao repete em laco - atualizacao nao e algo
