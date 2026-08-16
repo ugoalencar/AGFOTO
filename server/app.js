@@ -88,6 +88,27 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
     name: 'AG Fotografia',
     displayName: 'AG Foto'
   }));
+  // Atualizacao do sistema pelo GitHub.
+  app.get('/api/sistema/atualizacao', async (_req, res, next) => {
+    try {
+      const { UpdateService } = await import('../services/update-service.js');
+      const r = await UpdateService.estado();
+      return r.ok ? sendOk(res, r.data) : sendError(res, 400, new Error(r.error));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
+  app.post('/api/sistema/atualizacao/aplicar', async (_req, res, next) => {
+    try {
+      const { UpdateService } = await import('../services/update-service.js');
+      const r = await UpdateService.aplicar();
+      return r.ok ? sendOk(res, r.data) : sendError(res, 400, new Error(r.error));
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   app.get('/api/status/camera', async (_req, res, next) => {
     try {
       const service = app.locals.services.cameraService || new CameraService();

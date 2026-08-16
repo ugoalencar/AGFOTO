@@ -2300,3 +2300,63 @@ select {
   line-height: 1.5;
   color: var(--ag-muted);
 }
+
+/* Botao Atualizar, ao lado de Produtos/Carros. Fica discreto quando o sistema
+   esta em dia e so chama atencao quando ha novidade - um aviso permanente vira
+   ruido e para de ser lido. */
+.ag-atualizar {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border: 1px solid var(--ag-line-forte);
+  border-radius: var(--ag-radius);
+  background: var(--ag-panel-2);
+  color: var(--ag-muted);
+  font-family: var(--ag-body);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .14s ease, border-color .14s ease, background .14s ease;
+}
+
+.ag-atualizar svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ag-atualizar:hover:not(:disabled) {
+  color: var(--ag-text);
+  border-color: var(--ag-orange);
+  background: var(--ag-panel-3);
+}
+
+.ag-atualizar:disabled { opacity: .6; cursor: progress; }
+
+.ag-atualizar.tem-novidade {
+  color: var(--ag-on-warm);
+  background: var(--ag-yellow);
+  border-color: var(--ag-yellow);
+}
+
+.ag-atualizar.tem-novidade:hover:not(:disabled) {
+  background: var(--ag-amber);
+  color: var(--ag-on-warm);
+}
+
+/* Quantas atualizacoes esperam. */
+.ag-atualizar b {
+  min-width: 20px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--ag-red);
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+}

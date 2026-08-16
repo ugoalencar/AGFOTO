@@ -61,3 +61,9 @@ skills-lock.json
 # Arquivos temporarios de extracao/inspecao, nao fazem parte do sistema.
 temp_agfoto.zip
 temp_docx_content/
+
+# Dados de execucao: auditoria e status dos lotes/placas. Sao o registro DESTA
+# maquina, mudam a cada foto salva. Versionados, deixariam a pasta suja o tempo
+# todo e o "git pull --ff-only" do botao Atualizar abortaria sempre.
+dados/auditoria/
+dados/jsons/

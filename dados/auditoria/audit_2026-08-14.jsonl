@@ -1,3 +1,0 @@
-{"id":"69336646-b4c9-4fb8-8251-c4c4f08bbeed","timestamp":"2026-08-14T19:30:13.064Z","requestId":null,"action":"SERVER_START","details":{"host":"127.0.0.1","port":3000},"hostname":"ugoalencar","userAgent":"system"}
-{"id":"a61f2696-b521-47c6-b6b5-a69f900464ad","timestamp":"2026-08-14T20:11:02.838Z","requestId":null,"action":"SERVER_START","details":{"host":"127.0.0.1","port":3105},"hostname":"ugoalencar","userAgent":"system"}
-{"id":"3dc850b8-43aa-4c22-8862-a9bff4ec1471","timestamp":"2026-08-14T21:40:18.492Z","requestId":null,"action":"SERVER_START","details":{"host":"127.0.0.1","port":4317},"hostname":"ugoalencar","userAgent":"system"}

@@ -66,6 +66,16 @@
           <button :class="{ ativa: plataforma === 'produtos' }" @click="trocarPlataforma('produtos')">Produtos</button>
           <button :class="{ ativa: plataforma === 'carros' }" @click="trocarPlataforma('carros')">Carros</button>
         </div>
+
+        <button class="ag-atualizar" :class="{ 'tem-novidade': atualizacao.temNovidade }"
+                :title="atualizacaoTitulo" @click="onAtualizarSistema"
+                :disabled="atualizando">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.4-5.7"/><path d="M20 4v4h-4"/>
+          </svg>
+          <span>{{ atualizando ? 'Atualizando...' : 'Atualizar' }}</span>
+          <b v-if="atualizacao.temNovidade">{{ atualizacao.atualizacoesPendentes }}</b>
+        </button>
         <div class="ag-context">
           <span v-if="plataforma === 'produtos' && selectedLote" class="ag-chip">{{ rotuloLote(selectedLote) }}</span>
           <span v-if="plataforma === 'carros' && carrosData" class="ag-chip">{{ carrosData }}</span>
@@ -1004,6 +1014,57 @@
       </section>
 
       <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Atualizacao do sistema</h2></header>
+        <div class="ag-card-body">
+          <div class="ag-table-wrap">
+            <table class="ag-table">
+              <tbody>
+                <tr><td>Versao aqui</td><td>{{ atualizacao.versaoLocal || '-' }}</td></tr>
+                <tr><td>Versao no GitHub</td><td>{{ atualizacao.versaoRemota || '-' }}</td></tr>
+                <tr><td>Branch</td><td>{{ atualizacao.branch || '-' }}</td></tr>
+                <tr>
+                  <td>Situacao</td>
+                  <td>
+                    <span v-if="atualizacao.temNovidade" style="color:var(--ag-yellow)">
+                      {{ atualizacao.atualizacoesPendentes }} atualizacao(oes) disponivel(is)
+                    </span>
+                    <span v-else-if="atualizacao.conectado" style="color:var(--ag-ok)">em dia</span>
+                    <span v-else style="color:var(--ag-muted)">nao ligado ao GitHub</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div style="display:flex;gap:8px;margin-top:14px">
+            <button class="ag-btn" @click="onVerificarAtualizacao" :disabled="atualizando">
+              Verificar
+            </button>
+            <button class="ag-btn is-primary" @click="onAtualizarSistema"
+                    :disabled="atualizando || !atualizacao.podeAtualizar">
+              {{ atualizando ? 'Atualizando...' : 'Atualizar agora' }}
+            </button>
+          </div>
+
+          <div v-if="atualizacao.erroRede" class="entrega-alerta" style="margin-top:14px">
+            {{ atualizacao.erroRede }}
+          </div>
+
+          <div v-if="atualizacao.alteracoesLocais && atualizacao.alteracoesLocais.length"
+               class="entrega-alerta" style="margin-top:14px">
+            Ha {{ atualizacao.alteracoesLocais.length }} alteracao(oes) local(is) nesta pasta.
+            A atualizacao nao roda enquanto elas existirem - ela nunca sobrescreve
+            trabalho seu. Rode <code style="font-family:var(--ag-mono)">instalar.bat</code>
+            para guarda-las num commit local.
+          </div>
+
+          <div v-if="atualizacaoResultado" class="entrega-alerta" style="margin-top:14px">
+            {{ atualizacaoResultado }}
+          </div>
+        </div>
+      </section>
+
+      <section class="ag-card">
         <header class="ag-card-header"><h2 class="ag-card-title">Situacao</h2></header>
         <div class="ag-card-body">
           <div class="ag-table-wrap">
@@ -1732,6 +1793,7 @@ export default {
 
       if (pagina === 'carros-relatorios') await onCarregarRelatorioCarros();
       if (pagina === 'carros-entrega' || pagina === 'carros-ajustes') await onCarregarConfigAdset();
+      if (pagina === 'carros-ajustes') await onVerificarAtualizacao({ silencioso: true });
     };
 
     const irPara = async pagina => {
@@ -1909,6 +1971,100 @@ export default {
         showStatus(`✗ ${err.message}`, 'error');
       }
       await verificarCamera();
+    };
+
+    // Atualizacao do sistema pelo GitHub.
+    const atualizacao = ref({
+      conectado: false, temNovidade: false, atualizacoesPendentes: 0,
+      versaoLocal: null, versaoRemota: null, branch: null,
+      alteracoesLocais: [], podeAtualizar: false, erroRede: null
+    });
+    const atualizando = ref(false);
+    const atualizacaoResultado = ref('');
+
+    const atualizacaoTitulo = computed(() => {
+      const a = atualizacao.value;
+      if (!a.conectado) return 'Pasta nao ligada ao GitHub - rode instalar.bat';
+      if (a.erroRede) return a.erroRede;
+      if (a.temNovidade) return `${a.atualizacoesPendentes} atualizacao(oes) esperando - clique para aplicar`;
+      return `Sistema em dia (${a.versaoLocal || '-'})`;
+    });
+
+    const onVerificarAtualizacao = async ({ silencioso = false } = {}) => {
+      try {
+        const response = await this.$api.request('/api/sistema/atualizacao');
+        if (response.ok) atualizacao.value = response.data;
+        if (!silencioso) {
+          showStatus(atualizacao.value.temNovidade
+            ? `${atualizacao.value.atualizacoesPendentes} atualizacao(oes) disponivel(is)`
+            : '✓ Sistema em dia', 'info');
+        }
+      } catch (err) {
+        if (!silencioso) showStatus(`✗ ${err.message}`, 'error');
+      }
+    };
+
+    const onAtualizarSistema = async () => {
+      await onVerificarAtualizacao({ silencioso: true });
+
+      if (!atualizacao.value.temNovidade) {
+        showStatus('✓ O sistema ja esta em dia', 'success');
+        return;
+      }
+      if (!atualizacao.value.podeAtualizar) {
+        showStatus(`✗ ${atualizacao.value.erroRede || 'Ha alteracoes locais nesta pasta'}`, 'error');
+        return;
+      }
+      // Atualizar troca o codigo debaixo de quem esta trabalhando; se houver
+      // foto no palco, ela nao se perde, mas a tela recarrega.
+      if (!window.confirm(
+        `Aplicar ${atualizacao.value.atualizacoesPendentes} atualizacao(oes)?
+
+`
+        + 'A tela vai recarregar ao terminar.'
+      )) return;
+
+      atualizando.value = true;
+      atualizacaoResultado.value = '';
+      showStatus('Baixando a atualizacao...', 'info');
+
+      try {
+        const response = await this.$api.request('/api/sistema/atualizacao/aplicar', {
+          method: 'POST',
+          data: { operationId: makeOperationId('atualizar') }
+        });
+
+        if (!response.ok) {
+          atualizacaoResultado.value = response.error;
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+
+        const d = response.data;
+        if (d.jaEstavaAtualizado) {
+          showStatus('✓ O sistema ja estava em dia', 'success');
+          return;
+        }
+
+        atualizacaoResultado.value = `Atualizado de ${d.versaoAnterior} para ${d.versao}: `
+          + `${d.arquivos.length} arquivo(s).`
+          + (d.mexeuEmDependencia ? ' Mudou dependencia - rode instalar.bat.' : '')
+          + (d.precisaReiniciar
+              ? ' Mexeu no servidor: feche pelo atalho "AG Foto - Parar" e ligue de novo.'
+              : ' Recarregando a tela...');
+
+        showStatus(`✓ Atualizado para ${d.versao}`, 'success');
+
+        // Só o navegador basta quando nada do servidor mudou. Recarga forcada
+        // porque css e App.vue ficam em cache.
+        if (!d.precisaReiniciar) setTimeout(() => window.location.reload(true), 2500);
+      } catch (err) {
+        atualizacaoResultado.value = err.message;
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        atualizando.value = false;
+        await onVerificarAtualizacao({ silencioso: true });
+      }
     };
 
     const adsetModo = ref('desligado');
@@ -2822,6 +2978,11 @@ export default {
       carrosData.value = `${dois(hoje.getDate())}-${dois(hoje.getMonth() + 1)}-${hoje.getFullYear()}`;
       await onCarregarDia();
 
+      // Uma checada silenciosa ao abrir: o aviso de novidade precisa aparecer
+      // sem o usuario ir procurar. Nao repete em laco - atualizacao nao e algo
+      // que sai enquanto ele fotografa.
+      await onVerificarAtualizacao({ silencioso: true });
+
       // Refresh temp images every 2 seconds
       refreshInterval = setInterval(loadTempImages, 2000);
 
@@ -3005,6 +3166,12 @@ export default {
       adsetModo,
       adsetUsuario,
       onEnviarAoAdset,
+      atualizacao,
+      atualizando,
+      atualizacaoTitulo,
+      atualizacaoResultado,
+      onVerificarAtualizacao,
+      onAtualizarSistema,
       adsetCfg,
       adsetForm,
       adsetSalvando,
