@@ -68,3 +68,7 @@ temp_docx_content/
 dados/auditoria/
 dados/jsons/
 dist/
+
+# Especificacao interna com os prints da conta da concessionaria. Todo terminal
+# clona o repositorio, e este documento nao tem por que viajar junto.
+Nome da empresa AG Fotografia.docx

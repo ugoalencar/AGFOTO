@@ -96,10 +96,13 @@ rem --- 7. Ligacao com o GitHub -----------------------------------------------
 if "!TEMGIT!"=="0" goto :atalhos
 
 echo.
+rem O pacote do terminal ja vem como copia do repositorio, com o .git dentro -
+rem entao aqui normalmente nao ha nada a fazer. Este bloco cobre a pasta que
+rem chegou solta (copiada na mao, zip remontado sem o .git).
 if not exist .git (
   echo   Ligando esta pasta ao repositorio de atualizacoes...
-  rem O repositorio e so leitura para o terminal: git fetch/pull funciona sem
-  rem senha nem chave, e ninguem daqui consegue empurrar nada de volta.
+  rem So leitura para o terminal: git fetch/pull funciona sem senha nem chave, e
+  rem ninguem daqui consegue empurrar nada de volta.
   git init -q
   git remote add origin https://github.com/ugoalencar/AGFOTO.git
   git fetch -q --depth 1 origin master
