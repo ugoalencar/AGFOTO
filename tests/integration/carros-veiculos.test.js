@@ -807,3 +807,21 @@ test('modo invalido e recusado antes de gravar', async t => {
   assert.equal(result.ok, false);
   assert.match(result.error, /invalido/i);
 });
+
+test('salvar a configuracao grava na raiz do ambiente, nao na do projeto', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const { salvarConfigAdset } = await import('../../services/adset-session.js');
+
+  await salvarConfigAdset({
+    modo: 'ensaio', usuario: 'foto@ag.com.br', senha: 'segredo', manterConectado: false
+  });
+
+  // Com o caminho fixo na raiz do projeto, este teste gravava por cima do
+  // adset-config.json de verdade e apagava a credencial do cliente.
+  const noAmbiente = path.join(env.root, 'adset-config.json');
+  const gravado = JSON.parse(await fs.promises.readFile(noAmbiente, 'utf8'));
+
+  assert.equal(gravado.username, 'foto@ag.com.br');
+  assert.equal(env.root.startsWith(process.cwd()), false, 'o ambiente de teste fica fora do projeto');
+});

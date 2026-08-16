@@ -1,10 +1,15 @@
 import fs from 'fs';
 import path from 'path';
-import { config, ROOT } from '../server/config.js';
+import { config } from '../server/config.js';
 import { AdsetWebProvider } from './adset-web-provider.js';
 import { auditLogger } from '../server/audit-logger.js';
 
-const ARQUIVO = path.join(ROOT, 'adset-config.json');
+// Resolvido a cada chamada, nao uma vez no carregamento: com o caminho fixo na
+// raiz do projeto, os testes gravavam por cima do adset-config.json de verdade e
+// apagavam as credenciais do cliente.
+function arquivoConfig() {
+  return path.join(config.paths.root, 'adset-config.json');
+}
 
 export const MODOS = Object.freeze(['desligado', 'ensaio', 'real']);
 
@@ -181,7 +186,7 @@ export async function salvarConfigAdset(entrada = {}) {
   };
 
   try {
-    await fs.promises.writeFile(ARQUIVO, JSON.stringify(novo, null, 2) + '\n', 'utf8');
+    await fs.promises.writeFile(arquivoConfig(), JSON.stringify(novo, null, 2) + '\n', 'utf8');
   } catch (err) {
     return { ok: false, error: `Nao deu para gravar adset-config.json: ${err.message}` };
   }

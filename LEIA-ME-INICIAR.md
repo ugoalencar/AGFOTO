@@ -71,3 +71,44 @@ Os logs ficam em `logs/`:
 nova, copie a pasta na mao. Sem ela o sistema sobe normalmente e o launcher
 anota "simplusCamera.exe nao encontrado" — a captura por camera e que nao
 funciona.
+
+## Instalar numa maquina nova
+
+Duplo-clique em **`instalar.bat`**. Ele:
+
+1. confere Node.js e Git
+2. instala as dependencias (`npm install`)
+3. baixa o navegador do envio ao ADSET (Playwright + Chromium)
+4. cria as pastas de trabalho
+5. cria o `adset-config.json` a partir do modelo — usuario e senha voce preenche
+   na tela de **Ajustes**, nunca no arquivo
+6. liga a pasta ao GitHub para o botao Atualizar funcionar
+7. cria os atalhos na Area de Trabalho
+
+Rodar de novo numa pasta ja em uso e seguro: nao apaga foto, configuracao nem
+trabalho.
+
+## Atualizar o sistema
+
+O botao **Atualizar**, ao lado de Produtos e Carros, fica cinza quando o sistema
+esta em dia e **amarelo com um numero** quando ha novidade no GitHub. A checagem
+acontece uma vez ao abrir a tela.
+
+Em **Ajustes** ha o detalhe: versao daqui, versao no GitHub e o botao
+**Verificar** para consultar na hora.
+
+O que a atualizacao faz e nao faz:
+
+- usa `git pull --ff-only`: avanca ou aborta. **Nunca** inventa um merge nem
+  resolve conflito sozinho — numa maquina de producao, um merge automatico que
+  da errado deixa voce sem sistema no meio do expediente
+- se houver alteracao local na pasta, ela **para** e diz quais arquivos. A
+  atualizacao nunca sobrescreve trabalho seu; rode o `instalar.bat` para guardar
+  essas alteracoes num commit local
+- ao terminar, ela diz se basta recarregar a tela ou se precisa reiniciar:
+  mudanca em `server/`, `services/`, `routes/` ou `server.js` so vale com o
+  servidor reiniciado, porque o Node carrega esses arquivos uma vez, no start
+- se o `package.json` mudou, avisa para rodar o `instalar.bat` de novo
+
+Suas fotos, o `adset-config.json` e os dados em `dados/` ficam **fora do git** e
+nao sao tocados pela atualizacao.
