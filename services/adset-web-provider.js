@@ -3,35 +3,45 @@ import path from 'path';
 
 /**
  * Envio de fotos ao ADSET pelo proprio site, repetindo o caminho que o usuario
- * faz na mao. Os passos vieram dos prints em "Nome da empresa AG Fotografia.docx":
+ * faz na mao. Os passos vieram dos prints em "Nome da empresa AG Fotografia.docx"
+ * e cada seletor abaixo foi conferido contra o site de verdade.
  *
- *   1. Login com usuario e senha.
- *   2. Veiculos > Estoque Publicados  (Abrir?view=Publicado)
- *      Se a placa nao estiver la, Estoque Nao Publicados (Abrir?view=Pendente).
- *   3. Campo "Pesquisar": digita a placa e clica em "Buscar".
- *   4. Na linha do veiculo, o icone de camera abre a tela "Alterar", secao "5. Fotos".
- *   5. "Excluir Todas as Fotos".
- *   6. Sobe as nossas fotos na ordem definida no QA.
+ *   1. Login em /Integrador/Home/Principal  (#Email, #Senha, #loginBtn).
+ *   2. Menu Veiculos > Estoque Publicados. Se a placa nao estiver la, Estoque
+ *      Nao Publicados.
+ *   3. Campo #Filtro_PlacaChassi com a placa e botao #buscar.
+ *   4. Na linha (.informacoes), o icone "Editar Fotos" (a.foto-qtd) carrega a
+ *      tela de fotos por AJAX dentro da mesma pagina.
+ *   5. #btnExcluirTodas limpa as posicoes.
+ *   6. input[name="files[]"] recebe as nossas, na ordem do QA.
+ *   7. "Confirmar" grava.
  *
- * Os localizadores sao por texto visivel ("Buscar", "Excluir Todas as Fotos") e
- * nao por classe de CSS: o texto e o que os prints realmente provam, e e o que
- * menos quebra quando o site muda de layout.
+ * TUDO acontece a partir de /Integrador/Home/Principal, sem nunca navegar para
+ * outra URL. Isso nao e preciosismo: /IntegracaoDealerNet/Abrir e
+ * /Veiculo/Cadastro respondem o fragmento HTML sozinho, SEM o jQuery da pagina.
+ * Aberto assim, o campo de arquivo fica sem o handler de "change" - as fotos
+ * nunca subiriam, e o "Confirmar" gravaria o anuncio com zero foto. Ou seja: o
+ * caminho por URL direta apaga as fotos do cliente e nao poe nada no lugar.
+ * Por isso a navegacao aqui e sempre por clique, como o usuario faz.
  *
- * AVISO: o passo 5 apaga as fotos que o anuncio ja tem. E irreversivel e
- * acontece na conta de producao da concessionaria. Por isso nada aqui roda sem
- * modo explicito, e o modo "ensaio" para antes de apagar.
+ * Os cliques sao despachados por evento (dispatchEvent) porque os alvos vivem em
+ * menu suspenso ou linha da lista, e o clique de mouse tropeca em sobreposicao.
+ * O site escuta com jQuery, que atende o evento despachado igual.
+ *
+ * AVISO: o passo 5 apaga as fotos que o anuncio ja tem, na conta de producao da
+ * concessionaria, e nao da para desfazer. Por isso nada roda sem modo explicito,
+ * e o modo "ensaio" vai ate o passo 4 e para.
  */
 
 const URL_BASE = 'https://www.adset.com.br';
 
-// As duas listas, na ordem em que o usuario procura: publicados primeiro, e so
-// vai para os pendentes se nao achar.
+// As duas listas, na ordem em que o usuario procura.
 export const LISTAS = Object.freeze([
-  { nome: 'Estoque Publicados', url: `${URL_BASE}/Integrador/IntegracaoDealerNet/Abrir?view=Publicado` },
-  { nome: 'Estoque Nao Publicados', url: `${URL_BASE}/Integrador/IntegracaoDealerNet/Abrir?view=Pendente` }
+  { nome: 'Estoque Publicados', view: 'Publicado' },
+  { nome: 'Estoque Nao Publicados', view: 'Pendente' }
 ]);
 
-// O site e lento com estoque grande; 119 veiculos na conta dos prints.
+// O site e lento com estoque grande - 119 veiculos na conta dos prints.
 const TIMEOUT_MS = 45000;
 
 export class AdsetWebProvider {
@@ -67,7 +77,7 @@ export class AdsetWebProvider {
     try {
       await fs.promises.mkdir(this.pastaEvidencia, { recursive: true });
       const arquivo = path.join(this.pastaEvidencia, `${Date.now()}_${nome}.png`);
-      await this.page.screenshot({ path: arquivo, fullPage: false });
+      await this.page.screenshot({ path: arquivo });
       return arquivo;
     } catch {
       return null;
@@ -77,7 +87,7 @@ export class AdsetWebProvider {
   async abrir() {
     const { chromium } = await import('playwright');
     this.browser = await chromium.launch({ headless: !this.visivel });
-    const contexto = await this.browser.newContext({ acceptDownloads: false });
+    const contexto = await this.browser.newContext();
     contexto.setDefaultTimeout(TIMEOUT_MS);
     this.page = await contexto.newPage();
   }
@@ -90,34 +100,25 @@ export class AdsetWebProvider {
     try {
       if (!this.page) await this.abrir();
 
-      await this.page.goto(URL_BASE, { waitUntil: 'domcontentloaded' });
+      // Sem sessao o site redireciona para Home/Index com o ReturnUrl.
+      await this.page.goto(`${URL_BASE}/Integrador/Home/Principal`, { waitUntil: 'domcontentloaded' });
 
-      // Nao ha print da tela de login no documento, entao os campos sao
-      // procurados por varios nomes possiveis em vez de um chute unico. Se
-      // nenhum aparecer, para aqui em vez de seguir as cegas.
-      const usuario = this.page.locator(
-        'input[name="usuario" i], input[name="email" i], input[name="login" i], input[type="email"]'
-      ).first();
-      const senha = this.page.locator('input[type="password"]').first();
-
-      if (await usuario.count() === 0 || await senha.count() === 0) {
+      if (await this.page.locator('#Email').count() === 0) {
         await this.evidencia('login_sem_campos');
-        return {
-          ok: false,
-          error: 'Tela de login do ADSET nao reconhecida - confira a captura em evidencias'
-        };
+        return { ok: false, error: 'Tela de login do ADSET nao reconhecida' };
       }
 
-      await usuario.fill(this.usuario);
-      await senha.fill(this.senha);
-      await this.page.keyboard.press('Enter');
+      await this.page.fill('#Email', this.usuario);
+      await this.page.fill('#Senha', this.senha);
+      await this.page.click('#loginBtn');
       await this.page.waitForLoadState('networkidle').catch(() => {});
 
-      // "Sair" so existe depois de entrar - e o sinal mais confiavel dos prints.
+      // "Sair" so aparece depois de entrar.
       const entrou = await this.page.getByText('Sair', { exact: false }).count() > 0;
-      await this.evidencia(entrou ? 'login_ok' : 'login_falhou');
-
-      if (!entrou) return { ok: false, error: 'Login recusado pelo ADSET' };
+      if (!entrou) {
+        await this.evidencia('login_falhou');
+        return { ok: false, error: 'Login recusado pelo ADSET' };
+      }
 
       this.registrar('login', this.usuario);
       return { ok: true };
@@ -128,35 +129,146 @@ export class AdsetWebProvider {
   }
 
   /**
-   * Procura a placa nas duas listas e abre a tela de fotos do veiculo.
-   * Devolve em qual lista achou - o usuario precisa saber se mexeu em um anuncio
-   * publicado ou em um pendente.
+   * Abre uma das listas pelo menu lateral, sem sair da pagina.
+   */
+  async abrirLista(view) {
+    const link = this.page.locator(
+      `a[href="/Integrador/IntegracaoDealerNet/Abrir?view=${view}"]`
+    ).first();
+
+    if (await link.count() === 0) {
+      return { ok: false, error: `Menu do estoque ${view} nao encontrado` };
+    }
+
+    // O item vive em menu suspenso: clique de mouse nao alcanca, evento sim.
+    await link.dispatchEvent('click');
+    await this.page.waitForSelector('#Filtro_PlacaChassi', { timeout: TIMEOUT_MS });
+    await this.page.waitForLoadState('networkidle').catch(() => {});
+    return { ok: true };
+  }
+
+  /**
+   * Filtra uma lista pela placa e devolve o id do veiculo.
+   */
+  async procurarNaLista(placa, view) {
+    const lista = await this.abrirLista(view);
+    if (!lista.ok) return lista;
+
+    await this.page.fill('#Filtro_PlacaChassi', placa);
+    await this.page.click('#buscar');
+
+    // A lista se refaz por AJAX: esperar a linha da placa aparecer e mais firme
+    // do que contar segundos, e o "sumiu" e resposta valida (placa nao esta la).
+    await this.page.waitForFunction(
+      alvo => {
+        const linhas = [...document.querySelectorAll('.informacoes')];
+        return linhas.length === 0
+          || linhas.every(n => n.textContent.includes(alvo))
+          || linhas.some(n => n.textContent.includes(alvo));
+      },
+      placa,
+      { timeout: TIMEOUT_MS }
+    ).catch(() => {});
+    await this.page.waitForLoadState('networkidle').catch(() => {});
+
+    // O icone "Editar Fotos" da linha carrega o id do veiculo no data-id.
+    const achado = await this.page.evaluate(alvo => {
+      const linha = [...document.querySelectorAll('.informacoes')]
+        .find(n => n.textContent.includes(alvo));
+      if (!linha) return null;
+
+      const icone = linha.querySelector('a.foto-qtd');
+      if (!icone) return { erro: 'linha sem o icone de fotos' };
+
+      return {
+        id: icone.getAttribute('data-id'),
+        // O proprio site recusa editar fotos de cadastro incompleto.
+        invalido: icone.getAttribute('data-invalido') === '1',
+        fotosHoje: parseInt(icone.textContent.trim(), 10) || 0
+      };
+    }, placa);
+
+    if (!achado) return { ok: false, error: 'nao_encontrado' };
+    if (achado.erro) return { ok: false, error: achado.erro };
+    if (achado.invalido) {
+      return {
+        ok: false,
+        error: `O ADSET recusa editar fotos de ${placa}: cadastro incompleto `
+          + '(marca, modelo, versao, preco ou portas)'
+      };
+    }
+
+    return { ok: true, ...achado };
+  }
+
+  /**
+   * Procura a placa nas duas listas, publicados primeiro.
    */
   async localizarVeiculo(placa) {
     for (const lista of LISTAS) {
-      await this.page.goto(lista.url, { waitUntil: 'domcontentloaded' });
-      await this.page.waitForLoadState('networkidle').catch(() => {});
+      const achado = await this.procurarNaLista(placa, lista.view);
 
-      const pesquisar = this.page.locator('input').filter({ hasNot: this.page.locator('[type="hidden"]') }).first();
-      const campo = this.page.getByLabel('Pesquisar').or(pesquisar).first();
-
-      await campo.fill(placa);
-      await this.page.getByRole('button', { name: /Buscar/i }).first().click();
-      await this.page.waitForLoadState('networkidle').catch(() => {});
-
-      // A linha do veiculo mostra "Placa - XXXXXXX".
-      const linha = this.page.locator(`text=/Placa\\s*-\\s*${placa}/i`).first();
-      if (await linha.count() === 0) {
-        this.registrar('nao_encontrado', lista.nome);
-        continue;
+      if (achado.ok) {
+        this.registrar('encontrado', `${lista.nome} id=${achado.id}`);
+        return { ...achado, lista: lista.nome };
       }
+      if (achado.error !== 'nao_encontrado') return achado;
 
-      await this.evidencia(`encontrado_${placa}`);
-      this.registrar('encontrado', lista.nome);
-      return { ok: true, lista: lista.nome, linha };
+      this.registrar('nao_encontrado', lista.nome);
     }
 
     return { ok: false, error: `Placa ${placa} nao encontrada em nenhuma das duas listas` };
+  }
+
+  /**
+   * Abre a tela de fotos pelo icone da linha, como o usuario faz.
+   *
+   * Nao trocar por navegacao direta em /Veiculo/Cadastro: o fragmento vem sem o
+   * jQuery da pagina, o campo de arquivo fica sem handler e o envio grava o
+   * anuncio sem foto nenhuma.
+   */
+  async abrirTelaDeFotos(placa) {
+    const icone = this.page.locator('.informacoes')
+      .filter({ hasText: placa })
+      .locator('a.foto-qtd')
+      .first();
+
+    await icone.dispatchEvent('click');
+
+    try {
+      await this.page.waitForSelector('#btnExcluirTodas', { timeout: TIMEOUT_MS });
+    } catch {
+      await this.evidencia('sem_tela_de_fotos');
+      return { ok: false, error: 'Tela de fotos nao abriu - confira a evidencia' };
+    }
+
+    // O campo so sobe arquivo se o handler da pagina estiver ligado. Conferir
+    // aqui e o que impede um envio que apaga tudo e nao poe nada no lugar.
+    const preparado = await this.page.evaluate(() => {
+      const campo = document.querySelector('input[name="files[]"]');
+      if (!campo) return { pronto: false, motivo: 'sem campo de arquivo' };
+
+      const jq = window.jQuery;
+      const eventos = jq && jq._data ? jq._data(campo, 'events') : null;
+      if (!eventos || !eventos.change) {
+        return { pronto: false, motivo: 'campo de arquivo sem handler de envio' };
+      }
+
+      return {
+        pronto: true,
+        posicoes: document.querySelectorAll('#listaFotos li').length,
+        // Cada <li> e uma posicao; as ocupadas tem data-url preenchido.
+        ocupadas: [...document.querySelectorAll('#listaFotos li input[type="hidden"]')]
+          .filter(i => (i.getAttribute('data-url') || '').length > 0).length
+      };
+    });
+
+    if (!preparado.pronto) {
+      await this.evidencia('tela_de_fotos_incompleta');
+      return { ok: false, error: `Tela de fotos incompleta: ${preparado.motivo}` };
+    }
+
+    return { ok: true, ...preparado };
   }
 
   /**
@@ -171,65 +283,72 @@ export class AdsetWebProvider {
         return { ok: false, error: 'Nenhuma foto para enviar' };
       }
 
-      const achou = await this.localizarVeiculo(placa);
-      if (!achou.ok) return achou;
+      const veiculo = await this.localizarVeiculo(placa);
+      if (!veiculo.ok) return veiculo;
 
-      // O icone de camera na linha abre a tela "Alterar".
-      await achou.linha.locator('xpath=ancestor::tr[1] | xpath=ancestor::div[1]')
-        .locator('a,button').filter({ has: this.page.locator('[class*="camera" i], [class*="foto" i]') })
-        .first().click()
-        .catch(async () => {
-          // Alguns temas trocam o icone por link direto para a tela de alterar.
-          await this.page.locator('a[href*="Alterar" i]').first().click();
-        });
+      const tela = await this.abrirTelaDeFotos(placa);
+      if (!tela.ok) return tela;
 
-      await this.page.waitForLoadState('networkidle').catch(() => {});
-
-      const naTelaDeFotos = await this.page.getByText('Excluir Todas as Fotos').count() > 0;
-      if (!naTelaDeFotos) {
-        await this.evidencia('sem_tela_de_fotos');
-        return { ok: false, error: 'Tela de fotos do veiculo nao abriu - confira a evidencia' };
+      if (arquivos.length > tela.posicoes) {
+        return {
+          ok: false,
+          error: `O anuncio tem ${tela.posicoes} posicoes de foto e voce mandou `
+            + `${arquivos.length}. Tire fotos no QA antes de enviar.`
+        };
       }
 
       await this.evidencia(`fotos_antes_${placa}`);
 
       if (this.ensaio) {
-        // O ensaio existe para provar o caminho sem destruir nada: daqui em
-        // diante os passos apagam as fotos do anuncio em producao.
+        // O ensaio prova o caminho inteiro sem destruir nada: daqui em diante os
+        // passos apagam as fotos do anuncio em producao.
         this.registrar('ensaio_parou_antes_de_excluir', placa);
         return {
           ok: true,
           ensaio: true,
           data: {
             placa,
-            lista: achou.lista,
+            lista: veiculo.lista,
+            veiculoId: veiculo.id,
+            fotosNoAnuncio: tela.ocupadas,
             fotosAEnviar: arquivos.length,
-            mensagem: 'Ensaio: chegou na tela de fotos e parou antes de excluir'
+            mensagem: 'Ensaio: abriu a tela de fotos e parou antes de excluir'
           }
         };
       }
 
-      await this.page.getByRole('button', { name: /Excluir Todas as Fotos/i }).click();
-      // O site pode pedir confirmacao; aceita se pedir, segue se nao pedir.
-      this.page.once('dialog', d => d.accept().catch(() => {}));
-      await this.page.waitForTimeout(1500);
-      this.registrar('excluiu_fotos', placa);
-      await this.evidencia(`fotos_excluidas_${placa}`);
+      await this.page.click('#btnExcluirTodas');
+      await this.page.waitForTimeout(1000);
+      this.registrar('excluiu_fotos', `${tela.ocupadas} que estavam la`);
 
       // A ordem do array e a ordem em que o ADSET recebe: a primeira vira capa.
-      const entrada = this.page.locator('input[type="file"]').first();
-      await entrada.setInputFiles(arquivos);
+      await this.page.locator('input[name="files[]"]').first().setInputFiles(arquivos);
       await this.page.waitForLoadState('networkidle').catch(() => {});
-      await this.page.waitForTimeout(3000);
 
-      this.registrar('enviou_fotos', `${arquivos.length} fotos`);
+      // O envio para o S3 e assincrono: espera as posicoes serem preenchidas em
+      // vez de contar tempo, senao "Confirmar" grava um anuncio pela metade.
+      await this.page.waitForFunction(
+        esperadas => [...document.querySelectorAll('#listaFotos li input[type="hidden"]')]
+          .filter(i => (i.getAttribute('data-url') || '').length > 0).length >= esperadas,
+        arquivos.length,
+        { timeout: TIMEOUT_MS }
+      );
+
+      await this.evidencia(`fotos_carregadas_${placa}`);
+
+      await this.page.getByRole('button', { name: /^Confirmar$/i }).first().click();
+      await this.page.waitForLoadState('networkidle').catch(() => {});
+
+      this.registrar('confirmou', `${arquivos.length} fotos`);
       const evidenciaFinal = await this.evidencia(`fotos_depois_${placa}`);
 
       return {
         ok: true,
         data: {
           placa,
-          lista: achou.lista,
+          lista: veiculo.lista,
+          veiculoId: veiculo.id,
+          fotosSubstituidas: tela.ocupadas,
           fotosEnviadas: arquivos.length,
           evidencia: evidenciaFinal
         }
