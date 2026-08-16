@@ -750,8 +750,13 @@
         <header class="ag-card-header"><h2 class="ag-card-title">Placas do dia</h2></header>
         <div class="ag-card-body">
           <label class="ag-label">Dia</label>
-          <input class="ag-field" v-model="carrosData" type="text" placeholder="DD-MM-AAAA"
-                 @change="onCarregarDia">
+          <select class="ag-field" v-model="carrosData" @change="onCarregarDia">
+            <option v-for="d in carrosDatas" :key="d" :value="d">{{ d }}</option>
+            <option v-if="carrosDatas.length === 0" :value="carrosData">{{ carrosData }}</option>
+          </select>
+          <div v-if="carrosDatas.length > 1" style="font-size:11px;color:var(--ag-muted);margin-top:6px">
+            A edicao externa costuma demorar: o dia comeca no ultimo com fotos, nao no de hoje.
+          </div>
 
           <ul class="placa-lista" style="margin-top:12px" v-if="carrosPlacas.length > 0">
             <li v-for="placa in carrosPlacas" :key="placa.placa"
@@ -841,8 +846,10 @@
         <header class="ag-card-header"><h2 class="ag-card-title">Dia</h2></header>
         <div class="ag-card-body">
           <label class="ag-label">Dia</label>
-          <input class="ag-field" v-model="carrosData" type="text" placeholder="DD-MM-AAAA"
-                 @change="onCarregarDia">
+          <select class="ag-field" v-model="carrosData" @change="onCarregarDia">
+            <option v-for="d in carrosDatas" :key="d" :value="d">{{ d }}</option>
+            <option v-if="carrosDatas.length === 0" :value="carrosData">{{ carrosData }}</option>
+          </select>
           <div class="entrega-alerta" style="margin-top:14px">
             O envio ao ADSET esta em modo mock: monta e confere a entrega, mas nao
             manda para fora. Falta endpoint e credencial do ADSET.
@@ -1038,6 +1045,7 @@ export default {
     const carrosSemExif = ref(0);
     const carrosIntervalo = ref(3);
     const carrosPlacasLidas = ref(0);
+    const carrosDatas = ref([]);
     const placasPorGrupo = ref({});
     const carrosRelData = ref('');
     const carrosRelStatus = ref('');
@@ -1529,6 +1537,7 @@ export default {
       plataforma.value = destino;
       if (destino === 'carros') {
         activePage.value = 'carros';
+        await onCarregarDatas();
         await onCarregarDia();
       } else {
         activePage.value = 'captura';
@@ -1537,7 +1546,15 @@ export default {
 
     const irParaCarros = async pagina => {
       activePage.value = pagina;
-      await onCarregarDia();
+
+      if (pagina === 'carros') {
+        // Importar e sempre sobre o dia de hoje.
+        await onCarregarDatas();
+        await onCarregarDia();
+      } else {
+        await abrirUltimoDiaComFotos();
+      }
+
       if (pagina === 'carros-relatorios') await onCarregarRelatorioCarros();
     };
 
@@ -1688,6 +1705,27 @@ export default {
       }
     };
 
+    // Dias que ja tem fotos, do mais recente para o mais antigo.
+    const onCarregarDatas = async () => {
+      try {
+        const response = await this.$api.request('/api/carros/datas');
+        carrosDatas.value = response.ok ? (response.data.datas || []) : [];
+      } catch {
+        carrosDatas.value = [];
+      }
+      return carrosDatas.value;
+    };
+
+    // QA e Entrega acontecem depois da edicao externa, que leva dias: abrir no
+    // dia de hoje deixava a tela vazia justamente quando ha trabalho a fazer.
+    const abrirUltimoDiaComFotos = async () => {
+      const datas = await onCarregarDatas();
+      if (datas.length > 0 && !datas.includes(carrosData.value)) {
+        carrosData.value = datas[0];
+      }
+      await onCarregarDia();
+    };
+
     const onCarregarDia = async () => {
       if (!carrosData.value) { carrosPlacas.value = []; return; }
       try {
@@ -1740,6 +1778,7 @@ export default {
           naoRec ? 'error' : 'success'
         );
         carrosFotos.value = [];
+        await onCarregarDatas();
         await onCarregarDia();
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
@@ -2566,6 +2605,8 @@ export default {
       carrosSemExif,
       carrosIntervalo,
       carrosPlacasLidas,
+      carrosDatas,
+      onCarregarDatas,
       carrosSemPlaca,
       carrosGrupos,
       definirPlacaDoGrupo,
