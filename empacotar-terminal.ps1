@@ -121,7 +121,7 @@ Write-Host "  [ok] nada de indevido no pacote"
 # --- essenciais presentes ------------------------------------------------------
 $precisa = @('server.js','launcher.js','instalar.bat','iniciar-tudo.vbs','criar-atalho.vbs',
              'parar.bat','package.json','frontend\public\App.vue','LEIA-ME-INICIAR.md',
-             'frontend\public\css\main.css','frontend\public\graphg-simbolo.svg',
+             'frontend\public\css\main.css','frontend\public\graph\ag-simbolo.svg',
              'eng.traineddata')
 foreach ($f in $precisa) {
   if (-not (Test-Path (Join-Path $pasta $f))) {
