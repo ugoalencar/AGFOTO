@@ -165,6 +165,18 @@ router.post('/entregar', express.json(), async (req, res, next) => {
 });
 
 /**
+ * POST /api/carros/abrir-entrega
+ * Abre a pasta Entrega no Explorer - a ultima etapa acontece fora do sistema.
+ */
+router.post('/abrir-entrega', express.json(), async (req, res, next) => {
+  try {
+    responder(res, await VehicleService.abrirPastaEntrega());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
  * POST /api/carros/reordenar
  * Body: { data, placa, ordem: [nomes na ordem desejada] }
  */

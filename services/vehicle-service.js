@@ -794,11 +794,87 @@ export class VehicleService {
     return filePath;
   }
 
+  static pastaDeEntrega(data, placa) {
+    return path.join(
+      config.paths.entrega,
+      this.normalizarData(data),
+      this.normalizarPlaca(placa)
+    );
+  }
+
   /**
-   * Entrega a placa ao ADSET.
+   * Copia as fotos aprovadas da placa para Entrega/DD-MM-AAAA/PLACA.
    *
-   * O provider esta em modo mock: monta e confere o envio sem mandar para fora.
-   * A troca para o modo real e no adset-service, sem mexer aqui.
+   * Monta em uma pasta ".parcial" e so entao renomeia para o nome final: se a
+   * copia falhar no meio, Entrega nunca fica com um carro pela metade, que e
+   * indistinguivel de um carro entregue de verdade quando o usuario abre a pasta
+   * para subir no ADSET.
+   *
+   * Os nomes _0.._N sao preservados porque a ordem definida no QA e justamente o
+   * que o ADSET vai receber: a primeira foto vira a capa do anuncio.
+   */
+  static async copiarParaEntrega(data, placa) {
+    const dia = this.normalizarData(data);
+    const nome = this.normalizarPlaca(placa);
+    const origem = this.pastaDaPlaca(dia, nome);
+
+    const arquivos = (await fs.promises.readdir(origem))
+      .filter(f => EXTENSOES_FOTO.includes(path.extname(f).toLowerCase()))
+      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
+    if (arquivos.length === 0) throw new Error('Placa sem fotos');
+
+    const destino = this.pastaDeEntrega(dia, nome);
+    const parcial = `${destino}.parcial`;
+
+    await fs.promises.rm(parcial, { recursive: true, force: true });
+    await createSecureDirectory(parcial, config.paths.entrega);
+
+    try {
+      for (const arquivo of arquivos) {
+        await fs.promises.copyFile(
+          path.join(origem, arquivo),
+          path.join(parcial, arquivo)
+        );
+      }
+
+      // Reentrega substitui: a versao boa e sempre a ultima aprovada no QA.
+      await fs.promises.rm(destino, { recursive: true, force: true });
+      await fs.promises.rename(parcial, destino);
+    } catch (err) {
+      await fs.promises.rm(parcial, { recursive: true, force: true }).catch(() => {});
+      throw err;
+    }
+
+    return { fotos: arquivos.length, destino };
+  }
+
+  /**
+   * Abre a pasta Entrega no Explorer.
+   *
+   * O caminho vem da config, nunca do pedido: abrir caminho escolhido pelo
+   * navegador seria mandar o servidor abrir qualquer pasta da maquina.
+   */
+  static async abrirPastaEntrega() {
+    try {
+      const destino = config.paths.entrega;
+      await fs.promises.mkdir(destino, { recursive: true });
+
+      // O explorer devolve codigo 1 mesmo quando abre a janela.
+      await execFileAsync('explorer.exe', [destino]).catch(() => {});
+
+      return { ok: true, data: { pasta: destino } };
+    } catch (err) {
+      return { ok: false, error: err.message };
+    }
+  }
+
+  /**
+   * Entrega a placa.
+   *
+   * Hoje a entrega e a copia para a pasta Entrega, de onde o usuario sobe as
+   * fotos no site do ADSET. O envio automatico ao site ainda nao existe: o
+   * provider tem os seletores por confirmar contra as telas reais.
    */
   static async entregarPlaca(data, placa) {
     try {
@@ -814,17 +890,38 @@ export class VehicleService {
         };
       }
 
-      const fotos = await this.contarFotosDaPlaca(dia, nome);
-      if (fotos === 0) return { ok: false, error: 'Placa sem fotos' };
+      let copia;
+      try {
+        copia = await this.copiarParaEntrega(dia, nome);
+      } catch (err) {
+        // Marca o erro no historico: sem isso a placa fica parada em "pronto" e o
+        // usuario nao tem como saber que a copia falhou.
+        await this.marcarEvento(
+          dia, nome, STATUS_CARRO.ERRO, 'erro_entrega', { erro: err.message }
+        );
+        await auditLogger.log('VEHICLE_DELIVER_FAILED', {
+          data: dia, placa: nome, error: err.message
+        });
+        return { ok: false, error: `Falha ao copiar para Entrega: ${err.message}` };
+      }
 
       const atualizado = await this.marcarEvento(
-        dia, nome, STATUS_CARRO.ENTREGUE, 'entregue', { fotos, destino: 'adset_mock' }
+        dia, nome, STATUS_CARRO.ENTREGUE, 'entregue',
+        { fotos: copia.fotos, destino: copia.destino }
       );
-      await auditLogger.log('VEHICLE_DELIVERED', { data: dia, placa: nome, fotos, destino: 'adset_mock' });
+      await auditLogger.log('VEHICLE_DELIVERED', {
+        data: dia, placa: nome, fotos: copia.fotos, destino: copia.destino
+      });
 
       return {
         ok: true,
-        data: { data: dia, placa: nome, fotos, status: atualizado.status, destino: 'adset_mock' }
+        data: {
+          data: dia,
+          placa: nome,
+          fotos: copia.fotos,
+          status: atualizado.status,
+          destino: copia.destino
+        }
       };
     } catch (err) {
       return { ok: false, error: err.message };

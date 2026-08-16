@@ -601,3 +601,81 @@ test('a url so muda quando a foto daquela posicao muda', async t => {
   // mudar a toa, senao o navegador rebaixaria toda foto a cada abertura de tela.
   assert.deepEqual(segunda.map(f => f.url), primeira.map(f => f.url));
 });
+
+async function entregues(env, placa) {
+  const dir = path.join(env.paths.entrega, DIA, placa);
+  const arquivos = await fs.promises.readdir(dir)
+    .then(l => l.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })))
+    .catch(() => []);
+
+  const marcas = [];
+  for (const nome of arquivos) {
+    const buf = await fs.promises.readFile(path.join(dir, nome));
+    marcas.push(buf[buf.length - 1]);
+  }
+  return { arquivos, marcas };
+}
+
+test('entregar copia as fotos para Entrega/DD-MM-AAAA/PLACA na ordem do QA', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg', 'b.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+
+  // A ordem escolhida no QA e a que o ADSET recebe: a primeira foto vira a capa.
+  await VehicleService.reordenarFotos(DIA, 'ABC1234', [
+    'ABC1234_2.jpg', 'ABC1234_0.jpg', 'ABC1234_1.jpg'
+  ]);
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+
+  const result = await VehicleService.entregarPlaca(DIA, 'ABC1234');
+
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.data.fotos, 3);
+
+  const { arquivos, marcas } = await entregues(env, 'ABC1234');
+  assert.deepEqual(arquivos, ['ABC1234_0.jpg', 'ABC1234_1.jpg', 'ABC1234_2.jpg']);
+  assert.deepEqual(marcas, [2, 0, 1], 'a ordem do QA precisa chegar em Entrega');
+
+  // Entregar copia: as fotos seguem em Carros para reentrega ou correcao.
+  assert.equal((await listar(env, 'ABC1234')).length, 3);
+});
+
+test('entrega recusada nao deixa pasta pela metade em Entrega', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+
+  // Sem QA a entrega para antes de copiar qualquer coisa.
+  await VehicleService.entregarPlaca(DIA, 'ABC1234');
+
+  assert.deepEqual((await entregues(env, 'ABC1234')).arquivos, []);
+});
+
+test('reentregar depois de corrigir substitui o que estava em Entrega', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg', 'b.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+  await VehicleService.entregarPlaca(DIA, 'ABC1234');
+
+  assert.deepEqual((await entregues(env, 'ABC1234')).marcas, [0, 1, 2]);
+
+  // O usuario percebe um erro, reabre, tira uma foto e entrega de novo: Entrega
+  // nao pode ficar com a foto excluida sobrando da primeira vez.
+  await VehicleService.reabrirPlaca(DIA, 'ABC1234');
+  await VehicleService.excluirFoto(DIA, 'ABC1234', 'ABC1234_1.jpg');
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+  await VehicleService.entregarPlaca(DIA, 'ABC1234');
+
+  // Excluir deixa buraco na numeracao (_0, _2) de proposito - renumerar mexeria
+  // no conteudo das outras. O que importa e a foto excluida nao sobrar aqui.
+  const { arquivos, marcas } = await entregues(env, 'ABC1234');
+  assert.deepEqual(arquivos, ['ABC1234_0.jpg', 'ABC1234_2.jpg']);
+  assert.deepEqual(marcas, [0, 2]);
+});

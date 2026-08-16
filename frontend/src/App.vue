@@ -850,9 +850,15 @@
             <option v-for="d in carrosDatas" :key="d" :value="d">{{ d }}</option>
             <option v-if="carrosDatas.length === 0" :value="carrosData">{{ carrosData }}</option>
           </select>
+          <button class="ag-btn" style="width:100%;margin-top:12px" @click="onAbrirPastaEntrega">
+            Abrir pasta Entrega
+          </button>
+
           <div class="entrega-alerta" style="margin-top:14px">
-            O envio ao ADSET esta em modo mock: monta e confere a entrega, mas nao
-            manda para fora. Falta endpoint e credencial do ADSET.
+            Entregar copia as fotos aprovadas, na ordem do QA, para
+            <code style="font-family:var(--ag-mono)">Entrega/{{ carrosData }}/PLACA</code>.
+            De la voce sobe no site do ADSET. O envio automatico ao site ainda nao
+            esta ligado.
           </div>
         </div>
       </section>
@@ -1684,7 +1690,21 @@ export default {
     const onEntregarPlaca = async placa => {
       await acaoCarro('/api/carros/entregar',
         { data: carrosData.value, placa },
-        d => `\u2713 ${d.placa} entregue (${d.fotos} fotos)`);
+        d => `\u2713 ${d.placa}: ${d.fotos} fotos copiadas para ${d.destino}`);
+    };
+
+    // A entrega termina fora do sistema, subindo as fotos no site do ADSET;
+    // abrir a pasta daqui evita o usuario procurar o caminho na mao.
+    const onAbrirPastaEntrega = async () => {
+      try {
+        const response = await this.$api.request('/api/carros/abrir-entrega', {
+          method: 'POST',
+          data: { operationId: makeOperationId('carros') }
+        });
+        if (!response.ok) showStatus(`✗ ${response.error}`, 'error');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
     };
 
     const onCarregarRelatorioCarros = async () => {
@@ -2620,6 +2640,7 @@ export default {
       onAprovarPlaca,
       onReabrirPlaca,
       onEntregarPlaca,
+      onAbrirPastaEntrega,
       onCarregarRelatorioCarros,
       placaAtual,
       onMoverPosicao,

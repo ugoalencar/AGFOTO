@@ -1,0 +1,31 @@
+{
+  "data": "15-08-2026",
+  "criadoEm": "2026-08-16T03:30:01.092Z",
+  "atualizadoEm": "2026-08-16T03:30:01.416Z",
+  "placas": {
+    "BCM2H85": {
+      "placa": "BCM2H85",
+      "status": "entregue",
+      "importadoEm": "2026-08-16T03:30:01.092Z",
+      "aprovadoEm": "2026-08-16T03:30:01.092Z",
+      "entregueEm": "2026-08-16T03:30:01.415Z",
+      "historico": [
+        {
+          "evento": "qa_aprovado",
+          "em": "2026-08-16T03:30:01.092Z",
+          "detalhes": {
+            "fotos": 5
+          }
+        },
+        {
+          "evento": "entregue",
+          "em": "2026-08-16T03:30:01.415Z",
+          "detalhes": {
+            "fotos": 5,
+            "destino": "D:\\AGFOTO\\Entrega\\15-08-2026\\BCM2H85"
+          }
+        }
+      ]
+    }
+  }
+}
