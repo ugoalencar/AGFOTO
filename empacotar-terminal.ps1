@@ -42,9 +42,20 @@ Remove-Item $tar -Force
 # Coisas de desenvolvimento nao servem no terminal e so confundem quem abrir a
 # pasta procurando o que clicar.
 $fora = @(
-  'tests', 'docs', '.superpowers', '.github',
-  'empacotar-terminal.ps1',
-  'adset-config.exemplo.json'   # o instalar.bat cria o adset-config.json
+  # desenvolvimento
+  'tests', 'docs', '.superpowers', '.github', 'empacotar-terminal.ps1',
+  'Dockerfile', 'docker-compose.yml', 'DEPLOY-SCRIPT.ps1',
+
+  # documento interno: leva os prints da conta da concessionaria e o nome do
+  # cliente. Nao tem por que viajar para a maquina de um terminal.
+  'Nome da empresa AG Fotografia.docx',
+
+  # historico de versoes e notas de projeto: so confundem quem abre a pasta
+  # procurando o que clicar. O terminal le o LEIA-ME-INICIAR.md.
+  'CHECKLIST-IMPLANTACAO.md', 'LANCAMENTO-v1.0.0.md', 'MONITORING.md',
+  'OPERACIONAL.md', 'PROMPT_MESTRE_AG_FOTOGRAFIA.md',
+  'RELEASE-NOTES-v1.0.0.md', 'STATUS-DESENVOLVIMENTO.md',
+  'TESTE-RESULTADO-v1.0.0.md'
 )
 foreach ($f in $fora) {
   $alvo = Join-Path $pasta $f
@@ -80,6 +91,7 @@ $proibidos = @{
   'node_modules'       = 'dependencias (o instalar.bat baixa)'
   '.git'               = 'historico do repositorio'
   'adset.md'           = 'credenciais em texto'
+  'Nome da empresa AG Fotografia.docx' = 'documento interno com prints da conta do cliente'
 }
 $falhou = $false
 foreach ($item in $proibidos.GetEnumerator()) {
@@ -108,7 +120,9 @@ Write-Host "  [ok] nada de indevido no pacote"
 
 # --- essenciais presentes ------------------------------------------------------
 $precisa = @('server.js','launcher.js','instalar.bat','iniciar-tudo.vbs','criar-atalho.vbs',
-             'parar.bat','package.json','frontend\public\App.vue','LEIA-ME-INICIAR.md')
+             'parar.bat','package.json','frontend\public\App.vue','LEIA-ME-INICIAR.md',
+             'frontend\public\css\main.css','frontend\public\graphg-simbolo.svg',
+             'eng.traineddata')
 foreach ($f in $precisa) {
   if (-not (Test-Path (Join-Path $pasta $f))) {
     Write-Host "  [X] FALTA: $f" -ForegroundColor Red
