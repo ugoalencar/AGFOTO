@@ -18,7 +18,10 @@ Entrega/
 Carros/
 images/temp/
 dados/jsons/Lote_*.json
-dados/xlsx/*.xlsx
+# A pasta inteira, nao so *.xlsx: o cliente coloca planilha aqui em qualquer
+# formato, e um arquivo nao ignorado deixa a pasta do terminal suja para o git -
+# o que trava o botao Atualizar.
+dados/xlsx/
 !dados/xlsx/entradas/.gitkeep
 dados/envios/
 dados/backups/
