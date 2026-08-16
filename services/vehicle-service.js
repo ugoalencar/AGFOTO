@@ -896,20 +896,22 @@ export class VehicleService {
         return { ok: false, error: `Nenhuma foto em ${pasta}` };
       }
 
-      const { AdsetWebProvider } = await import('./adset-web-provider.js');
-      provider.atual = new AdsetWebProvider({
-        usuario: config.adset.username,
-        senha: config.adset.password,
+      // Com "manter conectado" ligado, a sessao devolve o navegador que ja esta
+      // logado: cada login custa uns 10 segundos, e enviar cinco placas seguidas
+      // seriam cinco logins.
+      const { adsetSession } = await import('./adset-session.js');
+      const sessao = await adsetSession.obter({
         ensaio: escolhido === 'ensaio',
-        visivel: config.adset?.visivel === true,
         pastaEvidencia: path.join(config.paths.evidenciasAdset, dia, nome)
       });
 
-      const entrou = await provider.atual.login();
-      if (!entrou.ok) {
-        await auditLogger.log('ADSET_LOGIN_FAILED', { data: dia, placa: nome, error: entrou.error });
-        return entrou;
+      if (!sessao.ok) {
+        await auditLogger.log('ADSET_LOGIN_FAILED', { data: dia, placa: nome, error: sessao.error });
+        return sessao;
       }
+
+      provider.atual = sessao.provider;
+      provider.sessao = adsetSession;
 
       const envio = await provider.atual.enviarFotos(nome, arquivos);
 
@@ -936,8 +938,13 @@ export class VehicleService {
       await auditLogger.log('ADSET_ENVIO_ERRO', { error: err.message });
       return { ok: false, error: err.message };
     } finally {
-      // Sem isso um navegador fica de pe a cada envio ate a memoria acabar.
-      if (provider.atual) await provider.atual.fechar();
+      // Sem isso um navegador fica de pe a cada envio ate a memoria acabar. Com
+      // "manter conectado", a sessao segura o dela e so os avulsos sao fechados.
+      if (provider.sessao) {
+        await provider.sessao.liberar(provider.atual);
+      } else if (provider.atual) {
+        await provider.atual.fechar();
+      }
     }
   }
 

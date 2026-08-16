@@ -2,6 +2,9 @@ import express from 'express';
 import { VehicleService } from '../services/vehicle-service.js';
 import { VehicleRepository } from '../repositories/vehicle-repository.js';
 import { config } from '../server/config.js';
+import {
+  adsetSession, lerConfigAdset, salvarConfigAdset, testarConexaoAdset
+} from '../services/adset-session.js';
 
 const router = express.Router();
 
@@ -167,17 +170,47 @@ router.post('/entregar', express.json(), async (req, res, next) => {
 
 /**
  * GET /api/carros/adset/config
- * Diz em que modo o envio esta, sem devolver a senha.
+ * Estado da configuracao e da sessao. Nunca devolve a senha.
  */
 router.get('/adset/config', (req, res) => {
-  res.json({
-    ok: true,
-    data: {
-      modo: config.adset?.modo || 'desligado',
-      usuario: config.adset?.username || null,
-      credenciais: Boolean(config.adset?.username && config.adset?.password)
-    }
-  });
+  res.json({ ok: true, data: lerConfigAdset() });
+});
+
+/**
+ * POST /api/carros/adset/config
+ * Body: { modo, usuario, senha?, manterConectado, visivel }
+ * Grava em adset-config.json, que fica fora do git.
+ */
+router.post('/adset/config', express.json(), async (req, res, next) => {
+  try {
+    responder(res, await salvarConfigAdset(req.body || {}));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/adset/testar
+ * Entra no ADSET so para conferir a credencial - nao toca em anuncio nenhum.
+ */
+router.post('/adset/testar', express.json(), async (req, res, next) => {
+  try {
+    responder(res, await testarConexaoAdset());
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/carros/adset/desconectar
+ * Fecha o navegador que ficou logado por "manter conectado".
+ */
+router.post('/adset/desconectar', express.json(), async (req, res, next) => {
+  try {
+    responder(res, await adsetSession.encerrar('pedido do usuario'));
+  } catch (err) {
+    next(err);
+  }
 });
 
 /**

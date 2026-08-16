@@ -2273,3 +2273,30 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .ag-camera { animation: none; }
 }
+
+/* Caixas de marcar dos ajustes: alvo grande e o texto de ajuda logo abaixo,
+   porque cada uma dessas opcoes muda o que o sistema faz na conta do cliente. */
+.ag-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 15px;
+  color: var(--ag-text);
+}
+
+.ag-check input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--ag-orange);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.ag-check-ajuda {
+  margin: 6px 0 0 30px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ag-muted);
+}

@@ -45,3 +45,19 @@ Thumbs.db
 # Perfil de navegador que o launcher cria para abrir a interface em janela de
 # app. E cache e estado da maquina local, nao codigo.
 .perfil-navegador/
+
+# Biblioteca da camera: 151 MB de binarios de terceiros. Copiada na mao em cada
+# maquina - ver LEIA-ME-INICIAR.md.
+simplusCameraLib/
+
+# Copias de seguranca feitas antes de trazer a branch para esta pasta.
+.backup-pre-merge/
+
+# Ferramental de agente, nao faz parte do sistema.
+.agents/
+.claude/
+skills-lock.json
+
+# Arquivos temporarios de extracao/inspecao, nao fazem parte do sistema.
+temp_agfoto.zip
+temp_docx_content/

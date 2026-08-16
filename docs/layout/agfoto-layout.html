@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AG Foto — Layout do sistema</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#0B0B0D;
+  --panel:#131318;
+  --panel2:#1A1A21;
+  --panel3:#212129;
+  --line:#2B2B34;
+  --text:#EDEDF0;
+  --muted:#8C8C99;
+  --red:#E8262B;
+  --orange:#FF6A13;
+  --yellow:#FFC20E;
+  --ok:#2EA043;
+  --display:"Barlow Condensed",Impact,sans-serif;
+  --body:"Inter",system-ui,-apple-system,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,"Courier New",monospace;
+  --r:6px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--ink);color:var(--text);font-family:var(--body);
+  font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased;
+}
+button,input,select{font-family:inherit;font-size:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+
+/* ---------- shell ---------- */
+html,body{height:100%;overflow:hidden}
+.app{display:grid;grid-template-columns:74px 1fr;height:100vh;overflow:hidden}
+.rail{
+  background:#08080A;border-right:1px solid var(--line);
+  display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 0;
+}
+.mark{width:46px;height:46px;margin-bottom:14px}
+.railbtn{
+  width:58px;padding:9px 4px 8px;background:none;border:0;border-radius:var(--r);
+  color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;
+  font-family:var(--display);font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+}
+.railbtn svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.6}
+.railbtn:hover{color:var(--text);background:var(--panel)}
+.railbtn.on{color:var(--text);background:var(--panel2);position:relative}
+.railbtn.on::before{
+  content:"";position:absolute;left:-11px;top:12px;bottom:12px;width:3px;
+  background:linear-gradient(180deg,var(--red),var(--orange) 55%,var(--yellow));
+}
+.railfoot{margin-top:auto;font-family:var(--mono);font-size:9px;color:#41414D;text-align:center;line-height:1.6}
+
+.main{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
+
+/* ---------- topbar ---------- */
+.topbar{
+  height:52px;border-bottom:1px solid var(--line);background:var(--panel);
+  display:flex;align-items:center;gap:16px;padding:0 16px;flex-shrink:0
+}
+.wordmark{font-family:var(--display);font-size:23px;letter-spacing:.02em;line-height:1;display:flex;align-items:baseline;gap:7px}
+.wordmark b{font-weight:700}
+.wordmark span{color:var(--muted);font-size:11px;letter-spacing:.22em;text-transform:uppercase}
+.ctx{display:flex;gap:8px;margin-left:6px}
+.chip{
+  background:var(--panel2);border:1px solid var(--line);border-radius:20px;
+  padding:5px 12px;font-family:var(--mono);font-size:11.5px;color:var(--text);display:flex;gap:7px;align-items:center
+}
+.chip i{font-style:normal;color:var(--muted);text-transform:uppercase;font-size:9.5px;letter-spacing:.12em}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(46,160,67,.16)}
+.topright{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--muted);font-size:12px}
+.avatar{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--red),var(--orange));
+  display:grid;place-items:center;font-family:var(--display);font-size:14px;color:#fff}
+
+/* ---------- seletor de área ---------- */
+.switch{display:flex;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:3px;gap:3px}
+.switch button{
+  background:none;border:0;border-radius:6px;padding:6px 16px 5px;color:var(--muted);cursor:pointer;
+  font-family:var(--display);font-size:15px;letter-spacing:.1em;text-transform:uppercase;
+  display:flex;align-items:center;gap:8px;position:relative
+}
+.switch button svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.6}
+.switch button:hover{color:var(--text)}
+.switch button.on{color:var(--text);background:var(--panel3)}
+.switch button.on::after{
+  content:"";position:absolute;left:12px;right:12px;bottom:3px;height:2px;
+  background:linear-gradient(90deg,var(--red),var(--orange) 55%,var(--yellow))
+}
+.raillabel{
+  font-family:var(--display);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+  color:#4A4A57;margin:2px 0 6px
+}
+
+/* ---------- generic ---------- */
+.view{display:none;padding:12px;gap:12px;flex:1;min-height:0;overflow:hidden}
+.view.on{display:grid}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.card > header{
+  padding:11px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-shrink:0
+}
+.card > header h2{
+  margin:0;font-family:var(--display);font-size:15px;letter-spacing:.1em;text-transform:uppercase;font-weight:600
+}
+.card > header .sub{font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.card .body{padding:14px;overflow:auto;min-height:0}
+.slash{width:16px;height:14px;flex-shrink:0}
+.right{margin-left:auto}
+.muted{color:var(--muted)}
+.lbl{
+  display:block;font-family:var(--display);font-size:12px;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--muted);margin-bottom:5px
+}
+.fld{
+  width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);
+  padding:9px 11px;font-family:var(--mono);font-size:14px
+}
+.fld:focus{border-color:var(--orange);outline:none}
+.fld.big{font-size:19px;padding:11px}
+.btn{
+  border:1px solid var(--line);background:var(--panel2);border-radius:var(--r);
+  padding:8px 14px;cursor:pointer;font-family:var(--display);font-size:14px;
+  letter-spacing:.09em;text-transform:uppercase;display:inline-flex;align-items:center;gap:7px
+}
+.btn:hover{background:var(--panel3)}
+.btn.pri{background:linear-gradient(180deg,var(--red),#B81216);border-color:#8E0F13;color:#fff}
+.btn.pri:hover{filter:brightness(1.1)}
+.btn.warn{background:transparent;border-color:#4A3A12;color:var(--yellow)}
+.btn.warn:hover{background:rgba(255,194,14,.08)}
+.btn.sm{padding:5px 10px;font-size:12.5px}
+.st{
+  font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 8px;border-radius:20px;border:1px solid;white-space:nowrap
+}
+.st.pend{color:var(--yellow);border-color:rgba(255,194,14,.35);background:rgba(255,194,14,.08)}
+.st.entr{color:var(--ok);border-color:rgba(46,160,67,.35);background:rgba(46,160,67,.08)}
+.st.retr{color:var(--red);border-color:rgba(232,38,43,.4);background:rgba(232,38,43,.09)}
+
+/* ---------- lists / tables ---------- */
+.list{list-style:none;margin:0;padding:0}
+.list li{
+  padding:9px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;
+  cursor:pointer;font-family:var(--mono);font-size:12.5px
+}
+.list li:hover{background:var(--panel2)}
+.list li.on{background:var(--panel2);box-shadow:inset 3px 0 0 var(--orange)}
+.list li .n{color:var(--muted);font-size:11px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{
+  text-align:left;font-family:var(--display);font-size:12px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--muted);font-weight:600;padding:8px 10px;border-bottom:1px solid var(--line);
+  position:sticky;top:0;background:var(--panel);z-index:1
+}
+td{padding:9px 10px;border-bottom:1px solid #1F1F26;font-family:var(--mono);font-size:12.5px}
+tr:hover td{background:var(--panel2)}
+td.desc{font-family:var(--body);font-size:13px}
+input[type=checkbox]{accent-color:var(--orange);width:15px;height:15px}
+
+/* ---------- palcos / thumbs ---------- */
+.stage{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:auto 1fr;gap:0;min-height:0}
+.stage > :nth-child(1){grid-area:1/1}
+.stage > :nth-child(2){grid-area:2/1}
+.stage > :nth-child(3){grid-area:1/2;border-left:1px solid var(--line)}
+.stage > :nth-child(4){grid-area:2/2;border-left:1px solid var(--line)}
+.stagehead{
+  display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);
+  background:var(--panel);flex-shrink:0
+}
+.stagehead h3{margin:0;font-family:var(--display);font-size:14px;letter-spacing:.12em;text-transform:uppercase}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px;padding:10px;overflow:auto;align-content:start}
+.thumb{
+  position:relative;aspect-ratio:4/3;border-radius:5px;border:1px solid var(--line);overflow:hidden;
+  background:linear-gradient(150deg,#26262E,#151519 60%);cursor:zoom-in
+}
+.thumb svg{position:absolute;inset:0;width:100%;height:100%;opacity:.5}
+.thumb .cap{
+  position:absolute;left:0;right:0;bottom:0;padding:4px 6px;background:linear-gradient(180deg,transparent,rgba(0,0,0,.85));
+  font-family:var(--mono);font-size:9.5px;color:#D6D6DE;display:flex;justify-content:space-between;align-items:center
+}
+.thumb .x{
+  position:absolute;top:5px;right:5px;width:20px;height:20px;border-radius:4px;border:0;
+  background:rgba(11,11,13,.78);color:#fff;cursor:pointer;font-size:12px;line-height:1;
+  opacity:0;transition:opacity .12s
+}
+.thumb:hover .x{opacity:1}
+.thumb .tags{position:absolute;top:5px;left:5px;display:flex;gap:3px}
+.tg{
+  font-family:var(--mono);font-size:9px;font-weight:500;padding:2px 5px;border-radius:3px;
+  background:rgba(11,11,13,.78);border:1px solid var(--line);color:var(--muted);cursor:pointer
+}
+.tg.ap{color:var(--yellow);border-color:rgba(255,194,14,.45)}
+.tg.at{color:var(--orange);border-color:rgba(255,106,19,.45)}
+.empty{
+  padding:34px 16px;text-align:center;color:var(--muted);font-size:13px;
+  display:flex;flex-direction:column;align-items:center;gap:8px
+}
+.empty .hint{font-family:var(--mono);font-size:11px;color:#5A5A66}
+
+/* ---------- kpis ---------- */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:14px}
+.kpi{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;position:relative;overflow:hidden}
+.kpi::after{content:"";position:absolute;left:0;top:0;bottom:0;width:3px}
+.kpi:nth-child(1)::after{background:var(--red)}
+.kpi:nth-child(2)::after{background:var(--orange)}
+.kpi:nth-child(3)::after{background:var(--yellow)}
+.kpi:nth-child(4)::after{background:var(--ok)}
+.kpi .v{font-family:var(--display);font-size:31px;line-height:1;font-weight:700}
+.kpi .k{font-family:var(--display);font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-top:5px}
+.bars{display:flex;align-items:flex-end;gap:7px;height:112px;padding:14px 0 0}
+.bars div{flex:1;background:linear-gradient(180deg,var(--orange),rgba(255,106,19,.18));border-radius:3px 3px 0 0;position:relative}
+.bars div span{
+  position:absolute;bottom:-19px;left:0;right:0;text-align:center;
+  font-family:var(--mono);font-size:9.5px;color:var(--muted)
+}
+
+/* ---------- car / drag ---------- */
+.order{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.order .thumb{cursor:grab}
+.order .thumb.drag{opacity:.35}
+.order .thumb .pos{
+  position:absolute;top:5px;left:5px;width:22px;height:22px;border-radius:4px;
+  background:linear-gradient(135deg,var(--red),var(--orange));color:#fff;display:grid;place-items:center;
+  font-family:var(--display);font-size:13px;font-weight:700
+}
+.plate{
+  font-family:var(--mono);font-weight:500;letter-spacing:.12em;background:#EDEDF0;color:#0B0B0D;
+  padding:2px 8px;border-radius:3px;font-size:12px;display:inline-block
+}
+.steps{display:flex;flex-direction:column;gap:0}
+.step{display:flex;gap:12px;padding:11px 0;border-bottom:1px solid #1F1F26}
+.step .num{
+  width:24px;height:24px;flex-shrink:0;border-radius:4px;border:1px solid var(--line);
+  display:grid;place-items:center;font-family:var(--mono);font-size:11px;color:var(--muted)
+}
+.step.done .num{background:rgba(46,160,67,.12);border-color:rgba(46,160,67,.4);color:var(--ok)}
+.step.now .num{background:linear-gradient(135deg,var(--red),var(--orange));border:0;color:#fff}
+.step h4{margin:0 0 2px;font-size:13.5px;font-weight:600}
+.step p{margin:0;font-size:12px;color:var(--muted)}
+
+/* ---------- layouts per view ---------- */
+#v-captura{grid-template-columns:270px 1fr 300px}
+#v-entregar{grid-template-columns:230px 1fr}
+#v-qa{grid-template-columns:230px 1fr 210px}
+#v-relatorio{grid-template-columns:340px 1fr}
+#v-c-captura{grid-template-columns:300px 1fr}
+#v-c-qa{grid-template-columns:230px 1fr}
+#v-c-entregar{grid-template-columns:1fr 380px}
+#v-c-relatorio{grid-template-columns:340px 1fr}
+
+@media (max-width:1180px){
+  #v-captura,#v-qa,#v-c-entregar,#v-c-captura,#v-c-qa,#v-entregar{grid-template-columns:1fr}
+  .view.on{display:flex;flex-direction:column}
+  .kpis{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:640px){
+  .app{grid-template-columns:1fr}
+  .rail{flex-direction:row;justify-content:flex-start;overflow:auto;padding:8px 10px}
+  .rail > div[id^="nav-"]{flex-direction:row!important}
+  .raillabel{display:none}
+  .mark{margin:0 10px 0 0;width:34px;height:34px}
+  .railfoot{display:none}
+  .railbtn.on::before{left:12px;right:12px;top:auto;bottom:-8px;width:auto;height:3px}
+  .ctx,.topright span{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <!-- ============ RAIL ============ -->
+  <nav class="rail">
+    <svg class="mark" viewBox="0 0 100 100" aria-label="AG Foto">
+      <g stroke-linecap="square">
+        <path d="M14 84 L34 22 L54 84" stroke="#EDEDF0" stroke-width="9" fill="none"/>
+        <path d="M22 66 H46" stroke="#EDEDF0" stroke-width="9"/>
+        <path d="M92 34 A26 26 0 1 0 92 66 V52 H74" stroke="#EDEDF0" stroke-width="9" fill="none"/>
+        <path d="M8 94 L26 94" stroke="#E8262B" stroke-width="7"/>
+        <path d="M34 94 L58 94" stroke="#FF6A13" stroke-width="7"/>
+        <path d="M66 94 L94 94" stroke="#FFC20E" stroke-width="7"/>
+      </g>
+    </svg>
+    <div class="raillabel" id="rail-label">Produtos</div>
+
+    <div id="nav-produtos" style="display:flex;flex-direction:column;gap:4px;align-items:center">
+      <button class="railbtn on" data-v="v-captura">
+        <svg viewBox="0 0 24 24"><path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.4"/></svg>
+        Captura
+      </button>
+      <button class="railbtn" data-v="v-entregar">
+        <svg viewBox="0 0 24 24"><path d="M12 3v11m0 0-4-4m4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>
+        Entregar
+      </button>
+      <button class="railbtn" data-v="v-qa">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m8 12 3 3 5-6"/></svg>
+        QA
+      </button>
+      <button class="railbtn" data-v="v-relatorio">
+        <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+        Relatório
+      </button>
+    </div>
+
+    <div id="nav-carros" hidden style="flex-direction:column;gap:4px;align-items:center">
+      <button class="railbtn on" data-v="v-c-captura">
+        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 6V4h7l3 2"/><circle cx="12" cy="12" r="2.4"/></svg>
+        Cartão
+      </button>
+      <button class="railbtn" data-v="v-c-qa">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="7" height="7" rx="1"/><rect x="14" y="5" width="7" height="7" rx="1"/><rect x="3" y="15" width="7" height="5" rx="1"/><rect x="14" y="15" width="7" height="5" rx="1"/></svg>
+        Ordem
+      </button>
+      <button class="railbtn" data-v="v-c-entregar">
+        <svg viewBox="0 0 24 24"><path d="M12 3v11m0 0-4-4m4 4 4-4"/><path d="M4 17v3h16v-3"/></svg>
+        Publicar
+      </button>
+      <button class="railbtn" data-v="v-c-relatorio">
+        <svg viewBox="0 0 24 24"><path d="M5 20V10M12 20V4M19 20v-7"/></svg>
+        Relatório
+      </button>
+    </div>
+
+    <div class="railfoot">v0.1<br>LAYOUT</div>
+  </nav>
+
+  <div class="main">
+    <!-- ============ TOPBAR ============ -->
+    <header class="topbar">
+      <div class="wordmark"><b>AG</b> FOTO</div>
+      <div class="switch" id="area-switch">
+        <button class="on" data-area="produtos">
+          <svg viewBox="0 0 24 24"><path d="M3 8.5 12 4l9 4.5v7L12 20l-9-4.5z"/><path d="M3 8.5 12 13l9-4.5M12 13v7"/></svg>
+          Produtos
+        </button>
+        <button data-area="carros">
+          <svg viewBox="0 0 24 24"><path d="M4 16v-3l2-5h12l2 5v3"/><path d="M2 16h20v3H2z"/><circle cx="7" cy="19" r="1.6"/><circle cx="17" cy="19" r="1.6"/></svg>
+          Carros
+        </button>
+      </div>
+      <div class="ctx" id="ctx"></div>
+      <div class="topright">
+        <span id="conn">FTP conectado</span>
+        <div class="avatar">H</div>
+      </div>
+    </header>
+
+    <!-- ================= CAPTURA ================= -->
+    <section class="view on" id="v-captura">
+      <!-- coluna 1: entrada -->
+      <div class="card">
+        <header><svg class="slash" viewBox="0 0 16 14"><path d="M4 12 L8 2" stroke="#E8262B" stroke-width="2.4"/><path d="M8 12 L12 2" stroke="#FF6A13" stroke-width="2.4"/><path d="M12 12 L16 2" stroke="#FFC20E" stroke-width="2.4"/></svg><h2>Entrada</h2></header>
+        <div class="body">
+          <label class="lbl" for="f-lote">Lote</label>
+          <input class="fld big" id="f-lote" value="37">
+          <p class="muted" style="font-size:11.5px;margin:7px 0 20px">
+            Pasta <span style="font-family:var(--mono)">finalizadas/Lote_37</span> já existe — as fotos serão somadas ao lote.
+          </p>
+
+          <label class="lbl" for="f-gtin">GTIN / código</label>
+          <input class="fld big" id="f-gtin" placeholder="leitor ou digitação" value="7891000315507">
+          <p class="muted" style="font-size:11.5px;margin:7px 0 20px">Aguardando leitura do próximo produto.</p>
+
+          <label class="lbl">Controle do lote</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn pri" style="justify-content:center">Salvar no lote</button>
+            <button class="btn warn" style="justify-content:center">Limpar temp</button>
+          </div>
+          <p class="muted" style="font-size:11.5px;margin-top:9px">
+            Salvar move as 8 imagens do palco atual para <span style="font-family:var(--mono)">Lote_37/7891000315507</span>.
+          </p>
+        </div>
+      </div>
+
+      <!-- coluna 2: palcos -->
+      <div class="card stage">
+        <div class="stagehead">
+          <h3>Palco atual</h3>
+          <span class="chip"><span class="dot"></span> temp/ monitorando</span>
+          <span class="right muted" style="font-size:12px">8 imagens</span>
+        </div>
+        <div class="grid" id="stage-now"></div>
+        <div class="stagehead">
+          <h3>Palco anterior</h3>
+          <span class="chip"><i>Origem</i> finalizadas</span>
+          <span class="right muted" style="font-size:12px">6 imagens</span>
+        </div>
+        <div class="grid" id="stage-prev"></div>
+      </div>
+
+      <!-- coluna 3: gtins do lote -->
+      <div class="card">
+        <header>
+          <h2>GTINs do lote 37</h2>
+          <span class="right sub">14 itens</span>
+        </header>
+        <ul class="list" id="gtin-list"></ul>
+        <div style="padding:11px 12px;border-top:1px solid var(--line);display:flex;gap:8px;flex-wrap:wrap">
+          <span class="st entr">3 entregues</span>
+          <span class="st pend">10 pendentes</span>
+          <span class="st retr">1 retrabalho</span>
+          <span class="muted" style="font-size:11.5px;width:100%;margin-top:4px">
+            Lote aberto em 14/08 · 128 fotos no total
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= QA HUB · ENTREGAR ================= -->
+    <section class="view" id="v-entregar">
+      <div class="card">
+        <header><h2>Lotes</h2></header>
+        <ul class="list">
+          <li class="on">Lote 37 <span class="right st pend">14 pend</span></li>
+          <li>Lote 36 <span class="right st entr">32 entr</span></li>
+          <li>Lote 35 <span class="right st retr">2 retr</span></li>
+          <li>Lote 34 <span class="right st entr">28 entr</span></li>
+        </ul>
+        <div style="padding:12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
+          <button class="btn sm" style="justify-content:center">Unificar planilhas do cliente</button>
+          <p class="muted" style="font-size:11px;margin:0">
+            Última unificação: 14/08 09:12 · 3 arquivos → <span style="font-family:var(--mono)">xls/base_sistema.xlsx</span>
+          </p>
+        </div>
+      </div>
+
+      <div class="card">
+        <header>
+          <h2>Lote 37 — entrega</h2>
+          <span class="sub">EAN → código interno vindo da planilha do cliente</span>
+          <div class="right" style="display:flex;gap:8px;align-items:center">
+            <input class="fld" style="width:190px;padding:6px 10px;font-size:12.5px" placeholder="EAN p/ retrabalho">
+            <button class="btn sm warn">Reiniciar</button>
+            <button class="btn sm pri">Entregar selecionados</button>
+          </div>
+        </header>
+        <div class="body" style="padding:0">
+          <table>
+            <thead><tr>
+              <th style="width:34px"><input type="checkbox"></th>
+              <th>EAN</th><th>Código</th><th>Descrição</th><th>Data foto</th><th>Fotos</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody id="deliver-rows"></tbody>
+          </table>
+        </div>
+        <div style="padding:10px 14px;border-top:1px solid var(--line);display:flex;gap:16px;align-items:center">
+          <span class="muted" style="font-size:12px">Ao entregar: a pasta do EAN é renomeada para o código e enviada ao FTP como <span style="font-family:var(--mono);color:var(--text)">Lote_37/COD-1182</span>.</span>
+          <span class="right st pend">3 selecionados</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= QA HUB · QA ================= -->
+    <section class="view" id="v-qa">
+      <div class="card">
+        <header><h2>Navegar</h2></header>
+        <ul class="list">
+          <li class="on">Lote 37 · 7891000100103</li>
+          <li>Lote 37 · 7891000315507</li>
+          <li>Lote 37 · 7896004400112</li>
+          <li>Lote 37 · 7891910000197</li>
+          <li>Lote 36 · 7894900011517</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <header>
+          <h2>7891000100103</h2>
+          <span class="sub">12 imagens · 2 apoio · 3 atualização</span>
+          <div class="right" style="display:flex;gap:10px;align-items:center">
+            <label style="display:flex;gap:7px;align-items:center;font-size:12.5px;color:var(--muted)">
+              <input type="checkbox" checked> Entregar somente ATUALIZAÇÃO
+            </label>
+            <button class="btn sm pri">Entregar</button>
+          </div>
+        </header>
+        <div class="grid" id="qa-grid"></div>
+      </div>
+
+      <div class="card">
+        <header><h2>Marcações</h2></header>
+        <div class="body">
+          <div class="step" style="border:0;padding-top:0">
+            <div class="num" style="color:var(--yellow);border-color:rgba(255,194,14,.4);font-family:var(--display);font-size:11px">AP</div>
+            <div><h4>Apoio</h4><p>Sai da entrega, fica guardada em <span style="font-family:var(--mono)">/apoio</span>. Nada é apagado.</p></div>
+          </div>
+          <div class="step">
+            <div class="num" style="color:var(--orange);border-color:rgba(255,106,19,.4);font-family:var(--display);font-size:11px">AT</div>
+            <div><h4>Atualização</h4><p>Vai para <span style="font-family:var(--mono)">/atualizacao</span>. Com o checkbox ligado, só estas sobem ao FTP.</p></div>
+          </div>
+          <div class="step">
+            <div class="num">✕</div>
+            <div><h4>Excluir</h4><p>Remove a imagem em definitivo do GTIN.</p></div>
+          </div>
+          <p class="muted" style="font-size:11.5px;margin-top:14px">
+            No FTP as fotos chegam na raiz do GTIN, sem subpastas — a pasta do lote é criada se não existir.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= QA HUB · RELATÓRIO ================= -->
+    <section class="view" id="v-relatorio">
+      <div class="card">
+        <header><h2>Filtros e totais</h2></header>
+        <div class="body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+            <div><span class="lbl">De</span><input class="fld" type="date" style="padding:6px 10px;font-size:12.5px" value="2026-08-01"></div>
+            <div><span class="lbl">Até</span><input class="fld" type="date" style="padding:6px 10px;font-size:12.5px" value="2026-08-14"></div>
+            <div><span class="lbl">Lote</span><select class="fld" style="padding:6px 10px;font-size:12.5px"><option>Todos</option><option>Lote 37</option></select></div>
+            <div><span class="lbl">Status</span><select class="fld" style="padding:6px 10px;font-size:12.5px"><option>Todos</option><option>Pendente</option><option>Entregue</option><option>Retrabalho</option></select></div>
+          </div>
+          <div class="kpis" style="grid-template-columns:1fr 1fr">
+            <div class="kpi"><div class="v">412</div><div class="k">Fotografados</div></div>
+            <div class="kpi"><div class="v">368</div><div class="k">Entregues</div></div>
+            <div class="kpi"><div class="v">38</div><div class="k">Pendentes</div></div>
+            <div class="kpi"><div class="v">6</div><div class="k">Retrabalho</div></div>
+          </div>
+          <div class="lbl" style="margin-top:6px">Produtos por dia — agosto</div>
+          <div class="bars">
+            <div style="height:44%"><span>04</span></div><div style="height:66%"><span>05</span></div>
+            <div style="height:52%"><span>06</span></div><div style="height:88%"><span>07</span></div>
+            <div style="height:71%"><span>08</span></div><div style="height:38%"><span>11</span></div>
+            <div style="height:95%"><span>12</span></div><div style="height:60%"><span>13</span></div>
+            <div style="height:47%"><span>14</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header>
+          <h2>Detalhamento</h2>
+          <span class="sub">01/08 a 14/08 · todos os lotes</span>
+          <button class="btn sm right">Exportar XLSX</button>
+        </header>
+        <div class="body" style="padding:0">
+          <table>
+            <thead><tr><th>Lote</th><th>EAN</th><th>Código</th><th>Descrição</th><th>Data foto</th><th>Entrega</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>37</td><td>7891000100103</td><td>COD-1182</td><td class="desc">Leite condensado 395g</td><td>14/08</td><td>—</td><td><span class="st pend">Pendente</span></td></tr>
+              <tr><td>37</td><td>7891000315507</td><td>COD-1183</td><td class="desc">Achocolatado em pó 400g</td><td>14/08</td><td>—</td><td><span class="st pend">Pendente</span></td></tr>
+              <tr><td>36</td><td>7894900011517</td><td>COD-1104</td><td class="desc">Refrigerante lata 350ml</td><td>13/08</td><td>13/08 17:40</td><td><span class="st entr">Entregue</span></td></tr>
+              <tr><td>35</td><td>7896004400112</td><td>COD-1077</td><td class="desc">Biscoito recheado 130g</td><td>12/08</td><td>—</td><td><span class="st retr">Retrabalho</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CARROS · CAPTURA ================= -->
+    <section class="view" id="v-c-captura">
+      <div class="card">
+        <header><h2>Cartão de memória</h2></header>
+        <div class="body">
+          <label class="lbl">Origem</label>
+          <input class="fld" value="E:\DCIM\100CANON" style="font-size:12.5px">
+          <div style="display:flex;gap:8px;margin:14px 0 20px">
+            <button class="btn pri" style="flex:1;justify-content:center">Varrer cartão</button>
+            <button class="btn sm">Trocar</button>
+          </div>
+          <div class="lbl">Como a varredura separa</div>
+          <div class="steps">
+            <div class="step done"><div class="num">1</div><div><h4>Foto da placa abre o veículo</h4><p>OCR lê a placa e cria a pasta com esse nome.</p></div></div>
+            <div class="step done"><div class="num">2</div><div><h4>Fotos seguintes entram nele</h4><p>Tudo até a próxima placa pertence ao mesmo carro.</p></div></div>
+            <div class="step now"><div class="num">3</div><div><h4>Destino separado</h4><p>Vai para <span style="font-family:var(--mono)">/Carros</span>, fora de finalizadas.</p></div></div>
+          </div>
+          <p class="muted" style="font-size:11.5px;margin-top:16px">Placas com leitura duvidosa ficam marcadas para conferência manual antes do QA.</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <header>
+          <h2>Varredura — 412 arquivos</h2>
+          <span class="sub">18 veículos identificados · 1 placa a conferir</span>
+          <button class="btn sm pri right">Confirmar e enviar para QA</button>
+        </header>
+        <div class="body" style="padding:0">
+          <table>
+            <thead><tr><th style="width:34px"></th><th>Placa (OCR)</th><th>Fotos</th><th>Primeiro arquivo</th><th>Confiança</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" checked></td><td><span class="plate">RKQ7B42</span></td><td>24</td><td>IMG_0412.JPG</td><td>98%</td><td><span class="st entr">OK</span></td></tr>
+              <tr><td><input type="checkbox" checked></td><td><span class="plate">MJP1A09</span></td><td>21</td><td>IMG_0437.JPG</td><td>96%</td><td><span class="st entr">OK</span></td></tr>
+              <tr><td><input type="checkbox"></td><td><span class="plate">QAB8D71</span></td><td>19</td><td>IMG_0459.JPG</td><td>62%</td><td><span class="st pend">Conferir</span></td></tr>
+              <tr><td><input type="checkbox" checked></td><td><span class="plate">LZT4C88</span></td><td>26</td><td>IMG_0479.JPG</td><td>99%</td><td><span class="st entr">OK</span></td></tr>
+              <tr><td><input type="checkbox" checked></td><td><span class="plate">HFG2E30</span></td><td>22</td><td>IMG_0506.JPG</td><td>97%</td><td><span class="st entr">OK</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CARROS · QA / ORDEM ================= -->
+    <section class="view" id="v-c-qa">
+      <div class="card">
+        <header><h2>Veículos</h2></header>
+        <ul class="list">
+          <li class="on">RKQ7B42 <span class="right n">24</span></li>
+          <li>MJP1A09 <span class="right n">21</span></li>
+          <li>QAB8D71 <span class="right n">19</span></li>
+          <li>LZT4C88 <span class="right n">26</span></li>
+        </ul>
+      </div>
+      <div class="card">
+        <header>
+          <h2><span class="plate">RKQ7B42</span></h2>
+          <span class="sub">arraste para definir a ordem de publicação</span>
+          <button class="btn sm pri right">Salvar ordem</button>
+        </header>
+        <div class="body"><div class="order" id="car-order"></div></div>
+        <div style="padding:10px 14px;border-top:1px solid var(--line)" class="muted">
+          Esta é a ordem em que as fotos serão carregadas no ADSet.
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CARROS · ENTREGAR ================= -->
+    <section class="view" id="v-c-entregar">
+      <div class="card">
+        <header>
+          <h2>Fila de publicação</h2>
+          <span class="sub">metronorte chevrolet — joinville (sc)</span>
+          <button class="btn sm pri right">Publicar selecionados</button>
+        </header>
+        <div class="body" style="padding:0">
+          <table>
+            <thead><tr><th style="width:34px"><input type="checkbox"></th><th>Placa</th><th>Fotos</th><th>Encontrado em</th><th>Ordem</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><input type="checkbox" checked></td><td><span class="plate">RKQ7B42</span></td><td>24</td><td>Estoque publicados</td><td>definida</td><td><span class="st pend">Na fila</span></td></tr>
+              <tr><td><input type="checkbox" checked></td><td><span class="plate">MJP1A09</span></td><td>21</td><td>Estoque publicados</td><td>definida</td><td><span class="st pend">Na fila</span></td></tr>
+              <tr><td><input type="checkbox"></td><td><span class="plate">QAB8D71</span></td><td>19</td><td>Não publicados</td><td>definida</td><td><span class="st pend">Na fila</span></td></tr>
+              <tr><td><input type="checkbox"></td><td><span class="plate">LZT4C88</span></td><td>26</td><td>—</td><td>definida</td><td><span class="st retr">Placa não localizada</span></td></tr>
+              <tr><td><input type="checkbox"></td><td><span class="plate">HFG2E30</span></td><td>22</td><td>Estoque publicados</td><td>definida</td><td><span class="st entr">Publicado 11:04</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <header><h2>O que o robô faz</h2><span class="sub">por veículo</span></header>
+        <div class="body">
+          <div class="steps">
+            <div class="step done"><div class="num">1</div><div><h4>Entra no ADSet</h4><p>Login com as credenciais salvas do cliente.</p></div></div>
+            <div class="step done"><div class="num">2</div><div><h4>Procura a placa em Estoque publicados</h4><p>Só vai para Estoque não publicados se não achar.</p></div></div>
+            <div class="step now"><div class="num">3</div><div><h4>Abre editar fotos e limpa tudo</h4><p>Remove as imagens que estavam no anúncio.</p></div></div>
+            <div class="step"><div class="num">4</div><div><h4>Sobe as fotos na ordem do QA</h4><p>Mesma sequência definida no arraste.</p></div></div>
+            <div class="step"><div class="num">5</div><div><h4>Confere e registra</h4><p>Grava data, quantidade e status no relatório.</p></div></div>
+          </div>
+          <p class="muted" style="font-size:11.5px;margin-top:16px">
+            Esta etapa depende de teste em ambiente real do ADSet — a tela prevê pausa manual e repetição por veículo.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ================= CARROS · RELATÓRIO ================= -->
+    <section class="view" id="v-c-relatorio">
+      <div class="card">
+        <header><h2>Filtros e totais</h2></header>
+        <div class="body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">
+            <div><span class="lbl">Data</span><input class="fld" type="date" style="padding:6px 10px;font-size:12.5px" value="2026-08-14"></div>
+            <div><span class="lbl">Status</span><select class="fld" style="padding:6px 10px;font-size:12.5px"><option>Todos</option><option>Publicado</option><option>Na fila</option></select></div>
+          </div>
+          <div class="kpis" style="grid-template-columns:1fr 1fr">
+            <div class="kpi"><div class="v">18</div><div class="k">Veículos hoje</div></div>
+            <div class="kpi"><div class="v">397</div><div class="k">Fotos</div></div>
+            <div class="kpi"><div class="v">14</div><div class="k">Publicados</div></div>
+            <div class="kpi"><div class="v">22</div><div class="k">Fotos / veículo</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <header>
+          <h2>Veículos do dia</h2>
+          <button class="btn sm right">Exportar XLSX</button>
+        </header>
+        <div class="body" style="padding:0">
+          <table>
+            <thead><tr><th>Placa</th><th>Fotos</th><th>Data foto</th><th>Publicação</th><th>Local</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><span class="plate">HFG2E30</span></td><td>22</td><td>14/08</td><td>14/08 11:04</td><td>Publicados</td><td><span class="st entr">Publicado</span></td></tr>
+              <tr><td><span class="plate">RKQ7B42</span></td><td>24</td><td>14/08</td><td>—</td><td>Publicados</td><td><span class="st pend">Na fila</span></td></tr>
+              <tr><td><span class="plate">LZT4C88</span></td><td>26</td><td>14/08</td><td>—</td><td>—</td><td><span class="st retr">Não localizada</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script>
+/* --------- placeholders de imagem (mockup) --------- */
+const shapes = [
+  '<rect x="34" y="18" width="32" height="64" rx="3"/>',
+  '<path d="M42 22h16v14l8 12v34H34V48l8-12z"/>',
+  '<rect x="28" y="30" width="44" height="44" rx="4"/>',
+  '<ellipse cx="50" cy="50" rx="20" ry="30"/>',
+  '<path d="M32 34h36v46H32z"/><path d="M40 34v-8h20v8"/>'
+];
+function photo(label, i, extra=''){
+  const s = shapes[i % shapes.length];
+  return `<div class="thumb">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid slice">
+      <g fill="none" stroke="#6E6E7C" stroke-width="2">${s}</g>
+    </svg>
+    ${extra}
+    <button class="x" title="Excluir">✕</button>
+    <div class="cap"><span>${label}</span><span>${(i+1).toString().padStart(2,'0')}</span></div>
+  </div>`;
+}
+const g = (id,n,label,extra=()=> '') => {
+  const el = document.getElementById(id); if(!el) return;
+  el.innerHTML = Array.from({length:n},(_,i)=>photo(label,i,extra(i))).join('');
+};
+g('stage-now', 8, 'temp');
+g('stage-prev', 6, 'Lote_37');
+g('qa-grid', 12, '78910001', i =>
+  `<div class="tags"><span class="tg ${i%5===0?'ap':''}">AP</span><span class="tg ${i%3===0?'at':''}">AT</span></div>`);
+
+/* --------- lista de GTINs --------- */
+const gtins = [
+  ['7891000100103','entr'],['7891000315507','pend'],['7896004400112','retr'],
+  ['7891910000197','pend'],['7894900011517','entr'],['7896102500011','pend'],
+  ['7622300861568','pend'],['7891149101504','entr']
+];
+document.getElementById('gtin-list').innerHTML = gtins.map(([c,s],i)=>
+  `<li${i===0?' class="on"':''}><span class="n">${(i+1).toString().padStart(2,'0')}</span>${c}
+   <span class="right st ${s}">${s==='entr'?'Entregue':s==='pend'?'Pendente':'Retrabalho'}</span></li>`).join('');
+
+/* --------- tabela de entrega --------- */
+const rows = [
+  ['7891000100103','COD-1182','Leite condensado 395g','14/08','12','pend',1],
+  ['7891000315507','COD-1183','Achocolatado em pó 400g','14/08','9','pend',1],
+  ['7896004400112','COD-1184','Biscoito recheado 130g','14/08','8','retr',0],
+  ['7891910000197','COD-1185','Arroz tipo 1 5kg','13/08','11','pend',1],
+  ['7894900011517','COD-1186','Refrigerante lata 350ml','13/08','10','entr',0],
+  ['7896102500011','COD-1187','Molho de tomate 340g','13/08','7','pend',0],
+  ['7622300861568','COD-1188','Chocolate ao leite 90g','12/08','9','entr',0]
+];
+const lab = {pend:'Pendente',entr:'Entregue',retr:'Retrabalho'};
+document.getElementById('deliver-rows').innerHTML = rows.map(r=>`
+  <tr>
+    <td><input type="checkbox" ${r[6]?'checked':''}></td>
+    <td>${r[0]}</td><td>${r[1]}</td><td class="desc">${r[2]}</td>
+    <td>${r[3]}</td><td>${r[4]}</td><td><span class="st ${r[5]}">${lab[r[5]]}</span></td>
+    <td><button class="btn sm">Entregar</button></td>
+  </tr>`).join('');
+
+/* --------- ordem das fotos do carro (arrastar) --------- */
+const order = document.getElementById('car-order');
+order.innerHTML = Array.from({length:10},(_,i)=>
+  photo('RKQ7B42', i, `<div class="pos">${i+1}</div>`)).join('');
+[...order.children].forEach(el=>{
+  el.draggable = true;
+  el.addEventListener('dragstart',()=>{el.classList.add('drag');dragged=el});
+  el.addEventListener('dragend',()=>{el.classList.remove('drag');renumber()});
+  el.addEventListener('dragover',e=>{
+    e.preventDefault();
+    if(!dragged||dragged===el)return;
+    const r = el.getBoundingClientRect();
+    const after = (e.clientX - r.left) > r.width/2;
+    order.insertBefore(dragged, after ? el.nextSibling : el);
+  });
+});
+let dragged=null;
+function renumber(){[...order.children].forEach((el,i)=>el.querySelector('.pos').textContent=i+1)}
+
+/* --------- navegação: duas áreas independentes --------- */
+const areas = {
+  produtos:{
+    nav:'nav-produtos', label:'Produtos', first:'v-captura', conn:'FTP conectado',
+    ctx:['<div class="chip"><i>Lote</i> 37</div>',
+         '<div class="chip"><i>Temp</i> 8 imagens</div>',
+         '<div class="chip"><span class="dot"></span> simplusCamera.exe</div>'].join('')
+  },
+  carros:{
+    nav:'nav-carros', label:'Carros', first:'v-c-captura', conn:'ADSet conectado',
+    ctx:['<div class="chip"><i>Cartão</i> E:\\DCIM</div>',
+         '<div class="chip"><i>Lote</i> 18 veículos</div>',
+         '<div class="chip"><span class="dot"></span> OCR de placa</div>'].join('')
+  }
+};
+function show(id){
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on', v.id===id));
+}
+function setArea(name){
+  const a = areas[name];
+  document.querySelectorAll('#area-switch button').forEach(b=>b.classList.toggle('on', b.dataset.area===name));
+  Object.values(areas).forEach(x=>{
+    const el = document.getElementById(x.nav);
+    el.hidden = x!==a;
+    el.style.display = x===a ? 'flex' : 'none';
+  });
+  document.getElementById('rail-label').textContent = a.label;
+  document.getElementById('ctx').innerHTML = a.ctx;
+  document.getElementById('conn').textContent = a.conn;
+  const nav = document.getElementById(a.nav);
+  [...nav.children].forEach((b,i)=>b.classList.toggle('on', i===0));
+  show(a.first);
+}
+document.getElementById('area-switch').addEventListener('click',e=>{
+  const b = e.target.closest('button'); if(b) setArea(b.dataset.area);
+});
+document.querySelectorAll('.rail .railbtn').forEach(b=>b.addEventListener('click',()=>{
+  b.parentElement.querySelectorAll('.railbtn').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); show(b.dataset.v);
+}));
+setArea('produtos');
+</script>
+</body>
+</html>

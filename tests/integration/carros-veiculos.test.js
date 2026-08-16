@@ -739,3 +739,71 @@ test('envio ao ADSET recusa modo que nao existe', async t => {
   assert.equal(result.ok, false);
   assert.match(result.error, /desconhecido/i);
 });
+
+// --- Configuracao do ADSET pela tela ----------------------------------------
+// A senha e o campo delicado: ela nunca sai do servidor, entao a tela sempre
+// manda o campo vazio ao salvar qualquer outra coisa.
+
+test('salvar sem senha nova mantem a senha ja guardada', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const { salvarConfigAdset, lerConfigAdset } = await import('../../services/adset-session.js');
+  const { config } = await import('../../server/config.js');
+
+  await salvarConfigAdset({
+    modo: 'ensaio', usuario: 'foto@ag.com.br', senha: 'segredo', manterConectado: false
+  });
+  assert.equal(config.adset.password, 'segredo');
+
+  // A tela nunca recebe a senha, entao mudar so o modo chega aqui com ela vazia.
+  const depois = await salvarConfigAdset({
+    modo: 'real', usuario: 'foto@ag.com.br', senha: '', manterConectado: true
+  });
+
+  assert.equal(depois.ok, true, depois.error);
+  assert.equal(config.adset.password, 'segredo', 'a senha nao pode ser apagada por omissao');
+  assert.equal(config.adset.modo, 'real');
+  assert.equal(lerConfigAdset().senhaGuardada, true);
+});
+
+test('a configuracao devolvida para a tela nunca leva a senha', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const { salvarConfigAdset, lerConfigAdset } = await import('../../services/adset-session.js');
+
+  await salvarConfigAdset({
+    modo: 'ensaio', usuario: 'foto@ag.com.br', senha: 'segredo', manterConectado: false
+  });
+
+  const visivel = lerConfigAdset();
+
+  assert.equal(JSON.stringify(visivel).includes('segredo'), false);
+  assert.equal(visivel.senhaGuardada, true);
+  // O usuario gravado precisa chegar na tela: o estado da sessao ja apagou este
+  // campo uma vez por usar o mesmo nome.
+  assert.equal(visivel.usuario, 'foto@ag.com.br');
+});
+
+test('sair do modo desligado sem credencial e recusado', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const { salvarConfigAdset } = await import('../../services/adset-session.js');
+  const { config } = await import('../../server/config.js');
+  config.adset.password = '';
+
+  const result = await salvarConfigAdset({ modo: 'real', usuario: '', senha: '' });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /usuario e senha/i);
+});
+
+test('modo invalido e recusado antes de gravar', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const { salvarConfigAdset } = await import('../../services/adset-session.js');
+
+  const result = await salvarConfigAdset({ modo: 'producao', usuario: 'a@b.c', senha: 'x' });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /invalido/i);
+});

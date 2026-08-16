@@ -49,6 +49,11 @@
           <span>REL</span>
           <small>Relat.</small>
         </button>
+        <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros-ajustes' }" @click="irParaCarros('carros-ajustes')">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/></svg>
+          <span>SET</span>
+          <small>Ajustes</small>
+        </button>
       </template>
 
       <div class="ag-rail-foot">{{ plataforma === 'carros' ? 'Carros' : 'Fase 1' }}<br>{{ plataforma === 'carros' ? 'ADSET' : 'Produtos' }}</div>
@@ -947,6 +952,112 @@
       </section>
     </main>
 
+    <!-- ============ CARROS: ajustes do ADSET ============ -->
+    <main v-if="activePage === 'carros-ajustes'" class="ag-view two-column-view">
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Conta do ADSET</h2></header>
+        <div class="ag-card-body">
+          <label class="ag-label">Usuario</label>
+          <input class="ag-field is-caminho" v-model="adsetForm.usuario" type="text"
+                 autocomplete="off" placeholder="nome@empresa.com.br">
+
+          <label class="ag-label" style="margin-top:14px">Senha</label>
+          <input class="ag-field" v-model="adsetForm.senha" type="password"
+                 autocomplete="new-password"
+                 :placeholder="adsetCfg.senhaGuardada ? 'guardada - deixe em branco para manter' : 'digite a senha'">
+
+          <label class="ag-label" style="margin-top:14px">Modo</label>
+          <select class="ag-field" v-model="adsetForm.modo">
+            <option value="desligado">Desligado</option>
+            <option value="ensaio">Ensaio</option>
+            <option value="real">Real</option>
+          </select>
+
+          <div style="display:flex;gap:8px;margin-top:16px">
+            <button class="ag-btn is-primary" style="flex:1"
+                    @click="onSalvarAdset" :disabled="adsetSalvando">
+              {{ adsetSalvando ? 'Salvando...' : 'Salvar' }}
+            </button>
+            <button class="ag-btn" @click="onTestarAdset"
+                    :disabled="adsetTestando || adsetForm.modo === 'desligado'">
+              {{ adsetTestando ? 'Testando...' : 'Testar' }}
+            </button>
+          </div>
+
+          <label class="ag-check" style="margin-top:18px">
+            <input type="checkbox" v-model="adsetForm.manterConectado">
+            <span>Manter conectado</span>
+          </label>
+          <div class="ag-check-ajuda">
+            Reaproveita o login entre operacoes. Fecha sozinha apos 30 min parada.
+          </div>
+
+          <label class="ag-check" style="margin-top:12px">
+            <input type="checkbox" v-model="adsetForm.visivel">
+            <span>Abrir o navegador na tela</span>
+          </label>
+          <div class="ag-check-ajuda">
+            Acompanhe cada clique na conta. Recomendado nas primeiras vezes.
+          </div>
+
+        </div>
+      </section>
+
+      <section class="ag-card">
+        <header class="ag-card-header"><h2 class="ag-card-title">Situacao</h2></header>
+        <div class="ag-card-body">
+          <div class="ag-table-wrap">
+            <table class="ag-table">
+              <tbody>
+                <tr><td>Modo</td><td><b>{{ adsetCfg.modo }}</b></td></tr>
+                <tr><td>Usuario</td><td>{{ adsetCfg.usuario || '-' }}</td></tr>
+                <tr><td>Senha</td><td>{{ adsetCfg.senhaGuardada ? 'guardada' : 'nao configurada' }}</td></tr>
+                <tr><td>Manter conectado</td><td>{{ adsetCfg.manterConectado ? 'sim' : 'nao' }}</td></tr>
+                <tr>
+                  <td>Sessao</td>
+                  <td>
+                    <span :style="{ color: adsetCfg.conectada ? 'var(--ag-ok)' : 'var(--ag-muted)' }">
+                      {{ adsetCfg.conectada ? 'conectada' : 'fechada' }}
+                    </span>
+                    <span v-if="adsetCfg.desde" style="color:var(--ag-muted)">
+                      desde {{ formatarData(adsetCfg.desde) }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <button class="ag-btn is-danger" style="margin-top:14px"
+                  @click="onDesconectarAdset" :disabled="!adsetCfg.conectada">
+            Desconectar agora
+          </button>
+
+          <div v-if="adsetTeste" class="entrega-alerta" style="margin-top:16px">
+            {{ adsetTeste }}
+          </div>
+
+          <div class="entrega-alerta" style="margin-top:16px">
+            O modo <b>real</b> APAGA as fotos que o anuncio tem hoje e sobe as
+            nossas. Nao da para desfazer. Use o <b>ensaio</b> primeiro: ele faz o
+            caminho inteiro e para antes de excluir.
+          </div>
+
+          <div style="font-size:12px;color:var(--ag-muted);line-height:1.6;margin-top:16px">
+            <p style="margin:0 0 10px"><b>Manter conectado</b> reaproveita o navegador
+            ja logado entre uma operacao e outra. Cada login leva uns 10 segundos:
+            sem isso, enviar cinco placas sao cinco logins.</p>
+            <p style="margin:0 0 10px"><b>Testar</b> so entra e confere se a conta
+            enxerga o estoque. Nao encosta em anuncio nenhum.</p>
+            <p style="margin:0">A senha fica em
+            <code style="font-family:var(--ag-mono)">adset-config.json</code>, que
+            esta fora do git, e nunca volta para esta tela - por isso o campo
+            aparece vazio mesmo com a senha guardada.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
     <!-- ============ CARROS: relatorios ============ -->
     <main v-if="activePage === 'carros-relatorios'" class="ag-view report-view">
       <section class="ag-card">
@@ -1620,7 +1731,7 @@ export default {
       }
 
       if (pagina === 'carros-relatorios') await onCarregarRelatorioCarros();
-      if (pagina === 'carros-entrega') await onCarregarConfigAdset();
+      if (pagina === 'carros-entrega' || pagina === 'carros-ajustes') await onCarregarConfigAdset();
     };
 
     const irPara = async pagina => {
@@ -1802,17 +1913,110 @@ export default {
 
     const adsetModo = ref('desligado');
     const adsetUsuario = ref(null);
+    const adsetCfg = ref({
+      modo: 'desligado', usuario: '', senhaGuardada: false,
+      manterConectado: false, visivel: false, conectada: false, desde: null
+    });
+    // Formulario separado do estado guardado: o que voce digita so vale depois
+    // de Salvar, e a senha nunca chega do servidor para ser preenchida aqui.
+    const adsetForm = ref({
+      usuario: '', senha: '', modo: 'desligado',
+      manterConectado: false, visivel: false
+    });
+    const adsetSalvando = ref(false);
+    const adsetTestando = ref(false);
+    const adsetTeste = ref('');
 
     const onCarregarConfigAdset = async () => {
       try {
         const response = await this.$api.request('/api/carros/adset/config');
-        if (response.ok) {
-          adsetModo.value = response.data.modo;
-          adsetUsuario.value = response.data.usuario;
-        }
+        if (!response.ok) throw new Error(response.error);
+
+        adsetCfg.value = response.data;
+        adsetModo.value = response.data.modo;
+        adsetUsuario.value = response.data.usuario;
+
+        adsetForm.value = {
+          usuario: response.data.usuario || '',
+          senha: '',
+          modo: response.data.modo,
+          manterConectado: response.data.manterConectado,
+          visivel: response.data.visivel
+        };
       } catch {
         adsetModo.value = 'desligado';
       }
+    };
+
+    const onSalvarAdset = async () => {
+      adsetSalvando.value = true;
+      try {
+        const response = await this.$api.request('/api/carros/adset/config', {
+          method: 'POST',
+          data: { ...adsetForm.value, operationId: makeOperationId('adset-config') }
+        });
+
+        if (!response.ok) {
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+
+        adsetCfg.value = response.data;
+        adsetModo.value = response.data.modo;
+        adsetUsuario.value = response.data.usuario;
+        // Some do campo depois de salva: nao fica senha parada na tela.
+        adsetForm.value.senha = '';
+        showStatus('✓ Configuracao do ADSET salva', 'success');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        adsetSalvando.value = false;
+      }
+    };
+
+    const onTestarAdset = async () => {
+      adsetTestando.value = true;
+      adsetTeste.value = '';
+      showStatus('Entrando no ADSET...', 'info');
+      try {
+        const response = await this.$api.request('/api/carros/adset/testar', {
+          method: 'POST',
+          data: { operationId: makeOperationId('adset-teste') }
+        });
+
+        if (!response.ok) {
+          adsetTeste.value = `Falhou: ${response.error}`;
+          showStatus(`✗ ${response.error}`, 'error');
+          return;
+        }
+
+        const d = response.data;
+        adsetTeste.value = `Entrou como ${d.usuario}. `
+          + `A lista de publicados respondeu com ${d.veiculosNaPrimeiraPagina} veiculo(s) `
+          + `na primeira pagina. `
+          + (d.mantidaAberta ? 'A sessao ficou aberta para as proximas operacoes.'
+                             : 'A sessao foi fechada em seguida.');
+        showStatus('✓ Conexao com o ADSET OK', 'success');
+      } catch (err) {
+        adsetTeste.value = `Falhou: ${err.message}`;
+        showStatus(`✗ ${err.message}`, 'error');
+      } finally {
+        adsetTestando.value = false;
+        await onCarregarConfigAdset();
+      }
+    };
+
+    const onDesconectarAdset = async () => {
+      try {
+        await this.$api.request('/api/carros/adset/desconectar', {
+          method: 'POST',
+          data: { operationId: makeOperationId('adset-sair') }
+        });
+        showStatus('✓ Sessao do ADSET encerrada', 'success');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+      await onCarregarConfigAdset();
     };
 
     // O modo real APAGA as fotos do anuncio publicado na conta do cliente. Uma
@@ -2801,6 +3005,14 @@ export default {
       adsetModo,
       adsetUsuario,
       onEnviarAoAdset,
+      adsetCfg,
+      adsetForm,
+      adsetSalvando,
+      adsetTestando,
+      adsetTeste,
+      onSalvarAdset,
+      onTestarAdset,
+      onDesconectarAdset,
       cameraEstado,
       cameraRotulo,
       cameraMensagem,

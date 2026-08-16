@@ -3,7 +3,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(__dirname, '..');
+export const ROOT = path.resolve(__dirname, '..');
 
 /**
  * Configuração da aplicação
@@ -71,7 +71,10 @@ export const config = {
     username: process.env.ADSET_USER,
     password: process.env.ADSET_PASS,
     // Com o navegador visível dá para acompanhar o que o sistema faz na conta.
-    visivel: process.env.ADSET_VISIVEL === 'true'
+    visivel: process.env.ADSET_VISIVEL === 'true',
+    // Reaproveita o navegador logado entre operações. Cada login custa uns 10s,
+    // então sem isso enviar cinco placas seguidas seriam cinco logins.
+    manterConectado: process.env.ADSET_MANTER === 'true'
   },
 
   // Camera
