@@ -375,4 +375,3 @@ PROPRIETARY — AG Fotografia
 **Desenvolvido por:** Claude (Anthropic)  
 **Data de Início:** 2026-08-13  
 **Última Atualização:** 2026-08-13
-
