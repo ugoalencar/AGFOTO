@@ -562,14 +562,29 @@ export class VehicleService {
           .filter(nome => EXTENSOES_FOTO.includes(path.extname(nome).toLowerCase()))
           .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 
-        placas.push({
-          placa: entry.name,
-          fotos: arquivos.map(nome => ({
+        const fotos = [];
+        for (const nome of arquivos) {
+          // Reordenar troca o CONTEUDO dos arquivos mantendo os nomes (_0.._N).
+          // Sem algo que mude na URL, o navegador reexibe a imagem do cache e a
+          // tela parece nao ter reagido - o disco muda e o usuario nao ve nada.
+          // mtime e tamanho juntos: so o mtime nao basta porque as fotos sao
+          // copiadas em sequencia e varias caem no mesmo milissegundo.
+          let versao = '0';
+          try {
+            const st = await fs.promises.stat(path.join(dirPlaca, nome));
+            versao = `${Math.round(st.mtimeMs)}-${st.size}`;
+          } catch {
+            // arquivo sumiu entre listar e medir
+          }
+
+          fotos.push({
             name: nome,
-            url: `/api/carros/foto/${encodeURIComponent(dia)}/${encodeURIComponent(entry.name)}/${encodeURIComponent(nome)}`
-          })),
-          total: arquivos.length
-        });
+            url: `/api/carros/foto/${encodeURIComponent(dia)}/${encodeURIComponent(entry.name)}`
+              + `/${encodeURIComponent(nome)}?v=${versao}`
+          });
+        }
+
+        placas.push({ placa: entry.name, fotos, total: fotos.length });
       }
 
       // O disco diz o que existe; o JSON diz em que ponto do fluxo cada placa

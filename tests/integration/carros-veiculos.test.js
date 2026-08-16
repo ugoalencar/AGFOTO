@@ -561,3 +561,43 @@ test('o QA renomeia a pasta nao reconhecida para a placa certa', async t => {
   assert.deepEqual(await listar(env, 'NAO-RECONHECIDO'), []);
   assert.deepEqual(await listar(env, 'ABC1234'), ['ABC1234_0.jpg', 'ABC1234_1.jpg']);
 });
+
+test('a url da foto muda quando o conteudo muda, para o navegador nao mostrar o cache', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg', 'b.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+
+  const antes = (await VehicleService.listarPorData(DIA)).data.placas[0].fotos;
+  // Reordenar troca o conteudo mantendo os nomes: sem versao na url o navegador
+  // reexibiria a imagem antiga e a tela pareceria nao reagir.
+  assert.ok(antes.every(f => /\?v=\d+-\d+$/.test(f.url)), `url sem versao: ${antes[0].url}`);
+
+  await VehicleService.reordenarFotos(DIA, 'ABC1234', [
+    'ABC1234_2.jpg', 'ABC1234_0.jpg', 'ABC1234_1.jpg'
+  ]);
+
+  const depois = (await VehicleService.listarPorData(DIA)).data.placas[0].fotos;
+
+  assert.deepEqual(depois.map(f => f.name), antes.map(f => f.name), 'os nomes seguem iguais');
+  assert.notDeepEqual(
+    depois.map(f => f.url), antes.map(f => f.url),
+    'a url precisa mudar quando a foto daquela posicao muda'
+  );
+});
+
+test('a url so muda quando a foto daquela posicao muda', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+
+  const primeira = (await VehicleService.listarPorData(DIA)).data.placas[0].fotos;
+  const segunda = (await VehicleService.listarPorData(DIA)).data.placas[0].fotos;
+
+  // Duas leituras seguidas sem alteracao devolvem a mesma url: a versao nao pode
+  // mudar a toa, senao o navegador rebaixaria toda foto a cada abertura de tela.
+  assert.deepEqual(segunda.map(f => f.url), primeira.map(f => f.url));
+});
