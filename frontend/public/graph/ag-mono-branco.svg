@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 390 160" width="390" height="160" role="img" aria-label="AG Fotografia">
+  <title>AG Fotografia - monocromatico claro</title>
+  <g transform="translate(80,80) scale(0.7)">
+    <polygon points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38" fill="#FFFFFF"/>
+    <polygon points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29" fill="#FFFFFF"/>
+    <polygon points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91" fill="#FFFFFF"/>
+    <polygon points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38" fill="#FFFFFF"/>
+    <polygon points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29" fill="#FFFFFF"/>
+    <polygon points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91" fill="#FFFFFF"/>
+  </g>
+  <g fill="#FFFFFF">
+    <g transform="translate(186,34) scale(0.62)"><path fill-rule="evenodd" d="M0,100 L34,0 L54,0 L88,100 L66,100 L59.5,80 L28.5,80 L22,100 Z M44,20 L30,72 L58,72 Z"/></g>
+    <g transform="translate(245.51999999999998,34) scale(0.62)"><path d="M93.30,25 A50,50 0 1 0 95.32,71.13 L75.38,61.83 A28,28 0 1 1 74.25,36 Z"/><rect x="58" y="45" width="38.9" height="22"/></g>
+  </g>
+  <text x="188" y="122" fill="#FFFFFF" font-family="Archivo, Inter, Arial, Helvetica, sans-serif" font-size="18" font-weight="600" textLength="124" lengthAdjust="spacing">FOTOGRAFIA</text>
+</svg>

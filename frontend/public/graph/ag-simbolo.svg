@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-110 -110 220 220" width="220" height="220" role="img" aria-label="AG Fotografia">
+  <title>AG Fotografia — símbolo</title>
+  <g>
+    <polygon points="100,0 50,86.6 0,46 39.84,23" fill="#FFC400"/>
+    <polygon points="50,86.6 -50,86.6 -39.84,23 0,46" fill="#FF9D00"/>
+    <polygon points="-50,86.6 -100,0 -39.84,-23 -39.84,23" fill="#FF6B00"/>
+    <polygon points="-100,0 -50,-86.6 0,-46 -39.84,-23" fill="#F03D0E"/>
+    <polygon points="-50,-86.6 50,-86.6 39.84,-23 0,-46" fill="#D91E18"/>
+    <polygon points="50,-86.6 100,0 39.84,23 39.84,-23" fill="#A81714"/>
+  </g>
+</svg>

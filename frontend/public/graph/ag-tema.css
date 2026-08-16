@@ -1,0 +1,307 @@
+/* ==========================================================================
+   AG Fotografia — tema da interface
+   Tokens de cor, tipografia e espaçamento. Importe antes de qualquer outro CSS.
+   ========================================================================== */
+
+:root {
+  /* --- Superfícies (preto) --------------------------------------------- */
+  --ag-preto:          #0A0A0B;  /* fundo da aplicação */
+  --ag-carvao:         #101013;  /* painéis, barra lateral */
+  --ag-grafite:        #17171B;  /* cards, linhas alternadas */
+  --ag-elevado:        #1E1E23;  /* modais, menus, hover */
+  --ag-borda:          #26262C;
+  --ag-borda-forte:    #35353D;
+
+  /* --- Varredura quente (marca) ---------------------------------------- */
+  --ag-amarelo:        #FFC400;
+  --ag-ambar:          #FF9D00;
+  --ag-laranja:        #FF6B00;
+  --ag-vermelho-vivo:  #F03D0E;
+  --ag-vermelho:       #D91E18;
+  --ag-vermelho-fundo: #A81714;
+
+  /* --- Texto ------------------------------------------------------------ */
+  --ag-texto:          #F4F4F5;
+  --ag-texto-2:        #A0A0A8;
+  --ag-texto-3:        #6B6B74;
+  --ag-texto-sobre-quente: #1A0C00;  /* texto sobre laranja/amarelo */
+
+  /* --- Funcionais (fora da marca, só para estado) ----------------------- */
+  --ag-ok:             #35C26B;
+  --ag-info:           #3B9EFF;
+
+  /* --- Papéis ----------------------------------------------------------- */
+  --ag-acao:           var(--ag-laranja);   /* ação primária */
+  --ag-acao-hover:     var(--ag-ambar);
+  --ag-foco:           var(--ag-amarelo);
+  --ag-perigo:         var(--ag-vermelho);
+
+  /* --- Estados do fluxo -------------------------------------------------- */
+  --ag-st-aguardando:  var(--ag-texto-3);
+  --ag-st-edicao:      var(--ag-ambar);
+  --ag-st-conferencia: var(--ag-amarelo);
+  --ag-st-retrabalho:  var(--ag-laranja);
+  --ag-st-aprovado:    var(--ag-ok);
+  --ag-st-entregando:  var(--ag-info);
+  --ag-st-entregue:    var(--ag-ok);
+  --ag-st-erro:        var(--ag-vermelho);
+
+  /* --- Tipografia -------------------------------------------------------- */
+  --ag-fonte-titulo: "Archivo", "Inter", system-ui, sans-serif;
+  --ag-fonte-texto:  "Inter", system-ui, -apple-system, sans-serif;
+  --ag-fonte-dado:   "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
+
+  --ag-t-xs: 11px;
+  --ag-t-sm: 13px;
+  --ag-t-md: 15px;
+  --ag-t-lg: 19px;
+  --ag-t-xl: 26px;
+  --ag-t-2xl: 38px;
+
+  /* --- Métrica ----------------------------------------------------------- */
+  --ag-r-sm: 4px;
+  --ag-r-md: 8px;
+  --ag-r-lg: 14px;
+  --ag-e-1: 4px;
+  --ag-e-2: 8px;
+  --ag-e-3: 16px;
+  --ag-e-4: 24px;
+  --ag-e-5: 40px;
+
+  --ag-sombra: 0 12px 32px rgba(0, 0, 0, .55);
+  --ag-brilho: 0 0 0 1px rgba(255, 107, 0, .35), 0 0 24px rgba(255, 107, 0, .18);
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+
+body.ag {
+  margin: 0;
+  background: var(--ag-preto);
+  color: var(--ag-texto);
+  font-family: var(--ag-fonte-texto);
+  font-size: var(--ag-t-md);
+  -webkit-font-smoothing: antialiased;
+}
+
+.ag-titulo {
+  font-family: var(--ag-fonte-titulo);
+  font-weight: 800;
+  letter-spacing: -.02em;
+  line-height: 1.05;
+}
+
+.ag-etiqueta {
+  font-family: var(--ag-fonte-texto);
+  font-size: var(--ag-t-xs);
+  font-weight: 700;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ag-texto-3);
+}
+
+.ag-dado {
+  font-family: var(--ag-fonte-dado);
+  font-size: var(--ag-t-sm);
+  letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+}
+
+:where(a, button, input, select, [tabindex]):focus-visible {
+  outline: 2px solid var(--ag-foco);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   Botões
+   ========================================================================== */
+
+.ag-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--ag-e-2);
+  padding: 9px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--ag-r-md);
+  font: inherit;
+  font-size: var(--ag-t-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background .14s ease, border-color .14s ease, transform .14s ease;
+}
+.ag-btn:active { transform: translateY(1px); }
+
+.ag-btn--primario {
+  background: var(--ag-acao);
+  color: var(--ag-texto-sobre-quente);
+}
+.ag-btn--primario:hover { background: var(--ag-acao-hover); }
+
+.ag-btn--secundario {
+  background: transparent;
+  border-color: var(--ag-borda-forte);
+  color: var(--ag-texto);
+}
+.ag-btn--secundario:hover {
+  border-color: var(--ag-laranja);
+  color: var(--ag-laranja);
+}
+
+.ag-btn--perigo {
+  background: transparent;
+  border-color: var(--ag-perigo);
+  color: var(--ag-vermelho-vivo);
+}
+.ag-btn--perigo:hover {
+  background: var(--ag-perigo);
+  color: var(--ag-texto);
+}
+
+.ag-btn--fantasma {
+  background: transparent;
+  color: var(--ag-texto-2);
+}
+.ag-btn--fantasma:hover {
+  background: var(--ag-elevado);
+  color: var(--ag-texto);
+}
+
+/* ==========================================================================
+   Selos de estado
+   ========================================================================== */
+
+.ag-selo {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  font-size: var(--ag-t-xs);
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.ag-selo::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.ag-selo[data-estado="aguardando"]  { color: var(--ag-st-aguardando); }
+.ag-selo[data-estado="edicao"]      { color: var(--ag-st-edicao); }
+.ag-selo[data-estado="conferencia"] { color: var(--ag-st-conferencia); }
+.ag-selo[data-estado="retrabalho"]  { color: var(--ag-st-retrabalho); }
+.ag-selo[data-estado="aprovado"]    { color: var(--ag-st-aprovado); }
+.ag-selo[data-estado="entregando"]  { color: var(--ag-st-entregando); }
+.ag-selo[data-estado="entregue"]    { color: var(--ag-st-entregue); }
+.ag-selo[data-estado="erro"]        { color: var(--ag-st-erro); }
+
+.ag-selo[data-estado="entregando"]::before { animation: ag-pulsar 1.2s ease-in-out infinite; }
+
+@keyframes ag-pulsar {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .25; }
+}
+
+/* ==========================================================================
+   Rotor de etapas — o símbolo como indicador de progresso
+   Uso: <svg class="ag-rotor" data-etapas="3"> com 6 <polygon class="lamina">
+   ========================================================================== */
+
+.ag-rotor { display: block; }
+.ag-rotor .lamina {
+  fill: var(--ag-borda);
+  transition: fill .45s cubic-bezier(.2, .7, .2, 1);
+}
+.ag-rotor[data-etapas="1"] .lamina:nth-child(-n+1),
+.ag-rotor[data-etapas="2"] .lamina:nth-child(-n+2),
+.ag-rotor[data-etapas="3"] .lamina:nth-child(-n+3),
+.ag-rotor[data-etapas="4"] .lamina:nth-child(-n+4),
+.ag-rotor[data-etapas="5"] .lamina:nth-child(-n+5),
+.ag-rotor[data-etapas="6"] .lamina:nth-child(-n+6) { fill: var(--lamina); }
+
+.ag-rotor .lamina:nth-child(1) { --lamina: var(--ag-amarelo); }
+.ag-rotor .lamina:nth-child(2) { --lamina: var(--ag-ambar); }
+.ag-rotor .lamina:nth-child(3) { --lamina: var(--ag-laranja); }
+.ag-rotor .lamina:nth-child(4) { --lamina: var(--ag-vermelho-vivo); }
+.ag-rotor .lamina:nth-child(5) { --lamina: var(--ag-vermelho); }
+.ag-rotor .lamina:nth-child(6) { --lamina: var(--ag-vermelho-fundo); }
+
+.ag-rotor--erro .lamina { fill: var(--ag-vermelho) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ag-rotor .lamina { transition: none; }
+  .ag-selo::before { animation: none; }
+}
+
+/* ==========================================================================
+   Cartões e tabelas
+   ========================================================================== */
+
+.ag-card {
+  background: var(--ag-grafite);
+  border: 1px solid var(--ag-borda);
+  border-radius: var(--ag-r-lg);
+  padding: var(--ag-e-4);
+}
+.ag-card--ativo {
+  border-color: var(--ag-laranja);
+  box-shadow: var(--ag-brilho);
+}
+
+.ag-tabela { width: 100%; border-collapse: collapse; }
+.ag-tabela th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: var(--ag-t-xs);
+  font-weight: 700;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ag-texto-3);
+  border-bottom: 1px solid var(--ag-borda);
+}
+.ag-tabela td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--ag-borda);
+  font-size: var(--ag-t-sm);
+}
+.ag-tabela tbody tr:hover { background: var(--ag-elevado); }
+
+/* ==========================================================================
+   Área de recebimento de arquivos
+   ========================================================================== */
+
+.ag-soltar {
+  border: 1.5px dashed var(--ag-borda-forte);
+  border-radius: var(--ag-r-lg);
+  padding: var(--ag-e-5) var(--ag-e-4);
+  text-align: center;
+  color: var(--ag-texto-2);
+  transition: border-color .16s ease, background .16s ease;
+}
+.ag-soltar:hover,
+.ag-soltar[data-sobre="true"] {
+  border-color: var(--ag-laranja);
+  border-style: solid;
+  background: color-mix(in srgb, var(--ag-laranja) 7%, transparent);
+  color: var(--ag-texto);
+}
+
+/* Barra de progresso: usa a varredura quente da marca */
+.ag-progresso {
+  height: 4px;
+  border-radius: 999px;
+  background: var(--ag-borda);
+  overflow: hidden;
+}
+.ag-progresso > i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg,
+    var(--ag-amarelo), var(--ag-ambar), var(--ag-laranja), var(--ag-vermelho-vivo));
+}

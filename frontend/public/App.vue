@@ -1,24 +1,28 @@
 <template>
   <div class="app-shell">
     <nav class="ag-rail" :aria-label="plataforma === 'carros' ? 'Carros' : 'Produtos'">
-      <img src="/favicon.svg" alt="AG Foto" class="ag-rail-mark">
+      <img src="/graph/ag-simbolo.svg" alt="AG Fotografia" class="ag-rail-mark">
 
       <!-- Produtos e Carros sao plataformas separadas, cada uma com suas
            secoes, rodando no mesmo servidor. -->
       <template v-if="plataforma === 'produtos'">
         <button class="ag-rail-button" :class="{ 'is-active': activePage === 'captura' }" @click="activePage = 'captura'">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.5"/></svg>
           <span>CAP</span>
           <small>Captura</small>
         </button>
         <button class="ag-rail-button" :class="{ 'is-active': activePage === 'entregar' }" @click="irPara('entregar')">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
           <span>ENT</span>
           <small>Entregar</small>
         </button>
         <button class="ag-rail-button" :class="{ 'is-active': activePage === 'qa' }" @click="irPara('qa')">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
           <span>QA</span>
           <small>QA</small>
         </button>
         <button class="ag-rail-button" :class="{ 'is-active': activePage === 'relatorios' }" @click="activePage = 'relatorios'">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
           <span>REL</span>
           <small>Relat.</small>
         </button>
@@ -26,18 +30,22 @@
 
       <template v-else>
         <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros' }" @click="irParaCarros('carros')">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10m0 0 4-4m-4 4-4-4"/><path d="M4 15v4h16v-4"/></svg>
           <span>IMP</span>
           <small>Importar</small>
         </button>
         <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros-qa' }" @click="irParaCarros('carros-qa')">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
           <span>QA</span>
           <small>QA</small>
         </button>
         <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros-entrega' }" @click="irParaCarros('carros-entrega')">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5z"/><path d="M3 7.5 12 12l9-4.5M12 12v9"/></svg>
           <span>ENT</span>
           <small>Entrega</small>
         </button>
         <button class="ag-rail-button" :class="{ 'is-active': activePage === 'carros-relatorios' }" @click="irParaCarros('carros-relatorios')">
+          <svg class="ag-rail-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
           <span>REL</span>
           <small>Relat.</small>
         </button>
@@ -48,7 +56,7 @@
 
     <div class="ag-main">
       <header class="ag-topbar">
-        <div class="ag-wordmark"><b>AG</b> Foto</div>
+        <div class="ag-wordmark"><img src="/graph/ag-horizontal.svg" alt="AG Fotografia"></div>
         <div class="ag-plataformas">
           <button :class="{ ativa: plataforma === 'produtos' }" @click="trocarPlataforma('produtos')">Produtos</button>
           <button :class="{ ativa: plataforma === 'carros' }" @click="trocarPlataforma('carros')">Carros</button>
@@ -486,7 +494,7 @@
 
           <label class="ag-label" style="margin-top:14px">Pasta das fotos</label>
           <div style="display:flex;gap:8px">
-            <input class="ag-field" v-model="carrosPasta" type="text"
+            <input class="ag-field is-caminho" v-model="carrosPasta" type="text"
                    placeholder="E:/DCIM/100CANON" @keydown.enter="onLerPastaCarros" style="flex:1">
             <button class="ag-btn" @click="onAbrirExplorador">Procurar</button>
           </div>
@@ -814,10 +822,10 @@
                    @click="openModal({ name: foto.name, url: foto.url }, 'carros')">
               <div class="palco-foto-acoes">
                 <button class="ag-btn" :disabled="i === 0"
-                        @click.stop="onMoverPosicao(i, i - 1)" title="Mover para tras">&lsaquo;</button>
+                        @click.stop="onMoverPosicao(i, i - 1)" title="Mover para tras">&#8592;</button>
                 <span class="palco-foto-nome">{{ foto.name }}</span>
                 <button class="ag-btn" :disabled="i === placaAtual.fotos.length - 1"
-                        @click.stop="onMoverPosicao(i, i + 1)" title="Mover para frente">&rsaquo;</button>
+                        @click.stop="onMoverPosicao(i, i + 1)" title="Mover para frente">&#8594;</button>
               </div>
             </div>
           </div>
@@ -864,7 +872,7 @@
             Desligado. Preencha usuario, senha e modo em
             <code style="font-family:var(--ag-mono)">adset-config.json</code>.
           </div>
-          <div v-else style="font-size:11px;color:var(--ag-muted)">
+          <div v-else style="font-size:11px;color:var(--ag-muted);overflow-wrap:anywhere">
             Modo <b>{{ adsetModo }}</b> como <b>{{ adsetUsuario || '-' }}</b>.
             <span v-if="adsetModo === 'ensaio'">
               O ensaio acha a placa e para antes de excluir as fotos do anuncio.

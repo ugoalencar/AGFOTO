@@ -1,16 +1,34 @@
+/* Paleta e metrica vindas de graph/ag-tema.css (manual da marca AG Fotografia).
+   Os nomes antigos das variaveis ficam: o resto da folha ja os usa em centenas
+   de lugares, e trocar nome de token nao muda um pixel na tela. */
 :root {
-  --ag-ink: #0B0B0D;
-  --ag-panel: #131318;
-  --ag-panel-2: #1A1A21;
-  --ag-panel-3: #212129;
-  --ag-line: #2B2B34;
-  --ag-text: #EDEDF0;
-  --ag-muted: #8C8C99;
-  --ag-red: #E8262B;
-  --ag-orange: #FF6A13;
-  --ag-yellow: #FFC20E;
-  --ag-ok: #2EA043;
-  --ag-radius: 6px;
+  --ag-ink: #0A0A0B;      /* preto - fundo da aplicacao */
+  --ag-panel: #101013;    /* carvao - paineis e barra lateral */
+  --ag-panel-2: #17171B;  /* grafite - cards */
+  --ag-panel-3: #1E1E23;  /* elevado - modais, menus, hover */
+  --ag-line: #26262C;
+  --ag-line-forte: #35353D;
+  --ag-text: #F4F4F5;
+  --ag-muted: #A0A0A8;
+  --ag-muted-2: #6B6B74;
+
+  /* Varredura quente: a ordem amarelo -> vermelho profundo e a identidade, e e
+     tambem a ordem em que um lote avanca pelo fluxo. */
+  --ag-yellow: #FFC400;
+  --ag-amber: #FF9D00;
+  --ag-orange: #FF6B00;
+  --ag-red-vivid: #F03D0E;
+  --ag-red: #D91E18;
+  --ag-red-deep: #A81714;
+
+  /* Sobre laranja/amarelo o texto e escuro: branco sobre quente nao le. */
+  --ag-on-warm: #1A0C00;
+
+  /* Verde e azul so como sinal funcional, nunca em peca de marca. */
+  --ag-ok: #35C26B;
+  --ag-info: #3B9EFF;
+
+  --ag-radius: 8px;
   --ag-display: Impact, "Arial Narrow", sans-serif;
   --ag-body: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --ag-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
@@ -501,7 +519,9 @@ select {
 .app-shell {
   height: 100vh;
   display: grid;
-  grid-template-columns: 74px minmax(0, 1fr);
+  /* O menu era 74px e ficava apertado demais para ler de longe, que e como o
+     fotografo usa: de pe, longe da tela, com a camera na mao. */
+  grid-template-columns: 104px minmax(0, 1fr);
   background: var(--ag-ink);
   overflow: hidden;
 }
@@ -512,14 +532,15 @@ select {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  padding: 14px 0;
+  gap: 8px;
+  padding: 16px 0 14px;
 }
 
 .ag-rail-button {
-  width: 58px;
-  padding: 9px 4px 8px;
+  width: 88px;
+  padding: 12px 4px 10px;
   border: 0;
+  border-left: 3px solid transparent;
   border-radius: var(--ag-radius);
   background: none;
   color: var(--ag-muted);
@@ -527,18 +548,38 @@ select {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   font-family: var(--ag-display);
-  font-size: 12px;
+  font-size: 15px;
   letter-spacing: .09em;
   text-transform: uppercase;
+  transition: background .14s ease, color .14s ease, border-color .14s ease;
 }
 
-.ag-rail-button:hover,
+.ag-rail-button:hover {
+  color: var(--ag-text);
+  background: var(--ag-panel-3);
+}
+
+/* A secao aberta ganha a marca de cor: o rotulo sozinho nao distinguia o
+   suficiente entre as quatro etapas. */
 .ag-rail-button.is-active {
   color: var(--ag-text);
   background: var(--ag-panel-2);
+  border-left-color: var(--ag-orange);
 }
+
+.ag-rail-icon {
+  width: 26px;
+  height: 26px;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ag-rail-button.is-active .ag-rail-icon { color: var(--ag-orange); }
 
 .ag-main {
   min-width: 0;
@@ -549,21 +590,31 @@ select {
 }
 
 .ag-topbar {
-  height: 52px;
+  height: 68px;
   border-bottom: 1px solid var(--ag-line);
   background: var(--ag-panel);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 0 16px;
+  gap: 18px;
+  padding: 0 18px;
   flex-shrink: 0;
 }
 
+/* A assinatura horizontal da marca no lugar do texto solto.
+   52px de altura da 127px de largura: o manual manda nao usar a assinatura
+   abaixo de 120px - menor que isso "FOTOGRAFIA" vira borrao e o certo passa a
+   ser so o simbolo. */
 .ag-wordmark {
-  font-family: var(--ag-display);
-  font-size: 23px;
-  letter-spacing: .02em;
-  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.ag-wordmark img {
+  height: 52px;
+  width: auto;
+  display: block;
 }
 
 .ag-context {
@@ -576,12 +627,13 @@ select {
 
 .ag-chip {
   background: var(--ag-panel-2);
-  border: 1px solid var(--ag-line);
+  border: 1px solid var(--ag-line-forte);
   border-radius: 20px;
-  padding: 5px 12px;
+  padding: 7px 14px;
   font-family: var(--ag-mono);
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--ag-text);
+  white-space: nowrap;
 }
 
 .ag-content {
@@ -609,48 +661,59 @@ select {
 }
 
 .ag-card-header {
-  padding: 11px 14px;
+  padding: 14px 18px;
   border-bottom: 1px solid var(--ag-line);
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-shrink: 0;
 }
 
 .ag-card-title {
   margin: 0;
   font-family: var(--ag-display);
-  font-size: 15px;
+  font-size: 18px;
   letter-spacing: .1em;
   text-transform: uppercase;
   font-weight: 600;
 }
 
+/* Um fio quente no topo de cada card: e a varredura da marca aparecendo sem
+   colorir fundo, que o manual proibe em area de revisao de imagem. */
+.ag-card-header::before {
+  content: "";
+  width: 4px;
+  height: 18px;
+  border-radius: 2px;
+  background: linear-gradient(180deg, var(--ag-yellow), var(--ag-orange), var(--ag-red));
+  flex-shrink: 0;
+}
+
 .ag-card-body {
-  padding: 14px;
+  padding: 18px;
   overflow: auto;
   min-height: 0;
 }
 
 .ag-rail-mark {
-  width: 30px;
-  height: 30px;
-  margin-bottom: 4px;
+  width: 46px;
+  height: 46px;
+  margin-bottom: 10px;
 }
 
 .ag-rail-button small {
   font-family: var(--ag-body);
-  font-size: 9px;
+  font-size: 11.5px;
   letter-spacing: 0;
   text-transform: none;
 }
 
 .ag-rail-foot {
   margin-top: auto;
-  color: var(--ag-muted);
+  color: var(--ag-muted-2);
   font-family: var(--ag-mono);
-  font-size: 9px;
-  line-height: 1.45;
+  font-size: 10.5px;
+  line-height: 1.5;
   text-align: center;
 }
 
@@ -693,27 +756,37 @@ select {
 .ag-label {
   display: block;
   font-family: var(--ag-display);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--ag-muted);
-  margin-bottom: 5px;
+  margin-bottom: 7px;
 }
 
 .ag-field {
   width: 100%;
   background: var(--ag-panel-2);
-  border: 1px solid var(--ag-line);
+  border: 1px solid var(--ag-line-forte);
   border-radius: var(--ag-radius);
-  padding: 9px 11px;
+  /* 42px de altura: o alvo de clique antigo era pequeno demais para uso rapido
+     entre uma foto e outra. */
+  padding: 11px 13px;
   color: var(--ag-text);
   font-family: var(--ag-mono);
-  font-size: 14px;
+  font-size: 16px;
+}
+
+/* Caminho de pasta e longo e fica ao lado de um botao: com a fonte grande dos
+   outros campos, "E:/DCIM/100CANON" nao cabia e o usuario perdia de vista onde
+   esta apontando. */
+.ag-field.is-caminho {
+  font-size: 13px;
+  padding: 11px 10px;
 }
 
 .ag-field.is-large {
-  font-size: 19px;
-  padding: 11px;
+  font-size: 22px;
+  padding: 13px 14px;
 }
 
 .ag-field:focus {
@@ -722,22 +795,28 @@ select {
 }
 
 .ag-btn {
-  border: 1px solid var(--ag-line);
+  border: 1px solid var(--ag-line-forte);
   background: var(--ag-panel-2);
   border-radius: var(--ag-radius);
-  padding: 8px 14px;
+  padding: 10px 18px;
   cursor: pointer;
   color: var(--ag-text);
   font-family: var(--ag-display);
-  font-size: 14px;
+  font-size: 15px;
   letter-spacing: .09em;
   text-transform: uppercase;
+  transition: background .14s ease, border-color .14s ease, color .14s ease;
 }
 
+
+/* Acao primaria e laranja, nao vermelha: no manual o vermelho e perigo, e usar a
+   mesma cor para "Buscar" e para "Excluir" tira o peso do aviso. Texto escuro
+   porque branco sobre quente nao le. */
 .ag-btn.is-primary {
-  background: linear-gradient(180deg, var(--ag-red), #B81216);
-  border-color: #8E0F13;
-  color: #fff;
+  background: linear-gradient(180deg, var(--ag-orange), #E45E00);
+  border-color: #C25200;
+  color: var(--ag-on-warm);
+  font-weight: 700;
 }
 
 .ag-btn.is-warning {
@@ -747,8 +826,20 @@ select {
 }
 
 .ag-btn.is-ok {
-  background: linear-gradient(180deg, var(--ag-ok), #1F7A32);
+  background: linear-gradient(180deg, var(--ag-ok), #1F8A4A);
   border-color: #176126;
+  color: #06210F;
+  font-weight: 700;
+}
+
+/* Vermelho fica reservado para o que nao da para desfazer. */
+.ag-btn.is-danger {
+  background: transparent;
+  border-color: var(--ag-red);
+  color: var(--ag-red-vivid);
+}
+.ag-btn.is-danger:hover:not(:disabled) {
+  background: var(--ag-red);
   color: #fff;
 }
 
@@ -966,18 +1057,18 @@ select {
 .ag-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .ag-table th {
   text-align: left;
   font-family: var(--ag-display);
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: .13em;
   text-transform: uppercase;
   color: var(--ag-muted);
   font-weight: 600;
-  padding: 8px 10px;
+  padding: 11px 13px;
   border-bottom: 1px solid var(--ag-line);
   position: sticky;
   top: 0;
@@ -986,10 +1077,10 @@ select {
 }
 
 .ag-table td {
-  padding: 9px 10px;
+  padding: 12px 13px;
   border-bottom: 1px solid var(--ag-line);
   font-family: var(--ag-mono);
-  font-size: 12.5px;
+  font-size: 14px;
 }
 
 .ag-table tr:hover td {
@@ -1857,18 +1948,31 @@ select {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 7px 10px;
+  padding: 10px 12px;
   border-bottom: 1px solid var(--ag-line);
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
 }
+
+/* O selo de situacao cede espaco antes do contador de fotos: com a fonte maior
+   ele empurrava o numero para fora da lista e a contagem sumia. */
+.placa-lista li .badge-status {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+  padding: 3px 8px;
+}
+
+.placa-lista li.ativa .badge-status { color: var(--ag-on-warm); }
 
 .placa-lista li:last-child { border-bottom: 0; }
 .placa-lista li:hover { background: var(--ag-panel-3); }
 
 .placa-lista li.ativa {
   background: var(--ag-orange);
-  color: #000;
+  color: var(--ag-on-warm);
 }
 
 /* Realce ao arrastar uma foto sobre a placa de destino. */
@@ -1882,12 +1986,20 @@ select {
   font-family: var(--ag-mono);
   font-weight: 700;
   letter-spacing: 0.05em;
+  flex-shrink: 0;
 }
 
 .placa-lista-total {
   margin-left: auto;
   color: var(--ag-muted);
+  font-family: var(--ag-mono);
+  flex-shrink: 0;
 }
+
+.placa-lista li.ativa {
+  color: var(--ag-on-warm);
+}
+.placa-lista li.ativa .placa-lista-total { color: var(--ag-on-warm); }
 
 .placa-lista li.ativa .placa-lista-total { color: #000; }
 
@@ -1983,16 +2095,26 @@ select {
   border-top: 1px solid var(--ag-line);
 }
 
+/* As setas de ordem sao o controle mais usado do QA de carros e eram os menores
+   alvos da tela: 28px quadrados, com a seta legivel. */
 .palco-foto-acoes .ag-btn {
-  padding: 1px 9px;
-  font-size: 14px;
-  line-height: 1.3;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--ag-body);
+  font-size: 19px;
+  line-height: 1;
+  flex-shrink: 0;
 }
 
 .palco-foto-nome {
   flex: 1;
+  min-width: 0;
   text-align: center;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--ag-muted);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2009,11 +2131,11 @@ select {
 }
 
 .ag-plataformas button {
-  padding: 5px 14px;
+  padding: 9px 20px;
   border: 0;
   background: var(--ag-panel-2);
   color: var(--ag-muted);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -2022,7 +2144,7 @@ select {
 
 .ag-plataformas button.ativa {
   background: var(--ag-orange);
-  color: #000;
+  color: var(--ag-on-warm);
 }
 
 .badge-status.organizado { background: var(--ag-panel-3); color: var(--ag-text); }

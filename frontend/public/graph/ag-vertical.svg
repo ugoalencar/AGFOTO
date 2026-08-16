@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 300" width="240" height="300" role="img" aria-label="AG Fotografia">
+  <title>AG Fotografia — assinatura vertical</title>
+  <g transform="translate(120,90) scale(0.72)">
+    <polygon points="100,0 50,86.6 0,46 39.84,23" fill="#FFC400"/>
+    <polygon points="50,86.6 -50,86.6 -39.84,23 0,46" fill="#FF9D00"/>
+    <polygon points="-50,86.6 -100,0 -39.84,-23 -39.84,23" fill="#FF6B00"/>
+    <polygon points="-100,0 -50,-86.6 0,-46 -39.84,-23" fill="#F03D0E"/>
+    <polygon points="-50,-86.6 50,-86.6 39.84,-23 0,-46" fill="#D91E18"/>
+    <polygon points="50,-86.6 100,0 39.84,23 39.84,-23" fill="#A81714"/>
+  </g>
+  <g fill="#FFFFFF">
+    <g transform="translate(59,196) scale(0.62)"><path fill-rule="evenodd" d="M0,100 L34,0 L54,0 L88,100 L66,100 L59.5,80 L28.5,80 L22,100 Z M44,20 L30,72 L58,72 Z"/></g>
+    <g transform="translate(118.52,196) scale(0.62)"><path d="M93.30,25 A50,50 0 1 0 95.32,71.13 L75.38,61.83 A28,28 0 1 1 74.25,36 Z"/><rect x="58" y="45" width="38.9" height="22"/></g>
+  </g>
+  <text x="120" y="284" fill="#FF6B00" text-anchor="middle" font-family="Archivo, Inter, Arial, Helvetica, sans-serif" font-size="18" font-weight="600" textLength="124" lengthAdjust="spacing">FOTOGRAFIA</text>
+</svg>

@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AG Fotografia — marca e interface</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ag-preto:#0A0A0B; --ag-carvao:#101013; --ag-grafite:#17171B; --ag-elevado:#1E1E23;
+  --ag-borda:#26262C; --ag-borda-forte:#35353D;
+  --ag-amarelo:#FFC400; --ag-ambar:#FF9D00; --ag-laranja:#FF6B00;
+  --ag-vermelho-vivo:#F03D0E; --ag-vermelho:#D91E18; --ag-vermelho-fundo:#A81714;
+  --ag-texto:#F4F4F5; --ag-texto-2:#A0A0A8; --ag-texto-3:#6B6B74;
+  --ag-texto-sobre-quente:#1A0C00;
+  --ag-ok:#35C26B; --ag-info:#3B9EFF;
+  --ag-acao:var(--ag-laranja); --ag-acao-hover:var(--ag-ambar);
+  --ag-foco:var(--ag-amarelo); --ag-perigo:var(--ag-vermelho);
+  --ft-titulo:"Archivo",system-ui,sans-serif;
+  --ft-texto:"Inter",system-ui,sans-serif;
+  --ft-dado:"JetBrains Mono",Consolas,monospace;
+  --r-md:8px; --r-lg:14px;
+  --brilho:0 0 0 1px rgba(255,107,0,.35),0 0 24px rgba(255,107,0,.18);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--ag-preto);color:var(--ag-texto);
+  font-family:var(--ft-texto);font-size:15px;line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+h1,h2,h3{font-family:var(--ft-titulo);font-weight:800;letter-spacing:-.02em;line-height:1.05;margin:0}
+p{margin:0 0 12px}
+code{font-family:var(--ft-dado);font-size:12.5px;color:var(--ag-ambar)}
+
+.env{max-width:1140px;margin:0 auto;padding:0 28px}
+.secao{padding:76px 0;border-top:1px solid var(--ag-borda)}
+.olho{
+  font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;
+  color:var(--ag-laranja);margin-bottom:14px;display:block;
+}
+.secao > .env > h2{font-size:34px;margin-bottom:10px}
+.legenda{color:var(--ag-texto-2);max-width:62ch;margin-bottom:38px}
+.nota{font-size:12px;color:var(--ag-texto-3);letter-spacing:.02em}
+
+/* ---------- topo ---------- */
+.capa{padding:96px 0 84px;position:relative;overflow:hidden}
+.capa::after{
+  content:"";position:absolute;inset:auto -20% -60% 40%;height:520px;
+  background:radial-gradient(closest-side,rgba(255,107,0,.16),transparent 70%);
+  pointer-events:none;
+}
+.capa-grade{display:grid;grid-template-columns:1.15fr .85fr;gap:56px;align-items:center;position:relative;z-index:1}
+.capa h1{font-size:clamp(40px,6vw,68px);font-weight:900;margin-bottom:18px}
+.capa h1 em{font-style:normal;color:var(--ag-laranja)}
+.capa p{font-size:17px;color:var(--ag-texto-2);max-width:46ch}
+
+/* ---------- rotor ---------- */
+.rotor-caixa{display:flex;flex-direction:column;align-items:center;gap:22px}
+.ag-rotor{width:100%;max-width:290px;height:auto;display:block}
+.ag-rotor .lamina{fill:var(--ag-borda);transition:fill .5s cubic-bezier(.2,.7,.2,1)}
+.ag-rotor .lamina:nth-child(1){--l:var(--ag-amarelo)}
+.ag-rotor .lamina:nth-child(2){--l:var(--ag-ambar)}
+.ag-rotor .lamina:nth-child(3){--l:var(--ag-laranja)}
+.ag-rotor .lamina:nth-child(4){--l:var(--ag-vermelho-vivo)}
+.ag-rotor .lamina:nth-child(5){--l:var(--ag-vermelho)}
+.ag-rotor .lamina:nth-child(6){--l:var(--ag-vermelho-fundo)}
+.ag-rotor[data-etapas="1"] .lamina:nth-child(-n+1),
+.ag-rotor[data-etapas="2"] .lamina:nth-child(-n+2),
+.ag-rotor[data-etapas="3"] .lamina:nth-child(-n+3),
+.ag-rotor[data-etapas="4"] .lamina:nth-child(-n+4),
+.ag-rotor[data-etapas="5"] .lamina:nth-child(-n+5),
+.ag-rotor[data-etapas="6"] .lamina:nth-child(-n+6){fill:var(--l)}
+.rotor-etapa{font-family:var(--ft-dado);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--ag-texto-2);min-height:18px}
+.rotor-trilha{display:flex;gap:6px}
+.rotor-trilha button{
+  width:34px;height:6px;border:0;padding:0;border-radius:999px;
+  background:var(--ag-borda-forte);cursor:pointer;transition:background .2s
+}
+.rotor-trilha button[aria-current="true"]{background:var(--ag-laranja)}
+
+/* ---------- blocos ---------- */
+.grade{display:grid;gap:20px}
+.g2{grid-template-columns:repeat(2,1fr)}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g4{grid-template-columns:repeat(4,1fr)}
+.card{background:var(--ag-grafite);border:1px solid var(--ag-borda);border-radius:var(--r-lg);padding:24px}
+.card h3{font-size:16px;margin-bottom:8px}
+.card p{font-size:13.5px;color:var(--ag-texto-2);margin:0}
+
+.palco{
+  background:var(--ag-carvao);border:1px solid var(--ag-borda);border-radius:var(--r-lg);
+  padding:34px;display:flex;align-items:center;justify-content:center;min-height:170px
+}
+.palco--claro{background:#F4F4F5;border-color:#DDD}
+.palco svg{max-width:100%;height:auto}
+.rotulo{font-family:var(--ft-dado);font-size:11px;color:var(--ag-texto-3);letter-spacing:.08em;margin-top:10px}
+
+/* ---------- paleta ---------- */
+.tinta{border:1px solid var(--ag-borda);border-radius:var(--r-md);overflow:hidden;background:var(--ag-grafite)}
+.tinta .amostra{height:88px}
+.tinta .info{padding:12px 14px}
+.tinta b{display:block;font-size:13px;font-weight:600}
+.tinta span{display:block;font-family:var(--ft-dado);font-size:11.5px;color:var(--ag-texto-3);margin-top:2px}
+
+/* ---------- tipografia ---------- */
+.tipo-linha{border-bottom:1px solid var(--ag-borda);padding:22px 0;display:grid;grid-template-columns:190px 1fr;gap:24px;align-items:baseline}
+.tipo-linha:last-child{border-bottom:0}
+.tipo-meta{font-family:var(--ft-dado);font-size:11.5px;color:var(--ag-texto-3);line-height:1.6}
+
+/* ---------- componentes ---------- */
+.btn{display:inline-flex;align-items:center;gap:8px;padding:9px 16px;border:1px solid transparent;border-radius:var(--r-md);font:inherit;font-size:13px;font-weight:600;cursor:pointer;transition:all .14s ease}
+.btn:active{transform:translateY(1px)}
+.btn-primario{background:var(--ag-acao);color:var(--ag-texto-sobre-quente)}
+.btn-primario:hover{background:var(--ag-acao-hover)}
+.btn-secundario{background:transparent;border-color:var(--ag-borda-forte);color:var(--ag-texto)}
+.btn-secundario:hover{border-color:var(--ag-laranja);color:var(--ag-laranja)}
+.btn-perigo{background:transparent;border-color:var(--ag-perigo);color:var(--ag-vermelho-vivo)}
+.btn-perigo:hover{background:var(--ag-perigo);color:#fff}
+.btn-fantasma{background:transparent;color:var(--ag-texto-2)}
+.btn-fantasma:hover{background:var(--ag-elevado);color:var(--ag-texto)}
+
+.selo{display:inline-flex;align-items:center;gap:6px;padding:3px 10px 3px 8px;border-radius:999px;border:1px solid currentColor;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;background:color-mix(in srgb,currentColor 12%,transparent)}
+.selo::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.s-aguardando{color:var(--ag-texto-3)} .s-edicao{color:var(--ag-ambar)}
+.s-conferencia{color:var(--ag-amarelo)} .s-retrabalho{color:var(--ag-laranja)}
+.s-aprovado{color:var(--ag-ok)} .s-entregando{color:var(--ag-info)}
+.s-entregue{color:var(--ag-ok)} .s-erro{color:var(--ag-vermelho)}
+.s-entregando::before{animation:pulsar 1.2s ease-in-out infinite}
+@keyframes pulsar{0%,100%{opacity:1}50%{opacity:.25}}
+
+.dado{font-family:var(--ft-dado);font-size:13px;font-variant-numeric:tabular-nums}
+
+/* ---------- maquete ---------- */
+.app{border:1px solid var(--ag-borda);border-radius:var(--r-lg);overflow:hidden;background:var(--ag-carvao)}
+.app-topo{display:flex;align-items:center;gap:18px;padding:12px 18px;background:var(--ag-preto);border-bottom:1px solid var(--ag-borda)}
+.app-topo nav{display:flex;gap:4px;margin-left:14px}
+.app-topo nav a{padding:6px 12px;border-radius:6px;font-size:13px;font-weight:500;color:var(--ag-texto-2);text-decoration:none}
+.app-topo nav a[aria-current]{background:var(--ag-elevado);color:var(--ag-texto);box-shadow:inset 0 -2px 0 var(--ag-laranja)}
+.app-corpo{display:grid;grid-template-columns:250px 1fr;min-height:400px}
+.app-lateral{border-right:1px solid var(--ag-borda);padding:20px 16px;background:var(--ag-carvao)}
+.fila-item{display:flex;gap:12px;align-items:center;padding:11px 12px;border-radius:var(--r-md);cursor:pointer;margin-bottom:4px}
+.fila-item:hover{background:var(--ag-elevado)}
+.fila-item[aria-selected="true"]{background:var(--ag-elevado);box-shadow:inset 2px 0 0 var(--ag-laranja)}
+.fila-item .ag-rotor{width:26px;flex:0 0 26px}
+.fila-item small{display:block;color:var(--ag-texto-3);font-size:11.5px}
+.app-painel{padding:24px;background:var(--ag-grafite)}
+
+table{width:100%;border-collapse:collapse}
+th{text-align:left;padding:10px 12px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ag-texto-3);border-bottom:1px solid var(--ag-borda)}
+td{padding:12px;border-bottom:1px solid var(--ag-borda);font-size:13.5px}
+tbody tr:hover{background:var(--ag-elevado)}
+
+.soltar{border:1.5px dashed var(--ag-borda-forte);border-radius:var(--r-lg);padding:40px 24px;text-align:center;color:var(--ag-texto-2);transition:all .16s ease}
+.soltar:hover{border-color:var(--ag-laranja);border-style:solid;background:rgba(255,107,0,.07);color:var(--ag-texto)}
+.progresso{height:4px;border-radius:999px;background:var(--ag-borda);overflow:hidden}
+.progresso>i{display:block;height:100%;background:linear-gradient(90deg,var(--ag-amarelo),var(--ag-ambar),var(--ag-laranja),var(--ag-vermelho-vivo))}
+
+.errado{position:relative}
+.errado::after{content:"";position:absolute;inset:0;border-radius:var(--r-lg);box-shadow:inset 0 0 0 1px var(--ag-vermelho)}
+.errado .rotulo{color:var(--ag-vermelho)}
+
+footer{padding:56px 0 80px;border-top:1px solid var(--ag-borda);color:var(--ag-texto-3);font-size:13px}
+
+@media(max-width:900px){
+  .capa-grade,.g2,.g3,.g4{grid-template-columns:1fr}
+  .app-corpo{grid-template-columns:1fr}
+  .app-lateral{border-right:0;border-bottom:1px solid var(--ag-borda)}
+  .tipo-linha{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){
+  *{animation:none!important;transition:none!important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="iris" viewBox="-110 -110 220 220">
+    <polygon points="100,0 50,86.6 0,46 39.84,23" fill="#FFC400"/>
+    <polygon points="50,86.6 -50,86.6 -39.84,23 0,46" fill="#FF9D00"/>
+    <polygon points="-50,86.6 -100,0 -39.84,-23 -39.84,23" fill="#FF6B00"/>
+    <polygon points="-100,0 -50,-86.6 0,-46 -39.84,-23" fill="#F03D0E"/>
+    <polygon points="-50,-86.6 50,-86.6 39.84,-23 0,-46" fill="#D91E18"/>
+    <polygon points="50,-86.6 100,0 39.84,23 39.84,-23" fill="#A81714"/>
+  </symbol>
+  <symbol id="iris-mono" viewBox="-110 -110 220 220">
+    <polygon points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38" fill="currentColor"/>
+    <polygon points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29" fill="currentColor"/>
+    <polygon points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91" fill="currentColor"/>
+    <polygon points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38" fill="currentColor"/>
+    <polygon points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29" fill="currentColor"/>
+    <polygon points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91" fill="currentColor"/>
+  </symbol>
+  <symbol id="marca" viewBox="0 0 390 160">
+    <use href="#iris" x="10" y="10" width="140" height="140"/>
+    <g fill="currentColor">
+      <g transform="translate(186,34) scale(0.62)"><path fill-rule="evenodd" d="M0,100 L34,0 L54,0 L88,100 L66,100 L59.5,80 L28.5,80 L22,100 Z M44,20 L30,72 L58,72 Z"/></g>
+      <g transform="translate(245.5,34) scale(0.62)"><path d="M93.30,25 A50,50 0 1 0 95.32,71.13 L75.38,61.83 A28,28 0 1 1 74.25,36 Z"/><rect x="58" y="45" width="38.9" height="22"/></g>
+    </g>
+    <text x="188" y="122" fill="#FF6B00" font-family="Archivo,Inter,Arial,sans-serif" font-size="18" font-weight="600" textLength="124" lengthAdjust="spacing">FOTOGRAFIA</text>
+  </symbol>
+</svg>
+
+<!-- ============================ CAPA ============================ -->
+<header class="capa">
+  <div class="env capa-grade">
+    <div>
+      <span class="olho">Marca e interface</span>
+      <h1>Toda imagem tem<br>uma <em>passagem</em>.</h1>
+      <p>Identidade da AG Fotografia e o sistema visual da plataforma de produção
+         e movimentação de imagens: do recebimento da OS à entrega no cliente.</p>
+      <p class="nota" style="margin-top:22px">Versão 1.0 &middot; Preto, vermelho, laranja e amarelo</p>
+    </div>
+
+    <div class="rotor-caixa">
+      <svg class="ag-rotor" id="rotorCapa" viewBox="-110 -110 220 220" data-etapas="3" aria-label="Rotor de etapas">
+        <polygon class="lamina" points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38"/>
+        <polygon class="lamina" points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29"/>
+        <polygon class="lamina" points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91"/>
+        <polygon class="lamina" points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38"/>
+        <polygon class="lamina" points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29"/>
+        <polygon class="lamina" points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91"/>
+      </svg>
+      <div class="rotor-etapa" id="rotorTexto">Em edição</div>
+      <div class="rotor-trilha" id="rotorTrilha" role="group" aria-label="Etapa da ordem de serviço"></div>
+    </div>
+  </div>
+</header>
+
+<!-- ============================ SÍMBOLO ============================ -->
+<section class="secao">
+  <div class="env">
+    <span class="olho">Símbolo</span>
+    <h2>Um diafragma de seis lâminas</h2>
+    <p class="legenda">A marca é o mecanismo que abre e fecha a passagem da luz — e, na plataforma,
+      a passagem da imagem. As seis lâminas correm em varredura quente, do amarelo ao vermelho
+      profundo, na ordem em que uma OS avança pelo fluxo.</p>
+
+    <div class="grade g3">
+      <div>
+        <div class="palco"><svg width="150" height="150"><use href="#iris" width="150" height="150"/></svg></div>
+        <div class="rotulo">símbolo · uso principal</div>
+      </div>
+      <div>
+        <div class="palco" style="color:var(--ag-texto)"><svg width="150" height="150"><use href="#iris-mono" width="150" height="150"/></svg></div>
+        <div class="rotulo">monocromático claro · 1 cor</div>
+      </div>
+      <div>
+        <div class="palco palco--claro" style="color:var(--ag-preto)"><svg width="150" height="150"><use href="#iris-mono" width="150" height="150"/></svg></div>
+        <div class="rotulo">monocromático escuro · 1 cor</div>
+      </div>
+    </div>
+
+    <div class="grade g3" style="margin-top:20px">
+      <div class="card">
+        <h3>Construção</h3>
+        <p>Hexágono regular de raio 100. A abertura interna é um hexágono de raio 46 girado 30°.
+          Cada lâmina vai de um vértice externo ao vértice interno seguinte — a inclinação é o que
+          dá o sentido de rotação.</p>
+      </div>
+      <div class="card">
+        <h3>Área de proteção</h3>
+        <p>Reserve em volta da assinatura uma margem igual ao raio da abertura interna
+          (<code>0,46 × altura do símbolo</code>). Nada entra nessa faixa: nem texto, nem borda,
+          nem outra marca.</p>
+      </div>
+      <div class="card">
+        <h3>Tamanho mínimo</h3>
+        <p>Símbolo isolado: 20&nbsp;px de altura em tela, 8&nbsp;mm impresso.
+          Assinatura horizontal: 120&nbsp;px / 30&nbsp;mm. Abaixo disso, use só o símbolo.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ ASSINATURAS ============================ -->
+<section class="secao">
+  <div class="env">
+    <span class="olho">Assinaturas</span>
+    <h2>Quatro versões, um só desenho</h2>
+    <p class="legenda">A horizontal é a padrão. A vertical serve para espaços estreitos e altos.
+      As monocromáticas cobrem gravação, carimbo, marca d'água e fundo fotográfico.</p>
+
+    <div class="grade g2">
+      <div>
+        <div class="palco" style="color:var(--ag-texto)">
+          <svg width="330" height="135" viewBox="0 0 390 160"><use href="#marca" width="390" height="160"/></svg>
+        </div>
+        <div class="rotulo">horizontal · padrão</div>
+      </div>
+      <div>
+        <div class="palco" style="color:var(--ag-texto)">
+          <svg width="150" height="190" viewBox="0 0 240 300">
+            <use href="#iris" x="34" y="4" width="172" height="172"/>
+            <g fill="currentColor">
+              <g transform="translate(59,196) scale(0.62)"><path fill-rule="evenodd" d="M0,100 L34,0 L54,0 L88,100 L66,100 L59.5,80 L28.5,80 L22,100 Z M44,20 L30,72 L58,72 Z"/></g>
+              <g transform="translate(118.5,196) scale(0.62)"><path d="M93.30,25 A50,50 0 1 0 95.32,71.13 L75.38,61.83 A28,28 0 1 1 74.25,36 Z"/><rect x="58" y="45" width="38.9" height="22"/></g>
+            </g>
+            <text x="120" y="284" fill="#FF6B00" text-anchor="middle" font-family="Archivo,Inter,Arial,sans-serif" font-size="18" font-weight="600" textLength="124" lengthAdjust="spacing">FOTOGRAFIA</text>
+          </svg>
+        </div>
+        <div class="rotulo">vertical · espaços estreitos</div>
+      </div>
+      <div>
+        <div class="palco palco--claro" style="color:var(--ag-preto)">
+          <svg width="330" height="135" viewBox="0 0 390 160">
+            <use href="#iris-mono" x="10" y="10" width="140" height="140"/>
+            <g fill="currentColor">
+              <g transform="translate(186,34) scale(0.62)"><path fill-rule="evenodd" d="M0,100 L34,0 L54,0 L88,100 L66,100 L59.5,80 L28.5,80 L22,100 Z M44,20 L30,72 L58,72 Z"/></g>
+              <g transform="translate(245.5,34) scale(0.62)"><path d="M93.30,25 A50,50 0 1 0 95.32,71.13 L75.38,61.83 A28,28 0 1 1 74.25,36 Z"/><rect x="58" y="45" width="38.9" height="22"/></g>
+              <text x="188" y="122" font-family="Archivo,Inter,Arial,sans-serif" font-size="18" font-weight="600" textLength="124" lengthAdjust="spacing">FOTOGRAFIA</text>
+            </g>
+          </svg>
+        </div>
+        <div class="rotulo">monocromática escura · fundo claro</div>
+      </div>
+      <div>
+        <div class="palco" style="gap:22px">
+          <svg width="86" height="86" viewBox="0 0 256 256"><rect width="256" height="256" rx="56" fill="#0A0A0B"/><use href="#iris" x="18" y="18" width="220" height="220"/></svg>
+          <svg width="52" height="52" viewBox="0 0 256 256"><rect width="256" height="256" rx="56" fill="#0A0A0B"/><use href="#iris" x="18" y="18" width="220" height="220"/></svg>
+          <svg width="30" height="30" viewBox="0 0 256 256"><rect width="256" height="256" rx="56" fill="#0A0A0B"/><use href="#iris" x="18" y="18" width="220" height="220"/></svg>
+        </div>
+        <div class="rotulo">ícone de aplicativo e favicon · 256 / 128 / 32</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ USOS INCORRETOS ============================ -->
+<section class="secao">
+  <div class="env">
+    <span class="olho">Limites</span>
+    <h2>O que quebra a marca</h2>
+    <p class="legenda">A varredura quente é a identidade. Trocar a ordem das lâminas, recolorir ou
+      distorcer o hexágono descaracteriza o símbolo mesmo quando a forma continua reconhecível.</p>
+
+    <div class="grade g4">
+      <div class="errado">
+        <div class="palco"><svg width="110" height="110" style="filter:hue-rotate(160deg)"><use href="#iris" width="110" height="110"/></svg></div>
+        <div class="rotulo">não recolorir fora da paleta</div>
+      </div>
+      <div class="errado">
+        <div class="palco"><svg width="150" height="90" viewBox="-110 -110 220 220" preserveAspectRatio="none"><use href="#iris" x="-110" y="-110" width="220" height="220"/></svg></div>
+        <div class="rotulo">não distorcer a proporção</div>
+      </div>
+      <div class="errado">
+        <div class="palco"><svg width="110" height="110" style="opacity:.28"><use href="#iris" width="110" height="110"/></svg></div>
+        <div class="rotulo">não aplicar com opacidade reduzida</div>
+      </div>
+      <div class="errado">
+        <div class="palco" style="background:#2A6E3F"><svg width="110" height="110"><use href="#iris" width="110" height="110"/></svg></div>
+        <div class="rotulo">não usar sobre fundo colorido</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ COR ============================ -->
+<section class="secao">
+  <div class="env">
+    <span class="olho">Cor</span>
+    <h2>Preto de base, quente de sinal</h2>
+    <p class="legenda">O preto é o ambiente permanente — em revisão de imagem, qualquer cor no fundo
+      contamina a leitura do produto fotografado. A varredura quente aparece só onde há ação, foco
+      ou estado. Verde e azul entram apenas como sinal funcional e nunca em peças de marca.</p>
+
+    <h3 style="font-size:15px;margin:0 0 14px;color:var(--ag-texto-2)">Varredura quente</h3>
+    <div class="grade g3" style="margin-bottom:34px">
+      <div class="tinta"><div class="amostra" style="background:#FFC400"></div><div class="info"><b>Amarelo</b><span>#FFC400 · --ag-amarelo</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#FF9D00"></div><div class="info"><b>Âmbar</b><span>#FF9D00 · --ag-ambar</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#FF6B00"></div><div class="info"><b>Laranja</b><span>#FF6B00 · --ag-laranja</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#F03D0E"></div><div class="info"><b>Vermelho vivo</b><span>#F03D0E · --ag-vermelho-vivo</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#D91E18"></div><div class="info"><b>Vermelho</b><span>#D91E18 · --ag-vermelho</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#A81714"></div><div class="info"><b>Vermelho profundo</b><span>#A81714 · --ag-vermelho-fundo</span></div></div>
+    </div>
+
+    <h3 style="font-size:15px;margin:0 0 14px;color:var(--ag-texto-2)">Superfícies e texto</h3>
+    <div class="grade g4" style="margin-bottom:34px">
+      <div class="tinta"><div class="amostra" style="background:#0A0A0B"></div><div class="info"><b>Preto</b><span>#0A0A0B · fundo</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#101013"></div><div class="info"><b>Carvão</b><span>#101013 · painéis</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#17171B"></div><div class="info"><b>Grafite</b><span>#17171B · cards</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#1E1E23"></div><div class="info"><b>Elevado</b><span>#1E1E23 · modais</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#26262C"></div><div class="info"><b>Borda</b><span>#26262C</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#F4F4F5"></div><div class="info"><b>Texto</b><span>#F4F4F5</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#A0A0A8"></div><div class="info"><b>Texto 2</b><span>#A0A0A8</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#6B6B74"></div><div class="info"><b>Texto 3</b><span>#6B6B74</span></div></div>
+    </div>
+
+    <h3 style="font-size:15px;margin:0 0 14px;color:var(--ag-texto-2)">Funcionais</h3>
+    <div class="grade g4">
+      <div class="tinta"><div class="amostra" style="background:#35C26B"></div><div class="info"><b>Aprovado</b><span>#35C26B · --ag-ok</span></div></div>
+      <div class="tinta"><div class="amostra" style="background:#3B9EFF"></div><div class="info"><b>Em trânsito</b><span>#3B9EFF · --ag-info</span></div></div>
+    </div>
+    <p class="nota" style="margin-top:16px">Contraste verificado: texto <code>#F4F4F5</code> sobre <code>#0A0A0B</code> = 18,7:1.
+      Sobre laranja e amarelo, o texto é sempre <code>#1A0C00</code> — nunca branco.</p>
+  </div>
+</section>
+
+<!-- ============================ TIPOGRAFIA ============================ -->
+<section class="secao">
+  <div class="env">
+    <span class="olho">Tipografia</span>
+    <h2>Três vozes, sem sobreposição</h2>
+    <p class="legenda">Archivo carrega o peso da marca. Inter faz o trabalho de interface.
+      JetBrains Mono existe por um motivo específico: GTIN, número de OS e nome de arquivo precisam
+      de dígitos de largura fixa para o olho comparar coluna com coluna.</p>
+
+    <div class="tipo-linha">
+      <div class="tipo-meta">Archivo 900<br>títulos e assinatura<br>−2% de tracking</div>
+      <div style="font-family:var(--ft-titulo);font-weight:900;font-size:44px;letter-spacing:-.02em">Fila de produção</div>
+    </div>
+    <div class="tipo-linha">
+      <div class="tipo-meta">Archivo 700<br>títulos de seção<br>26 / 19 px</div>
+      <div style="font-family:var(--ft-titulo);font-weight:700;font-size:26px;letter-spacing:-.01em">Conferência de GTIN</div>
+    </div>
+    <div class="tipo-linha">
+      <div class="tipo-meta">Inter 400/600<br>corpo e rótulos<br>15 / 13 px · 1,55</div>
+      <div style="max-width:52ch;color:var(--ag-texto-2)">A OS 4821 tem 36 GTIN aguardando conferência. Fotos reprovadas voltam
+        para retrabalho com o motivo registrado e seguem visíveis para o fotógrafo original.</div>
+    </div>
+    <div class="tipo-linha">
+      <div class="tipo-meta">Inter 700 · versalete<br>rótulos de coluna<br>11 px · +16% tracking</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--ag-texto-3)">Ordem de serviço · Fotógrafo · Estado</div>
+    </div>
+    <div class="tipo-linha">
+      <div class="tipo-meta">JetBrains Mono 400/600<br>códigos e arquivos<br>13 px · tabular</div>
+      <div class="dado">7891000315507&nbsp;&nbsp;OS-4821&nbsp;&nbsp;/rt/7891000315507_01.tif</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ ROTOR ============================ -->
+<section class="secao">
+  <div class="env">
+    <span class="olho">Elemento de sistema</span>
+    <h2>O símbolo também é o indicador de progresso</h2>
+    <p class="legenda">Cada lâmina é uma etapa do fluxo. O rotor aparece do favicon à linha da fila:
+      de relance, sem ler texto, dá para ver quanto falta. É a única peça animada da interface —
+      e ela só se move quando o estado realmente muda.</p>
+
+    <div class="grade g3">
+      <div class="card" style="display:flex;gap:18px;align-items:center">
+        <svg class="ag-rotor" viewBox="-110 -110 220 220" data-etapas="1" style="width:64px;flex:0 0 64px">
+          <polygon class="lamina" points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38"/><polygon class="lamina" points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29"/><polygon class="lamina" points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91"/><polygon class="lamina" points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38"/><polygon class="lamina" points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29"/><polygon class="lamina" points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91"/>
+        </svg>
+        <div><h3>Recebida</h3><p>OS aberta, pastas criadas, nada fotografado.</p></div>
+      </div>
+      <div class="card" style="display:flex;gap:18px;align-items:center">
+        <svg class="ag-rotor" viewBox="-110 -110 220 220" data-etapas="4" style="width:64px;flex:0 0 64px">
+          <polygon class="lamina" points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38"/><polygon class="lamina" points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29"/><polygon class="lamina" points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91"/><polygon class="lamina" points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38"/><polygon class="lamina" points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29"/><polygon class="lamina" points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91"/>
+        </svg>
+        <div><h3>Em conferência</h3><p>Edição concluída, aguardando decisão por GTIN.</p></div>
+      </div>
+      <div class="card" style="display:flex;gap:18px;align-items:center">
+        <svg class="ag-rotor" viewBox="-110 -110 220 220" data-etapas="6" style="width:64px;flex:0 0 64px">
+          <polygon class="lamina" points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38"/><polygon class="lamina" points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29"/><polygon class="lamina" points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91"/><polygon class="lamina" points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38"/><polygon class="lamina" points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29"/><polygon class="lamina" points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91"/>
+        </svg>
+        <div><h3>Entregue</h3><p>Arquivos no destino, com recibo registrado.</p></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ COMPONENTES ============================ -->
+<section class="secao">
+  <div class="env">
+    <span class="olho">Componentes</span>
+    <h2>Ações, estados e dados</h2>
+    <p class="legenda">Laranja é a ação principal e aparece uma vez por tela. Vermelho é destrutivo
+      ou falha — nunca decoração. Amarelo é foco e atenção.</p>
+
+    <div class="grade g2">
+      <div class="card">
+        <h3 style="margin-bottom:18px">Botões</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <button class="btn btn-primario">Enviar para conferência</button>
+          <button class="btn btn-secundario">Abrir pasta</button>
+          <button class="btn btn-perigo">Reprovar GTIN</button>
+          <button class="btn btn-fantasma">Cancelar</button>
+        </div>
+        <p style="margin-top:16px;font-size:12.5px;color:var(--ag-texto-3)">
+          O rótulo diz o que acontece. O botão que diz “Aprovar” produz o aviso “Aprovado”.</p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:18px">Estados do fluxo</h3>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <span class="selo s-aguardando">Aguardando</span>
+          <span class="selo s-edicao">Em edição</span>
+          <span class="selo s-conferencia">Conferência</span>
+          <span class="selo s-retrabalho">Retrabalho</span>
+          <span class="selo s-aprovado">Aprovado</span>
+          <span class="selo s-entregando">Entregando</span>
+          <span class="selo s-entregue">Entregue</span>
+          <span class="selo s-erro">Erro na entrega</span>
+        </div>
+        <p style="margin-top:16px;font-size:12.5px;color:var(--ag-texto-3)">
+          O ponto de “Entregando” pulsa. Os demais são estáticos — movimento significa trabalho em curso.</p>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:18px">Recebimento de arquivos</h3>
+        <div class="soltar">
+          <div style="font-weight:600;margin-bottom:4px">Solte as imagens aqui</div>
+          <div style="font-size:12.5px">TIF, CR3 ou JPG · o GTIN é lido do nome do arquivo</div>
+        </div>
+        <div style="margin-top:16px">
+          <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+            <span class="dado">7891000315507_01.tif</span><span style="color:var(--ag-texto-3)">64%</span>
+          </div>
+          <div class="progresso"><i style="width:64%"></i></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 style="margin-bottom:18px">Vazio e falha</h3>
+        <div style="border:1px solid var(--ag-borda);border-radius:8px;padding:20px;text-align:center;margin-bottom:14px">
+          <div style="font-weight:600;font-size:14px">Nenhuma OS na fila</div>
+          <div style="font-size:12.5px;color:var(--ag-texto-3);margin-top:4px">Importe uma OS do Redmine para começar.</div>
+        </div>
+        <div style="border:1px solid var(--ag-vermelho);border-radius:8px;padding:14px 16px;background:rgba(217,30,24,.08)">
+          <div style="font-weight:600;font-size:13.5px;color:var(--ag-vermelho-vivo)">3 arquivos sem GTIN correspondente</div>
+          <div style="font-size:12.5px;color:var(--ag-texto-2);margin-top:4px">Abra o conflito e associe cada arquivo a um GTIN da OS.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ MAQUETE ============================ -->
+<section class="secao">
+  <div class="env">
+    <span class="olho">Interface</span>
+    <h2>Tudo junto</h2>
+    <p class="legenda">A fila à esquerda, a decisão à direita, o rotor repetindo o estado em cada linha.</p>
+
+    <div class="app">
+      <div class="app-topo">
+        <svg width="110" height="45" viewBox="0 0 390 160" style="color:var(--ag-texto)"><use href="#marca" width="390" height="160"/></svg>
+        <nav>
+          <a href="#" aria-current="page">Produção</a>
+          <a href="#">Conferência</a>
+          <a href="#">Entregas</a>
+          <a href="#">Relatórios</a>
+        </nav>
+        <div style="margin-left:auto;display:flex;gap:10px;align-items:center">
+          <span class="selo s-entregando">2 entregando</span>
+          <button class="btn btn-primario">Nova OS</button>
+        </div>
+      </div>
+
+      <div class="app-corpo">
+        <aside class="app-lateral">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--ag-texto-3);margin-bottom:12px">Fila · 4 OS</div>
+
+          <div class="fila-item" aria-selected="true">
+            <svg class="ag-rotor" viewBox="-110 -110 220 220" data-etapas="4"><polygon class="lamina" points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38"/><polygon class="lamina" points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29"/><polygon class="lamina" points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91"/><polygon class="lamina" points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38"/><polygon class="lamina" points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29"/><polygon class="lamina" points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91"/></svg>
+            <div><span class="dado" style="font-weight:600">OS-4821</span><small>36 GTIN · Karoline</small></div>
+          </div>
+          <div class="fila-item">
+            <svg class="ag-rotor" viewBox="-110 -110 220 220" data-etapas="2"><polygon class="lamina" points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38"/><polygon class="lamina" points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29"/><polygon class="lamina" points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91"/><polygon class="lamina" points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38"/><polygon class="lamina" points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29"/><polygon class="lamina" points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91"/></svg>
+            <div><span class="dado" style="font-weight:600">OS-4822</span><small>12 GTIN · Lilian</small></div>
+          </div>
+          <div class="fila-item">
+            <svg class="ag-rotor" viewBox="-110 -110 220 220" data-etapas="6"><polygon class="lamina" points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38"/><polygon class="lamina" points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29"/><polygon class="lamina" points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91"/><polygon class="lamina" points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38"/><polygon class="lamina" points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29"/><polygon class="lamina" points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91"/></svg>
+            <div><span class="dado" style="font-weight:600">OS-4818</span><small>58 GTIN · entregue</small></div>
+          </div>
+          <div class="fila-item">
+            <svg class="ag-rotor ag-rotor--erro" viewBox="-110 -110 220 220" data-etapas="5" style="--ag-amarelo:var(--ag-vermelho);--ag-ambar:var(--ag-vermelho);--ag-laranja:var(--ag-vermelho);--ag-vermelho-vivo:var(--ag-vermelho);--ag-vermelho-fundo:var(--ag-vermelho)"><polygon class="lamina" points="96.48,2.99 49.98,83.53 3.48,45.77 40.53,24.38"/><polygon class="lamina" points="45.65,85.05 -47.35,85.05 -37.90,25.90 -0.85,47.29"/><polygon class="lamina" points="-50.83,82.06 -97.33,1.52 -41.38,-19.87 -41.38,22.91"/><polygon class="lamina" points="-96.48,-2.99 -49.98,-83.53 -3.48,-45.77 -40.53,-24.38"/><polygon class="lamina" points="-45.65,-85.05 47.35,-85.05 37.90,-25.90 0.85,-47.29"/><polygon class="lamina" points="50.83,-82.06 97.33,-1.52 41.38,19.87 41.38,-22.91"/></svg>
+            <div><span class="dado" style="font-weight:600">OS-4815</span><small style="color:var(--ag-vermelho)">falha na entrega</small></div>
+          </div>
+        </aside>
+
+        <div class="app-painel">
+          <div style="display:flex;align-items:baseline;gap:14px;margin-bottom:20px">
+            <h3 style="font-size:22px">OS-4821</h3>
+            <span class="selo s-conferencia">Conferência</span>
+            <span style="margin-left:auto;font-size:12.5px;color:var(--ag-texto-3)">28 de 36 conferidos</span>
+          </div>
+
+          <table>
+            <thead>
+              <tr><th>GTIN</th><th>Produto</th><th>Fotos</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="dado">7891000315507</td><td>Leite Ninho 400g</td><td class="dado">6</td>
+                <td><span class="selo s-aprovado">Aprovado</span></td>
+                <td style="text-align:right"><button class="btn btn-fantasma">Ver</button></td>
+              </tr>
+              <tr>
+                <td class="dado">7896004400112</td><td>Café Pilão 500g</td><td class="dado">4</td>
+                <td><span class="selo s-retrabalho">Retrabalho</span></td>
+                <td style="text-align:right"><button class="btn btn-fantasma">Ver</button></td>
+              </tr>
+              <tr>
+                <td class="dado">7891910000197</td><td>Açúcar União 1kg</td><td class="dado">5</td>
+                <td><span class="selo s-conferencia">Conferência</span></td>
+                <td style="text-align:right"><button class="btn btn-secundario">Decidir</button></td>
+              </tr>
+              <tr>
+                <td class="dado">7894900011517</td><td>Coca-Cola 2L</td><td class="dado">0</td>
+                <td><span class="selo s-aguardando">Aguardando</span></td>
+                <td style="text-align:right"><button class="btn btn-fantasma">Ver</button></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div style="display:flex;gap:10px;margin-top:22px">
+            <button class="btn btn-primario">Aprovar selecionados</button>
+            <button class="btn btn-perigo">Enviar para retrabalho</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="env">
+    AG Fotografia · manual de marca e sistema de interface · v1.0<br>
+    Arquivos da marca em SVG e tokens em <code>ag-tema.css</code>.
+  </div>
+</footer>
+
+<script>
+(function () {
+  var etapas = [
+    ['Recebida', 1], ['Em produção', 2], ['Em edição', 3],
+    ['Em conferência', 4], ['Aprovada', 5], ['Entregue', 6]
+  ];
+  var rotor = document.getElementById('rotorCapa');
+  var texto = document.getElementById('rotorTexto');
+  var trilha = document.getElementById('rotorTrilha');
+  var atual = 2;
+
+  function pintar(i) {
+    atual = i;
+    rotor.setAttribute('data-etapas', etapas[i][1]);
+    texto.textContent = etapas[i][0];
+    Array.prototype.forEach.call(trilha.children, function (b, k) {
+      b.setAttribute('aria-current', k === i ? 'true' : 'false');
+    });
+  }
+
+  etapas.forEach(function (e, i) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('aria-label', e[0]);
+    b.addEventListener('click', function () { pintar(i); parar(); });
+    trilha.appendChild(b);
+  });
+
+  var lento = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var timer = null;
+  function parar() { if (timer) { clearInterval(timer); timer = null; } }
+  pintar(atual);
+  if (!lento) {
+    timer = setInterval(function () { pintar((atual + 1) % etapas.length); }, 2200);
+  }
+})();
+</script>
+</body>
+</html>
