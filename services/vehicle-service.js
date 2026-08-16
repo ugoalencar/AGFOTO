@@ -8,9 +8,13 @@ import { VehicleBatch, Vehicle } from '../domain/vehicle.js';
 import { config } from '../server/config.js';
 import { createSecureDirectory, assertInsideRoot, validateImageSignature } from '../server/secure-filesystem.js';
 import { lerDataDeCaptura } from '../server/exif-data.js';
+import { TesseractPlateOcrProvider } from './tesseract-plate-provider.js';
 import { PlateOcrService, MockPlateOcrProvider } from './plate-ocr-service.js';
 import { VehicleRepository } from '../repositories/vehicle-repository.js';
 import { auditLogger } from '../server/audit-logger.js';
+
+// Leitura de placa roda na propria maquina, sem servico externo.
+const ocrProvider = new TesseractPlateOcrProvider();
 
 // Extensoes aceitas na pasta de origem (JPG da camera e RAW).
 const EXTENSOES_FOTO = ['.jpg', '.jpeg', '.png', '.webp', '.cr2', '.cr3', '.nef', '.arw', '.dng'];
@@ -92,7 +96,7 @@ export class VehicleService {
    * imagem de verdade entra na lista, e a pasta lida fica guardada para ser a
    * unica de onde as miniaturas podem ser servidas depois.
    */
-  static async scanFolder(caminho) {
+  static async scanFolder(caminho, { lerPlacas = true } = {}) {
     try {
       if (!caminho || typeof caminho !== 'string') {
         return { ok: false, error: 'Informe a pasta das fotos' };
@@ -142,6 +146,20 @@ export class VehicleService {
         });
       }
 
+      // Leitura de placa: a foto que traz uma placa legivel e a que abre um
+      // carro. O que sair daqui e sugestao - quem confirma e o usuario, porque
+      // o OCR erra com placa suja, torta ou de longe.
+      if (lerPlacas) {
+        for (const foto of fotos) {
+          const encontrada = await ocrProvider.detectPlate(foto.path);
+          if (encontrada) {
+            foto.placaSugerida = encontrada.normalizedText;
+            foto.placaConfianca = encontrada.confidence;
+            foto.placaFormato = encontrada.format;
+          }
+        }
+      }
+
       // A sequencia e o que separa um veiculo do outro, entao a ordem importa.
       // Nome como desempate para fotos do mesmo segundo (rajada).
       fotos.sort((a, b) => (a.ordenacaoMs - b.ordenacaoMs)
@@ -154,10 +172,11 @@ export class VehicleService {
       });
 
       const semExif = fotos.filter(f => f.origemDaHora === 'arquivo').length;
+      const placasLidas = fotos.filter(f => f.placaSugerida).length;
 
       pastaOrigemAtual = pasta;
 
-      return { ok: true, data: { pasta, fotos, total: fotos.length, semExif } };
+      return { ok: true, data: { pasta, fotos, total: fotos.length, semExif, placasLidas } };
     } catch (err) {
       return { ok: false, error: `Nao foi possivel ler a pasta: ${err.message}` };
     }

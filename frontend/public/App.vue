@@ -530,6 +530,10 @@
               {{ carrosFotos.length }} fotos · {{ carrosGrupos.length }} carro(s) ·
               {{ carrosPlacasInformadas }} placa(s)
             </div>
+            <div v-if="carrosPlacasLidas > 0" style="font-size:11px;color:var(--ag-ok);margin-bottom:8px">
+              {{ carrosPlacasLidas }} placa(s) lida(s) das fotos. Confira antes de importar:
+              o OCR erra com placa suja, torta ou de longe.
+            </div>
 
             <!-- Fotos do mesmo carro saem juntas; entre um carro e outro ha uma
                  pausa. O corte e ajustavel porque esse ritmo muda com o trabalho. -->
@@ -624,6 +628,9 @@
                 <span class="grupo-info">
                   {{ grupo.fotos.length }} foto(s) · {{ formatarHora(grupo.fotos[0].capturadaEm) }}
                   &rarr; {{ formatarHora(grupo.fotos[grupo.fotos.length - 1].capturadaEm) }}
+                </span>
+                <span v-if="grupo.lida" class="grupo-lida" title="Placa lida da foto - confira">
+                  lida
                 </span>
                 <input class="ag-field grupo-placa" :value="grupo.placa"
                        type="text" maxlength="8" placeholder="placa deste carro"
@@ -1026,6 +1033,7 @@ export default {
     const carrosEmCurso = ref(false);
     const carrosSemExif = ref(0);
     const carrosIntervalo = ref(3);
+    const carrosPlacasLidas = ref(0);
     const placasPorGrupo = ref({});
     const carrosRelData = ref('');
     const carrosRelStatus = ref('');
@@ -1104,8 +1112,19 @@ export default {
         const anterior = atual?.fotos[atual.fotos.length - 1];
         const pausa = anterior ? instante - new Date(anterior.capturadaEm).getTime() : Infinity;
 
-        if (!atual || pausa > limite) {
-          grupos.push({ placa: placasPorGrupo.value[grupos.length] || '', fotos: [foto] });
+        // Placa lida na foto abre um carro - e o sinal mais forte. Sem leitura,
+        // a pausa entre as fotos decide.
+        const abrePorPlaca = !!foto.placaSugerida;
+
+        if (!atual || abrePorPlaca || pausa > limite) {
+          const indice = grupos.length;
+          grupos.push({
+            // O usuario pode ter corrigido a placa: a correcao vence a leitura.
+            placa: placasPorGrupo.value[indice] ?? (foto.placaSugerida || ''),
+            lida: foto.placaSugerida || null,
+            confianca: foto.placaConfianca ?? null,
+            fotos: [foto]
+          });
         } else {
           atual.fotos.push(foto);
         }
@@ -1571,6 +1590,7 @@ export default {
         }
         carrosFotos.value = (response.data.fotos || []).map(f => ({ ...f, placa: '' }));
         carrosSemExif.value = response.data.semExif || 0;
+        carrosPlacasLidas.value = response.data.placasLidas || 0;
         placasPorGrupo.value = {};
         showStatus(`✓ ${carrosFotos.value.length} fotos lidas`, 'success');
       } catch (err) {
@@ -2531,6 +2551,7 @@ export default {
       carrosEmCurso,
       carrosSemExif,
       carrosIntervalo,
+      carrosPlacasLidas,
       carrosGrupos,
       definirPlacaDoGrupo,
       formatarHora,

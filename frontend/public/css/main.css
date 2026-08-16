@@ -2071,3 +2071,14 @@ select {
   text-align: center;
   text-transform: uppercase;
 }
+
+/* Placa que veio da leitura automatica - marcada para ser conferida. */
+.grupo-lida {
+  padding: 2px 7px;
+  border-radius: 3px;
+  background: var(--ag-ok);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}

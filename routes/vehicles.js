@@ -29,7 +29,9 @@ router.get('/navegar', async (req, res, next) => {
  */
 router.get('/pasta', async (req, res, next) => {
   try {
-    const result = await VehicleService.scanFolder(req.query.caminho);
+    const result = await VehicleService.scanFolder(req.query.caminho, {
+      lerPlacas: req.query.ocr !== '0'
+    });
     if (!result.ok) return res.status(400).json({ ok: false, error: result.error });
     return res.json({ ok: true, data: result.data });
   } catch (err) {
