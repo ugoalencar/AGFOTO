@@ -527,7 +527,17 @@
 
           <div v-if="carrosFotos.length > 0" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--ag-line)">
             <div style="font-size:12px;color:var(--ag-muted);margin-bottom:8px">
-              {{ carrosFotos.length }} fotos · {{ carrosPlacasInformadas }} placa(s)
+              {{ carrosFotos.length }} fotos · {{ carrosGrupos.length }} carro(s) ·
+              {{ carrosPlacasInformadas }} placa(s)
+            </div>
+
+            <!-- Fotos do mesmo carro saem juntas; entre um carro e outro ha uma
+                 pausa. O corte e ajustavel porque esse ritmo muda com o trabalho. -->
+            <label class="ag-label" style="margin-top:4px">Separar carros a cada</label>
+            <div style="display:flex;align-items:center;gap:8px">
+              <input class="ag-field" type="number" min="1" max="60" v-model.number="carrosIntervalo"
+                     style="width:70px">
+              <span style="font-size:12px;color:var(--ag-muted)">minuto(s) de pausa</span>
             </div>
             <div v-if="carrosSemExif > 0" class="entrega-alerta">
               {{ carrosSemExif }} foto(s) sem a hora do disparo no EXIF: nelas a ordem
@@ -605,19 +615,31 @@
         </div>
 
         <div class="ag-card-body">
-          <!-- Sequencia recem-carregada: marcar as placas -->
-          <div v-if="carrosFotos.length > 0" class="carros-sequencia">
-            <div v-for="(foto, i) in carrosFotos" :key="foto.name"
-                 class="carro-foto" :class="{ 'e-placa': !!foto.placa }">
-              <div class="carro-foto-seq">{{ i + 1 }}</div>
-              <img :src="`/api/carros/pasta/imagem/${encodeURIComponent(foto.name)}`"
-                   :alt="foto.name" @click="openModal({ name: foto.name }, 'carros')">
-              <input class="ag-field carro-placa" v-model="foto.placa"
-                     type="text" maxlength="8" placeholder="placa"
-                     @input="foto.placa = foto.placa.toUpperCase()">
-              <div class="carro-foto-nome" :title="foto.name">
-                {{ formatarHora(foto.capturadaEm) }}
-                <span v-if="foto.origemDaHora === 'arquivo'" class="hora-arquivo" title="Sem EXIF: hora do arquivo">~</span>
+          <!-- Sequencia recem-carregada, ja separada em carros pelo intervalo
+               entre as fotos: basta uma placa por grupo. -->
+          <div v-if="carrosFotos.length > 0">
+            <div v-for="(grupo, g) in carrosGrupos" :key="g" class="grupo-carro">
+              <div class="grupo-cabecalho">
+                <span class="grupo-titulo">Carro {{ g + 1 }}</span>
+                <span class="grupo-info">
+                  {{ grupo.fotos.length }} foto(s) · {{ formatarHora(grupo.fotos[0].capturadaEm) }}
+                  &rarr; {{ formatarHora(grupo.fotos[grupo.fotos.length - 1].capturadaEm) }}
+                </span>
+                <input class="ag-field grupo-placa" :value="grupo.placa"
+                       type="text" maxlength="8" placeholder="placa deste carro"
+                       @input="definirPlacaDoGrupo(g, $event.target.value)">
+              </div>
+              <div class="carros-sequencia">
+                <div v-for="foto in grupo.fotos" :key="foto.name"
+                     class="carro-foto" :class="{ 'e-placa': !!grupo.placa }">
+                  <div class="carro-foto-seq">{{ foto.sequencia }}</div>
+                  <img :src="`/api/carros/pasta/imagem/${encodeURIComponent(foto.name)}`"
+                       :alt="foto.name" @click="openModal({ name: foto.name }, 'carros')">
+                  <div class="carro-foto-nome" :title="foto.name">
+                    {{ formatarHora(foto.capturadaEm) }}
+                    <span v-if="foto.origemDaHora === 'arquivo'" class="hora-arquivo" title="Sem EXIF: hora do arquivo">~</span>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1003,6 +1025,8 @@ export default {
     const carrosPlacaSelecionada = ref('');
     const carrosEmCurso = ref(false);
     const carrosSemExif = ref(0);
+    const carrosIntervalo = ref(3);
+    const placasPorGrupo = ref({});
     const carrosRelData = ref('');
     const carrosRelStatus = ref('');
     const carrosRelItens = ref([]);
@@ -1067,8 +1091,30 @@ export default {
 
     const carrosTotalFotos = computed(() => carrosPlacas.value.reduce((s, p) => s + p.total, 0));
 
+    // Agrupa a sequencia em carros pela pausa entre as fotos. Sem leitura de
+    // placa, e o sinal mais confiavel que existe: fotos do mesmo carro saem em
+    // seguida, e entre um carro e outro o fotografo se desloca.
+    const carrosGrupos = computed(() => {
+      const grupos = [];
+      const limite = Math.max(1, Number(carrosIntervalo.value) || 3) * 60 * 1000;
+
+      for (const foto of carrosFotos.value) {
+        const instante = new Date(foto.capturadaEm).getTime();
+        const atual = grupos[grupos.length - 1];
+        const anterior = atual?.fotos[atual.fotos.length - 1];
+        const pausa = anterior ? instante - new Date(anterior.capturadaEm).getTime() : Infinity;
+
+        if (!atual || pausa > limite) {
+          grupos.push({ placa: placasPorGrupo.value[grupos.length] || '', fotos: [foto] });
+        } else {
+          atual.fotos.push(foto);
+        }
+      }
+      return grupos;
+    });
+
     const carrosPlacasInformadas = computed(() => (
-      carrosFotos.value.filter(f => (f.placa || '').trim()).length
+      carrosGrupos.value.filter(g => (g.placa || '').trim()).length
     ));
 
     // Foto antes da primeira placa nao pertence a veiculo nenhum.
@@ -1525,12 +1571,17 @@ export default {
         }
         carrosFotos.value = (response.data.fotos || []).map(f => ({ ...f, placa: '' }));
         carrosSemExif.value = response.data.semExif || 0;
+        placasPorGrupo.value = {};
         showStatus(`✓ ${carrosFotos.value.length} fotos lidas`, 'success');
       } catch (err) {
         showStatus(`✗ ${err.message}`, 'error');
       } finally {
         carrosLendo.value = false;
       }
+    };
+
+    const definirPlacaDoGrupo = (indice, valor) => {
+      placasPorGrupo.value = { ...placasPorGrupo.value, [indice]: (valor || '').toUpperCase() };
     };
 
     const formatarHora = iso => {
@@ -1635,7 +1686,12 @@ export default {
           method: 'POST',
           data: {
             data: carrosData.value,
-            fotos: carrosFotos.value.map(f => ({ name: f.name, placa: f.placa })),
+            // Cada grupo vira um carro: a placa vai na primeira foto dele e as
+            // demais seguem junto, que e o formato que o servidor espera.
+            fotos: carrosGrupos.value.flatMap(grupo => grupo.fotos.map((f, i) => ({
+              name: f.name,
+              placa: i === 0 ? grupo.placa : ''
+            }))),
             operationId: makeOperationId('carros-importar')
           }
         });
@@ -2474,6 +2530,9 @@ export default {
       carrosPlacaSelecionada,
       carrosEmCurso,
       carrosSemExif,
+      carrosIntervalo,
+      carrosGrupos,
+      definirPlacaDoGrupo,
       formatarHora,
       carrosProntas,
       carrosRelData,

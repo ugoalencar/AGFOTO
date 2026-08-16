@@ -2034,3 +2034,40 @@ select {
   font-weight: 700;
   margin-left: 2px;
 }
+
+/* ============================================================
+   Carros propostos pela pausa entre as fotos
+   ============================================================ */
+.grupo-carro {
+  border: 1px solid var(--ag-line);
+  border-radius: var(--ag-radius);
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.grupo-cabecalho {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.grupo-titulo {
+  font-family: var(--ag-display);
+  font-size: 15px;
+  letter-spacing: 0.06em;
+}
+
+.grupo-info {
+  font-size: 11px;
+  color: var(--ag-muted);
+}
+
+.grupo-placa {
+  margin-left: auto;
+  width: 170px;
+  font-family: var(--ag-mono);
+  text-align: center;
+  text-transform: uppercase;
+}
