@@ -29,6 +29,11 @@
   --ag-info: #3B9EFF;
 
   --ag-radius: 8px;
+
+  /* Zoom geral da interface. Um numero so para toda a tela crescer junto, em vez
+     de mexer em dezenas de tamanhos e correr o risco de desalinhar. Ajuste aqui
+     ate ficar confortavel; a disposicao nao muda, so a escala. */
+  --ag-zoom: 1.30;
   --ag-display: Impact, "Arial Narrow", sans-serif;
   --ag-body: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --ag-mono: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
@@ -517,7 +522,10 @@ select {
 }
 
 .app-shell {
-  height: 100vh;
+  zoom: var(--ag-zoom);
+  /* A altura precisa ser dividida pelo zoom, senao a tela passa do rodape e
+     aparece barra de rolagem no lugar do conteudo caber. */
+  height: calc(100vh / var(--ag-zoom));
   display: grid;
   /* O menu era 74px e ficava apertado demais para ler de longe, que e como o
      fotografo usa: de pe, longe da tela, com a camera na mao. */
