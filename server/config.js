@@ -29,6 +29,9 @@ export const config = {
     jsons: path.join(ROOT, 'dados', 'jsons'),
     xlsx: path.join(ROOT, 'dados', 'xlsx'),
     envios: path.join(ROOT, 'dados', 'envios'),
+    // Capturas de tela de cada passo do envio ao ADSET: e o unico jeito de
+    // conferir depois o que o sistema fez na conta do cliente.
+    evidenciasAdset: path.join(ROOT, 'dados', 'evidencias-adset'),
     auditoria: path.join(ROOT, 'dados', 'auditoria'),
     backups: path.join(ROOT, 'dados', 'backups'),
     logs: path.join(ROOT, 'logs')
@@ -55,12 +58,20 @@ export const config = {
     secure: process.env.FTP_SECURE === 'true'
   },
 
-  // ADSET (valores padrão)
+  // ADSET. Credenciais vêm de adset-config.json (fora do git) ou do ambiente.
+  //
+  // modo:
+  //   'desligado' - o botão de envio recusa. É o padrão, de propósito: o envio
+  //                 apaga as fotos do anúncio publicado na conta do cliente.
+  //   'ensaio'    - entra, acha a placa, abre a tela de fotos e para ANTES de
+  //                 excluir. Serve para conferir o caminho sem estragar nada.
+  //   'real'      - executa o envio inteiro.
   adset: {
-    enabled: process.env.ADSET_ENABLED === 'true',
+    modo: process.env.ADSET_MODO || 'desligado',
     username: process.env.ADSET_USER,
     password: process.env.ADSET_PASS,
-    dryRun: process.env.ADSET_DRY_RUN === 'true'
+    // Com o navegador visível dá para acompanhar o que o sistema faz na conta.
+    visivel: process.env.ADSET_VISIVEL === 'true'
   },
 
   // Camera

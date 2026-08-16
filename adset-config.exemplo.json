@@ -1,0 +1,21 @@
+{
+  "_leia": [
+    "Copie este arquivo para adset-config.json e preencha. O adset-config.json",
+    "esta no .gitignore: a senha nunca entra no repositorio.",
+    "",
+    "modo:",
+    "  desligado - o botao Enviar recusa. E o padrao.",
+    "  ensaio    - entra no ADSET, acha a placa, abre a tela de fotos e PARA",
+    "              antes de excluir. Use este primeiro.",
+    "  real      - executa tudo: APAGA as fotos do anuncio e sobe as nossas.",
+    "",
+    "visivel: true abre o navegador na tela para voce acompanhar o que o sistema",
+    "faz na conta. Recomendado nas primeiras vezes.",
+    "",
+    "Cada passo vira uma captura de tela em dados/evidencias-adset/DIA/PLACA."
+  ],
+  "modo": "desligado",
+  "username": "",
+  "password": "",
+  "visivel": true
+}

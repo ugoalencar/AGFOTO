@@ -1,6 +1,7 @@
 import express from 'express';
 import { VehicleService } from '../services/vehicle-service.js';
 import { VehicleRepository } from '../repositories/vehicle-repository.js';
+import { config } from '../server/config.js';
 
 const router = express.Router();
 
@@ -159,6 +160,34 @@ router.post('/reabrir', express.json(), async (req, res, next) => {
 router.post('/entregar', express.json(), async (req, res, next) => {
   try {
     responder(res, await VehicleService.entregarPlaca(req.body?.data, req.body?.placa));
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/carros/adset/config
+ * Diz em que modo o envio esta, sem devolver a senha.
+ */
+router.get('/adset/config', (req, res) => {
+  res.json({
+    ok: true,
+    data: {
+      modo: config.adset?.modo || 'desligado',
+      usuario: config.adset?.username || null,
+      credenciais: Boolean(config.adset?.username && config.adset?.password)
+    }
+  });
+});
+
+/**
+ * POST /api/carros/adset/enviar   Body: { data, placa, modo? }
+ * Sobe as fotos entregues para o anuncio no site do ADSET.
+ */
+router.post('/adset/enviar', express.json(), async (req, res, next) => {
+  try {
+    const { data, placa, modo } = req.body || {};
+    responder(res, await VehicleService.enviarAoAdset(data, placa, { modo }));
   } catch (err) {
     next(err);
   }

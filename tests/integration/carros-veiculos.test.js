@@ -679,3 +679,63 @@ test('reentregar depois de corrigir substitui o que estava em Entrega', async t 
   assert.deepEqual(arquivos, ['ABC1234_0.jpg', 'ABC1234_2.jpg']);
   assert.deepEqual(marcas, [0, 2]);
 });
+
+// --- Guardas do envio ao ADSET ---------------------------------------------
+// O envio APAGA as fotos do anuncio publicado na conta do cliente. Estes testes
+// cobrem as recusas: e onde um erro custa caro e nao da para desfazer.
+
+async function placaEntregue(env) {
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+  await VehicleService.entregarPlaca(DIA, 'ABC1234');
+}
+
+test('envio ao ADSET recusa enquanto o modo estiver desligado', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await placaEntregue(env);
+
+  const result = await VehicleService.enviarAoAdset(DIA, 'ABC1234');
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /desligado/i);
+});
+
+test('envio ao ADSET recusa sem usuario e senha configurados', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await placaEntregue(env);
+
+  const result = await VehicleService.enviarAoAdset(DIA, 'ABC1234', { modo: 'ensaio' });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /senha|usuario/i);
+});
+
+test('envio ao ADSET recusa placa que ainda nao foi entregue', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg']);
+  fotos[0].placa = 'ABC1234';
+  await VehicleService.importarParaData(DIA, fotos);
+  await VehicleService.aprovarPlaca(DIA, 'ABC1234');
+
+  // Aprovada mas nao entregue: nao existe pasta em Entrega para subir.
+  const result = await VehicleService.enviarAoAdset(DIA, 'ABC1234', { modo: 'real' });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /Entregue a placa primeiro/i);
+});
+
+test('envio ao ADSET recusa modo que nao existe', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  await placaEntregue(env);
+
+  const result = await VehicleService.enviarAoAdset(DIA, 'ABC1234', { modo: 'producao' });
+
+  assert.equal(result.ok, false);
+  assert.match(result.error, /desconhecido/i);
+});

@@ -850,6 +850,98 @@ export class VehicleService {
   }
 
   /**
+   * Sobe as fotos ja entregues para o anuncio da placa no site do ADSET.
+   *
+   * Sai da pasta Entrega, nao de Carros: o que vai para o cliente e o que foi
+   * conferido e copiado, nunca o que ainda pode estar sendo mexido no QA.
+   *
+   * O envio APAGA as fotos que o anuncio tem hoje. Por isso exige que a placa ja
+   * esteja entregue e que o modo esteja configurado - o padrao e recusar.
+   */
+  static async enviarAoAdset(data, placa, { modo = null } = {}) {
+    const provider = { atual: null };
+    try {
+      const dia = this.normalizarData(data);
+      const nome = this.normalizarPlaca(placa);
+
+      const escolhido = modo || config.adset?.modo || 'desligado';
+      if (escolhido === 'desligado') {
+        return {
+          ok: false,
+          error: 'Envio ao ADSET desligado. Configure modo e credenciais em adset-config.json'
+        };
+      }
+      if (!['ensaio', 'real'].includes(escolhido)) {
+        return { ok: false, error: `Modo de envio desconhecido: ${escolhido}` };
+      }
+      // O estado da placa vem antes das credenciais: e o erro que o usuario pode
+      // corrigir sozinho na tela, e nao adianta abrir navegador para descobrir
+      // depois que nao havia o que enviar.
+      const estado = await this.carregarStatusDia(dia);
+      if (estado.placas[nome]?.status !== STATUS_CARRO.ENTREGUE) {
+        return { ok: false, error: 'Entregue a placa primeiro: o envio sai da pasta Entrega' };
+      }
+
+      if (!config.adset?.username || !config.adset?.password) {
+        return { ok: false, error: 'Usuario e senha do ADSET nao configurados' };
+      }
+
+      const pasta = this.pastaDeEntrega(dia, nome);
+      const arquivos = (await fs.promises.readdir(pasta).catch(() => []))
+        .filter(f => EXTENSOES_FOTO.includes(path.extname(f).toLowerCase()))
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }))
+        .map(f => path.join(pasta, f));
+
+      if (arquivos.length === 0) {
+        return { ok: false, error: `Nenhuma foto em ${pasta}` };
+      }
+
+      const { AdsetWebProvider } = await import('./adset-web-provider.js');
+      provider.atual = new AdsetWebProvider({
+        usuario: config.adset.username,
+        senha: config.adset.password,
+        ensaio: escolhido === 'ensaio',
+        visivel: config.adset?.visivel === true,
+        pastaEvidencia: path.join(config.paths.evidenciasAdset, dia, nome)
+      });
+
+      const entrou = await provider.atual.login();
+      if (!entrou.ok) {
+        await auditLogger.log('ADSET_LOGIN_FAILED', { data: dia, placa: nome, error: entrou.error });
+        return entrou;
+      }
+
+      const envio = await provider.atual.enviarFotos(nome, arquivos);
+
+      await auditLogger.log(
+        envio.ok ? 'ADSET_ENVIO_OK' : 'ADSET_ENVIO_FALHOU',
+        {
+          data: dia,
+          placa: nome,
+          modo: escolhido,
+          fotos: arquivos.length,
+          lista: envio.data?.lista,
+          error: envio.error,
+          passos: provider.atual.passos
+        }
+      );
+
+      if (!envio.ok) return envio;
+
+      return {
+        ok: true,
+        data: { data: dia, placa: nome, modo: escolhido, ...envio.data }
+      };
+    } catch (err) {
+      await auditLogger.log('ADSET_ENVIO_ERRO', { error: err.message });
+      return { ok: false, error: err.message };
+    } finally {
+      // Sem isso um navegador fica de pe a cada envio ate a memoria acabar.
+      if (provider.atual) await provider.atual.fechar();
+    }
+  }
+
+  /**
    * Abre a pasta Entrega no Explorer.
    *
    * O caminho vem da config, nunca do pedido: abrir caminho escolhido pelo

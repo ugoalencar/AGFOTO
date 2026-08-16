@@ -56,7 +56,7 @@
         <div class="ag-context">
           <span v-if="plataforma === 'produtos' && selectedLote" class="ag-chip">{{ rotuloLote(selectedLote) }}</span>
           <span v-if="plataforma === 'carros' && carrosData" class="ag-chip">{{ carrosData }}</span>
-          <span class="ag-chip">{{ plataforma === 'carros' ? 'ADSET mock' : 'Entrega local/mock' }}</span>
+          <span class="ag-chip">{{ plataforma === 'carros' ? `ADSET ${adsetModo}` : 'Entrega local/mock' }}</span>
         </div>
       </header>
 
@@ -857,8 +857,21 @@
           <div class="entrega-alerta" style="margin-top:14px">
             Entregar copia as fotos aprovadas, na ordem do QA, para
             <code style="font-family:var(--ag-mono)">Entrega/{{ carrosData }}/PLACA</code>.
-            De la voce sobe no site do ADSET. O envio automatico ao site ainda nao
-            esta ligado.
+          </div>
+
+          <label class="ag-label" style="margin-top:16px">Envio ao site do ADSET</label>
+          <div v-if="adsetModo === 'desligado'" class="entrega-alerta">
+            Desligado. Preencha usuario, senha e modo em
+            <code style="font-family:var(--ag-mono)">adset-config.json</code>.
+          </div>
+          <div v-else style="font-size:11px;color:var(--ag-muted)">
+            Modo <b>{{ adsetModo }}</b> como <b>{{ adsetUsuario || '-' }}</b>.
+            <span v-if="adsetModo === 'ensaio'">
+              O ensaio acha a placa e para antes de excluir as fotos do anuncio.
+            </span>
+            <span v-else style="color:var(--ag-yellow)">
+              Modo real: APAGA as fotos que o anuncio ja tem e sobe as nossas.
+            </span>
           </div>
         </div>
       </section>
@@ -890,6 +903,29 @@
               </tbody>
             </table>
           </div>
+
+          <template v-if="carrosEntregues.length > 0">
+            <h3 class="ag-label" style="margin-top:22px">Entregues — subir no ADSET</h3>
+            <div class="ag-table-wrap">
+              <table class="ag-table">
+                <thead><tr><th>Placa</th><th>Fotos</th><th>Entregue em</th><th>Acao</th></tr></thead>
+                <tbody>
+                  <tr v-for="placa in carrosEntregues" :key="placa.placa">
+                    <td style="font-family:var(--ag-mono)">{{ placa.placa }}</td>
+                    <td>{{ placa.total }}</td>
+                    <td>{{ formatarData(placa.entregueEm) }}</td>
+                    <td>
+                      <button class="ag-btn" @click="onEnviarAoAdset(placa.placa, 'ensaio')"
+                              :disabled="carrosEmCurso || adsetModo === 'desligado'">Ensaio</button>
+                      <button class="ag-btn is-primary" style="margin-left:6px"
+                              @click="onEnviarAoAdset(placa.placa, 'real')"
+                              :disabled="carrosEmCurso || adsetModo !== 'real'">Enviar</button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </template>
         </div>
       </section>
     </main>
@@ -1113,6 +1149,10 @@ export default {
     // Entrega so lista o que o QA aprovou.
     const carrosProntas = computed(() => (
       carrosPlacas.value.filter(p => p.status === 'pronto_para_entrega')
+    ));
+
+    const carrosEntregues = computed(() => (
+      carrosPlacas.value.filter(p => p.status === 'entregue')
     ));
 
     const carrosTotalFotos = computed(() => carrosPlacas.value.reduce((s, p) => s + p.total, 0));
@@ -1543,6 +1583,7 @@ export default {
       plataforma.value = destino;
       if (destino === 'carros') {
         activePage.value = 'carros';
+        await onCarregarConfigAdset();
         await onCarregarDatas();
         await onCarregarDia();
       } else {
@@ -1562,6 +1603,7 @@ export default {
       }
 
       if (pagina === 'carros-relatorios') await onCarregarRelatorioCarros();
+      if (pagina === 'carros-entrega') await onCarregarConfigAdset();
     };
 
     const irPara = async pagina => {
@@ -1691,6 +1733,44 @@ export default {
       await acaoCarro('/api/carros/entregar',
         { data: carrosData.value, placa },
         d => `\u2713 ${d.placa}: ${d.fotos} fotos copiadas para ${d.destino}`);
+    };
+
+    const adsetModo = ref('desligado');
+    const adsetUsuario = ref(null);
+
+    const onCarregarConfigAdset = async () => {
+      try {
+        const response = await this.$api.request('/api/carros/adset/config');
+        if (response.ok) {
+          adsetModo.value = response.data.modo;
+          adsetUsuario.value = response.data.usuario;
+        }
+      } catch {
+        adsetModo.value = 'desligado';
+      }
+    };
+
+    // O modo real APAGA as fotos do anuncio publicado na conta do cliente. Uma
+    // confirmacao antes, porque nao ha como desfazer.
+    const onEnviarAoAdset = async (placa, modo) => {
+      if (modo === 'real') {
+        const certeza = window.confirm(
+          `Enviar ${placa} ao ADSET?\n\n` +
+          'As fotos que o anuncio tem hoje serao APAGADAS e substituidas pelas ' +
+          'nossas, na ordem do QA. Nao da para desfazer.'
+        );
+        if (!certeza) return;
+      }
+
+      showStatus(modo === 'ensaio'
+        ? `Ensaio de ${placa}: abrindo o ADSET...`
+        : `Enviando ${placa} ao ADSET...`, 'info');
+
+      await acaoCarro('/api/carros/adset/enviar',
+        { data: carrosData.value, placa, modo },
+        d => d.ensaio
+          ? `✓ Ensaio de ${d.placa}: achou em "${d.lista}", ${d.fotosAEnviar} fotos prontas`
+          : `✓ ${d.placa}: ${d.fotosEnviadas} fotos no ADSET (${d.lista})`);
     };
 
     // A entrega termina fora do sistema, subindo as fotos no site do ADSET;
@@ -2641,6 +2721,10 @@ export default {
       onReabrirPlaca,
       onEntregarPlaca,
       onAbrirPastaEntrega,
+      carrosEntregues,
+      adsetModo,
+      adsetUsuario,
+      onEnviarAoAdset,
       onCarregarRelatorioCarros,
       placaAtual,
       onMoverPosicao,
