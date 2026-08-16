@@ -2212,3 +2212,64 @@ select {
   font-weight: 700;
   text-transform: uppercase;
 }
+
+/* ============================================================
+   Estado da camera na barra do topo
+   O fotografo precisa ver de longe se a camera esta de pe: descobrir que caiu
+   so quando a foto nao chega custa a sessao inteira.
+   ============================================================ */
+.ag-camera {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 14px;
+  border: 1px solid var(--ag-line-forte);
+  border-radius: 20px;
+  background: var(--ag-panel-2);
+  color: var(--ag-muted);
+  font-family: var(--ag-body);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .14s ease, border-color .14s ease, background .14s ease;
+}
+
+.ag-camera svg {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ag-camera.is-conectada {
+  color: var(--ag-ok);
+  border-color: color-mix(in srgb, var(--ag-ok) 45%, transparent);
+}
+
+/* Processo de pe e camera fora, ou o contrario: os dois sao "nao da para
+   fotografar agora", e piscar chama o olho sem depender de ler o texto. */
+.ag-camera.is-sem_dispositivo,
+.ag-camera.is-desconectada,
+.ag-camera.is-sem_processo {
+  color: var(--ag-red-vivid);
+  border-color: var(--ag-red);
+  background: color-mix(in srgb, var(--ag-red) 14%, transparent);
+  animation: ag-camera-alerta 1.6s ease-in-out infinite;
+}
+
+.ag-camera.is-desconhecido { color: var(--ag-muted); }
+
+.ag-camera:hover { background: var(--ag-panel-3); }
+
+@keyframes ag-camera-alerta {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .55; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ag-camera { animation: none; }
+}

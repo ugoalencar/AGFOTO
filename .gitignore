@@ -41,3 +41,7 @@ Thumbs.db
 .tmp/
 .worktrees/
 *.tmp
+
+# Perfil de navegador que o launcher cria para abrir a interface em janela de
+# app. E cache e estado da maquina local, nao codigo.
+.perfil-navegador/

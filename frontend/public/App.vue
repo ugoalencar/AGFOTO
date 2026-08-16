@@ -65,6 +65,15 @@
           <span v-if="plataforma === 'produtos' && selectedLote" class="ag-chip">{{ rotuloLote(selectedLote) }}</span>
           <span v-if="plataforma === 'carros' && carrosData" class="ag-chip">{{ carrosData }}</span>
           <span class="ag-chip">{{ plataforma === 'carros' ? `ADSET ${adsetModo}` : 'Entrega local/mock' }}</span>
+          <button v-if="plataforma === 'produtos'"
+                  class="ag-camera" :class="`is-${cameraEstado}`"
+                  :title="cameraMensagem + ' - clique para religar o simplusCamera'"
+                  @click="onReligarCamera">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M3 8h3l1.5-2h9L18 8h3v11H3z"/><circle cx="12" cy="13" r="3.5"/>
+            </svg>
+            <span>{{ cameraRotulo }}</span>
+          </button>
         </div>
       </header>
 
@@ -1743,6 +1752,54 @@ export default {
         d => `\u2713 ${d.placa}: ${d.fotos} fotos copiadas para ${d.destino}`);
     };
 
+    // Estado da camera. O simplusCamera.exe nao morre quando a camera e desligada
+    // ou o cabo sai, entao o servidor cruza o processo com o dispositivo USB - aqui
+    // so mostramos o resultado.
+    const cameraEstado = ref('desconhecido');
+    const cameraMensagem = ref('Verificando a camera...');
+    let cameraTimer = null;
+
+    const cameraRotulo = computed(() => ({
+      conectada: 'Camera',
+      sem_dispositivo: 'Sem camera',
+      sem_processo: 'Camera parada',
+      desconectada: 'Sem camera',
+      desconhecido: 'Camera...'
+    })[cameraEstado.value] || 'Camera');
+
+    const verificarCamera = async () => {
+      try {
+        const response = await this.$api.request('/api/status/camera');
+        if (!response.ok) throw new Error(response.error || 'sem resposta');
+
+        const d = response.data;
+        cameraMensagem.value = d.message;
+        cameraEstado.value = d.connected ? 'conectada'
+          : d.running ? 'sem_dispositivo'
+          : d.devicePresent ? 'sem_processo'
+          : 'desconectada';
+      } catch (err) {
+        // Servidor fora do ar tambem e "nao da para fotografar agora".
+        cameraEstado.value = 'desconectada';
+        cameraMensagem.value = 'Sem resposta do servidor';
+      }
+    };
+
+    const onReligarCamera = async () => {
+      showStatus('Religando a camera...', 'info');
+      try {
+        const response = await this.$api.request('/api/status/camera/open', {
+          method: 'POST',
+          data: { operationId: makeOperationId('camera') }
+        });
+        showStatus(response.ok ? `✓ ${response.data.message}` : `✗ ${response.error}`,
+          response.ok ? 'success' : 'error');
+      } catch (err) {
+        showStatus(`✗ ${err.message}`, 'error');
+      }
+      await verificarCamera();
+    };
+
     const adsetModo = ref('desligado');
     const adsetUsuario = ref(null);
 
@@ -2564,6 +2621,14 @@ export default {
       // Refresh temp images every 2 seconds
       refreshInterval = setInterval(loadTempImages, 2000);
 
+      // A camera cai sem avisar - cabo puxado, bateria, modo de espera. Sondar a
+      // cada 5s deixa a tela dizer isso antes do fotografo perder uma sessao
+      // inteira achando que o sistema e que nao esta salvando. Consulta o
+      // dispositivo USB no Windows, entao 5s e um meio-termo entre demorar a
+      // perceber e ficar chamando PowerShell o tempo todo.
+      await verificarCamera();
+      cameraTimer = setInterval(verificarCamera, 5000);
+
       // Setas e Esc navegam o preview, como no sphoto.
       document.addEventListener('keydown', onPreviewKeydown);
     });
@@ -2640,6 +2705,9 @@ export default {
     onUnmounted(() => {
       if (refreshInterval) {
         clearInterval(refreshInterval);
+      }
+      if (cameraTimer) {
+        clearInterval(cameraTimer);
       }
       document.removeEventListener('keydown', onPreviewKeydown);
     });
@@ -2733,6 +2801,10 @@ export default {
       adsetModo,
       adsetUsuario,
       onEnviarAoAdset,
+      cameraEstado,
+      cameraRotulo,
+      cameraMensagem,
+      onReligarCamera,
       onCarregarRelatorioCarros,
       placaAtual,
       onMoverPosicao,
