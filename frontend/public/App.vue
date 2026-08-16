@@ -534,6 +534,10 @@
               {{ carrosPlacasLidas }} placa(s) lida(s) das fotos. Confira antes de importar:
               o OCR erra com placa suja, torta ou de longe.
             </div>
+            <div v-if="carrosSemPlaca > 0" class="entrega-alerta">
+              {{ carrosSemPlaca }} carro(s) sem placa reconhecida. Eles entram como
+              NAO-RECONHECIDO e voce renomeia no QA - ou digite a placa aqui mesmo.
+            </div>
 
             <!-- Fotos do mesmo carro saem juntas; entre um carro e outro ha uma
                  pausa. O corte e ajustavel porque esse ritmo muda com o trabalho. -->
@@ -554,13 +558,10 @@
             </div>
             <button class="ag-btn is-ok" style="width:100%;margin-top:10px"
                     @click="onImportarCarros"
-                    :disabled="!carrosData || carrosPlacasInformadas === 0 || carrosImportando">
-              {{ carrosImportando ? 'Importando...' : `Importar ${carrosPlacasInformadas} placa(s)` }}
+                    :disabled="!carrosData || carrosGrupos.length === 0 || carrosImportando">
+              {{ carrosImportando ? 'Importando...' : `Importar ${carrosGrupos.length} carro(s)` }}
             </button>
-            <div v-if="carrosPlacasInformadas === 0" style="font-size:11px;color:var(--ag-yellow);margin-top:6px">
-              Digite a placa na foto da placa de cada carro para liberar a importacao.
-            </div>
-            <div v-else style="font-size:11px;color:var(--ag-muted);margin-top:6px">
+            <div style="font-size:11px;color:var(--ag-muted);margin-top:6px">
               Copia as fotos para <code style="font-family:var(--ag-mono)">Carros/{{ carrosData }}/PLACA</code>.
               O cartao nao e apagado.
             </div>
@@ -577,7 +578,7 @@
                   @dragover.prevent="carrosPlacaAlvo = placa.placa"
                   @dragleave="carrosPlacaAlvo = ''"
                   @drop.prevent="onSoltarNaPlaca(placa.placa)">
-                <span class="placa-lista-nome">{{ placa.placa }}</span>
+                <span class="placa-lista-nome" :class="{ 'nao-reconhecida': placa.placa.startsWith('NAO-RECONHECIDO') }">{{ placa.placa }}</span>
                 <span class="placa-lista-total">{{ placa.total }}</span>
               </li>
             </ul>
@@ -631,6 +632,9 @@
                 </span>
                 <span v-if="grupo.lida" class="grupo-lida" title="Placa lida da foto - confira">
                   lida
+                </span>
+                <span v-else class="grupo-nao-lida" title="Placa nao reconhecida: entra como NAO-RECONHECIDO e voce renomeia no QA">
+                  nao reconhecida
                 </span>
                 <input class="ag-field grupo-placa" :value="grupo.placa"
                        type="text" maxlength="8" placeholder="placa deste carro"
@@ -756,7 +760,7 @@
                 @dragover.prevent="carrosPlacaAlvo = placa.placa"
                 @dragleave="carrosPlacaAlvo = ''"
                 @drop.prevent="onSoltarNaPlaca(placa.placa)">
-              <span class="placa-lista-nome">{{ placa.placa }}</span>
+              <span class="placa-lista-nome" :class="{ 'nao-reconhecida': placa.placa.startsWith('NAO-RECONHECIDO') }">{{ placa.placa }}</span>
               <span class="badge-status" :class="placa.status">{{ rotuloStatusCarro(placa.status) }}</span>
               <span class="placa-lista-total">{{ placa.total }}</span>
             </li>
@@ -1134,6 +1138,10 @@ export default {
 
     const carrosPlacasInformadas = computed(() => (
       carrosGrupos.value.filter(g => (g.placa || '').trim()).length
+    ));
+
+    const carrosSemPlaca = computed(() => (
+      carrosGrupos.value.filter(g => !(g.placa || '').trim()).length
     ));
 
     // Foto antes da primeira placa nao pertence a veiculo nenhum.
@@ -1708,9 +1716,11 @@ export default {
             data: carrosData.value,
             // Cada grupo vira um carro: a placa vai na primeira foto dele e as
             // demais seguem junto, que e o formato que o servidor espera.
+            // Grupo sem placa vai com o marcador '?': o servidor cria a pasta
+            // NAO-RECONHECIDO em vez de deixar as fotos sem destino.
             fotos: carrosGrupos.value.flatMap(grupo => grupo.fotos.map((f, i) => ({
               name: f.name,
-              placa: i === 0 ? grupo.placa : ''
+              placa: i === 0 ? (grupo.placa || '?') : ''
             }))),
             operationId: makeOperationId('carros-importar')
           }
@@ -1720,10 +1730,14 @@ export default {
           return;
         }
         const d = response.data;
+        // Carro sem placa sai como aviso, nao como confirmacao: ele precisa ser
+        // renomeado no QA e some da tela se passar batido como sucesso.
+        const naoRec = (d.naoReconhecidas || []).length;
         showStatus(
-          `✓ ${d.placas} placa(s), ${d.fotos} fotos em ${d.data}`
+          `✓ ${d.placas} carro(s), ${d.fotos} fotos em ${d.data}`
+            + (naoRec ? ` · ${naoRec} sem placa (renomeie no QA)` : '')
             + (d.ignoradas.length ? ` · ${d.ignoradas.length} ignorada(s)` : ''),
-          'success'
+          naoRec ? 'error' : 'success'
         );
         carrosFotos.value = [];
         await onCarregarDia();
@@ -2552,6 +2566,7 @@ export default {
       carrosSemExif,
       carrosIntervalo,
       carrosPlacasLidas,
+      carrosSemPlaca,
       carrosGrupos,
       definirPlacaDoGrupo,
       formatarHora,

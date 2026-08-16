@@ -22,6 +22,15 @@ const EXTENSOES_FOTO = ['.jpg', '.jpeg', '.png', '.webp', '.cr2', '.cr3', '.nef'
 // Ultima pasta lida. As miniaturas so podem sair daqui.
 let pastaOrigemAtual = null;
 
+// Nome da pasta de um carro cuja placa nao foi lida. Numerado quando ha mais de
+// um no mesmo dia: NAO-RECONHECIDO, NAO-RECONHECIDO-2, ...
+export const PLACA_NAO_RECONHECIDA = 'NAO-RECONHECIDO';
+const PADRAO_NAO_RECONHECIDA = /^NAO-RECONHECIDO(-\d+)?$/;
+
+// A tela usa este marcador para dizer "aqui comeca um carro" quando a placa nao
+// foi lida; o servidor e quem escolhe o nome livre da pasta.
+export const PLACA_MARCADOR_NOVO_CARRO = '?';
+
 // Etapas do carro. Entre ORGANIZADO e PRONTO o cliente edita as fotos num
 // programa de fora do sistema - o QA e o que acontece quando ele volta.
 export const STATUS_CARRO = Object.freeze({
@@ -275,7 +284,16 @@ export class VehicleService {
   }
 
   static normalizarPlaca(valor) {
-    const placa = String(valor || '').trim().toUpperCase().replace(/[\s-]/g, '');
+    const bruto = String(valor || '').trim().toUpperCase();
+
+    // Carro cuja placa nao foi reconhecida ainda precisa de uma pasta: sem isso
+    // as fotos dele ficariam sem destino ou grudariam no carro anterior. O nome
+    // e proposital para saltar aos olhos no QA, onde o usuario renomeia.
+    if (PADRAO_NAO_RECONHECIDA.test(bruto.replace(/\s/g, ''))) {
+      return bruto.replace(/\s/g, '');
+    }
+
+    const placa = bruto.replace(/[\s-]/g, '');
     if (!/^[A-Z0-9]{5,8}$/.test(placa)) {
       throw new Error(`Placa invalida: ${valor}`);
     }
@@ -326,17 +344,37 @@ export class VehicleService {
       const grupos = [];
       const ignoradas = [];
       let atual = null;
+      let semPlaca = 0;
+
+      // Nome livre para o proximo carro sem placa, sem colidir com o que ja
+      // esta no dia (uma segunda importacao nao pode cair na pasta da primeira).
+      const proximoNaoReconhecido = async () => {
+        for (let n = 1; ; n++) {
+          const nome = n === 1 ? PLACA_NAO_RECONHECIDA : `${PLACA_NAO_RECONHECIDA}-${n}`;
+          const usadoAgora = grupos.some(g => g.placa === nome);
+          const jaEmDisco = await fs.promises
+            .stat(this.pastaDaPlaca(dia, nome)).then(() => true, () => false);
+          if (!usadoAgora && !jaEmDisco) return nome;
+        }
+      };
 
       for (const foto of fotos) {
         const bruta = String(foto.placa || '').trim();
-        if (bruta) {
+
+        if (bruta === PLACA_MARCADOR_NOVO_CARRO) {
+          // A tela diz "aqui comeca um carro" sem saber a placa.
+          atual = { placa: await proximoNaoReconhecido(), fotos: [], reconhecida: false };
+          grupos.push(atual);
+          semPlaca++;
+        } else if (bruta) {
           const placa = this.normalizarPlaca(bruta);
           atual = grupos.find(g => g.placa === placa);
           if (!atual) {
-            atual = { placa, fotos: [] };
+            atual = { placa, fotos: [], reconhecida: true };
             grupos.push(atual);
           }
         }
+
         if (!atual) {
           ignoradas.push(foto.name);
           continue;
@@ -345,7 +383,7 @@ export class VehicleService {
       }
 
       if (grupos.length === 0) {
-        return { ok: false, error: 'Nenhuma placa informada: marque a foto da placa de cada veiculo' };
+        return { ok: false, error: 'Nenhuma foto agrupada: informe a placa de pelo menos um carro' };
       }
 
       const copiadas = [];
@@ -374,7 +412,13 @@ export class VehicleService {
 
       return {
         ok: true,
-        data: { data: dia, placas: grupos.length, fotos: copiadas.length, ignoradas }
+        data: {
+          data: dia,
+          placas: grupos.length,
+          fotos: copiadas.length,
+          ignoradas,
+          naoReconhecidas: grupos.filter(g => !g.reconhecida).map(g => g.placa)
+        }
       };
     } catch (err) {
       return { ok: false, error: err.message };

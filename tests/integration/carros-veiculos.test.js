@@ -17,6 +17,9 @@ function bytesDaFoto(marca) {
 
 async function montarOrigem(env, nomes) {
   const origem = path.join(env.root, 'cartao');
+  // Recomeca a pasta: chamar duas vezes no mesmo teste (simulando um segundo
+  // cartao) nao pode devolver as fotos da primeira junto.
+  await fs.promises.rm(origem, { recursive: true, force: true });
   await fs.promises.mkdir(origem, { recursive: true });
 
   for (let i = 0; i < nomes.length; i++) {
@@ -491,4 +494,70 @@ test('sem EXIF a hora cai para a do arquivo e a tela e avisada', async t => {
   assert.equal(scan.data.semExif, 2);
   assert.ok(scan.data.fotos.every(f => f.origemDaHora === 'arquivo'));
   assert.deepEqual(scan.data.fotos.map(f => f.name), ['foto0.jpg', 'foto1.jpg']);
+});
+
+// --- Carro sem placa reconhecida -------------------------------------------
+
+test('carro sem placa vai para NAO-RECONHECIDO em vez de ficar sem destino', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['p.jpg', 'a.jpg', 'x.jpg', 'y.jpg']);
+
+  fotos[0].placa = 'ABC1234';
+  fotos[2].placa = '?'; // a tela diz "aqui comeca um carro", sem saber a placa
+
+  const result = await VehicleService.importarParaData(DIA, fotos);
+
+  assert.equal(result.ok, true, result.error);
+  assert.equal(result.data.placas, 2);
+  assert.deepEqual(result.data.naoReconhecidas, ['NAO-RECONHECIDO']);
+  assert.deepEqual(await listar(env, 'ABC1234'), ['ABC1234_0.jpg', 'ABC1234_1.jpg']);
+  assert.deepEqual(await listar(env, 'NAO-RECONHECIDO'),
+    ['NAO-RECONHECIDO_0.jpg', 'NAO-RECONHECIDO_1.jpg']);
+});
+
+test('dois carros sem placa no mesmo dia nao caem na mesma pasta', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['a.jpg', 'b.jpg', 'c.jpg', 'd.jpg']);
+
+  fotos[0].placa = '?';
+  fotos[2].placa = '?';
+
+  const result = await VehicleService.importarParaData(DIA, fotos);
+
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(result.data.naoReconhecidas, ['NAO-RECONHECIDO', 'NAO-RECONHECIDO-2']);
+  assert.equal((await listar(env, 'NAO-RECONHECIDO')).length, 2);
+  assert.equal((await listar(env, 'NAO-RECONHECIDO-2')).length, 2);
+});
+
+test('uma segunda importacao nao mistura com o nao reconhecido da primeira', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+
+  const primeira = await montarOrigem(env, ['a.jpg', 'b.jpg']);
+  primeira[0].placa = '?';
+  await VehicleService.importarParaData(DIA, primeira);
+
+  const segunda = await montarOrigem(env, ['c.jpg', 'd.jpg']);
+  segunda[0].placa = '?';
+  await VehicleService.importarParaData(DIA, segunda);
+
+  assert.equal((await listar(env, 'NAO-RECONHECIDO')).length, 2);
+  assert.equal((await listar(env, 'NAO-RECONHECIDO-2')).length, 2);
+});
+
+test('o QA renomeia a pasta nao reconhecida para a placa certa', async t => {
+  const env = await createTestEnv(t);
+  applyConfigOverrides(env.config);
+  const fotos = await montarOrigem(env, ['a.jpg', 'b.jpg']);
+  fotos[0].placa = '?';
+  await VehicleService.importarParaData(DIA, fotos);
+
+  const result = await VehicleService.renomearPlaca(DIA, 'NAO-RECONHECIDO', 'ABC1234');
+
+  assert.equal(result.ok, true, result.error);
+  assert.deepEqual(await listar(env, 'NAO-RECONHECIDO'), []);
+  assert.deepEqual(await listar(env, 'ABC1234'), ['ABC1234_0.jpg', 'ABC1234_1.jpg']);
 });
