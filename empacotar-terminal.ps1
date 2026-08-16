@@ -31,12 +31,16 @@ New-Item -ItemType Directory -Force -Path $pasta | Out-Null
 # --- o que vai ---------------------------------------------------------------
 # O codigo sai do git (git archive), nao do disco: assim o pacote leva
 # exatamente a versao commitada, sem arquivo solto ou meia-edicao desta matriz.
+# Formato zip, nao tar: dependendo do PATH, "tar" pode ser o do Git Bash, que
+# le "C:\..." como nome de servidor remoto e falha com "Cannot connect to C".
+# Expand-Archive nao tem esse problema.
 Write-Host "  codigo (da versao commitada)..."
-$tar = Join-Path $env:TEMP "agfoto-pacote.tar"
-& git archive --format=tar -o $tar HEAD
+$tmpZip = Join-Path $env:TEMP "agfoto-pacote.zip"
+if (Test-Path $tmpZip) { Remove-Item $tmpZip -Force }
+& git archive --format=zip -o $tmpZip HEAD
 if ($LASTEXITCODE -ne 0) { throw "git archive falhou" }
-& tar -xf $tar -C $pasta
-Remove-Item $tar -Force
+Expand-Archive -Path $tmpZip -DestinationPath $pasta -Force
+Remove-Item $tmpZip -Force
 
 # --- o que NAO vai, mesmo estando no git -------------------------------------
 # Coisas de desenvolvimento nao servem no terminal e so confundem quem abrir a
