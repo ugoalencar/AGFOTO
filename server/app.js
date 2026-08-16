@@ -88,6 +88,15 @@ export function createApp({ configOverrides = null, services = {} } = {}) {
     name: 'AG Fotografia',
     displayName: 'AG Foto'
   }));
+  app.get('/api/sistema/versao', async (_req, res, next) => {
+    try {
+      const { lerVersao } = await import('./versao.js');
+      return sendOk(res, await lerVersao());
+    } catch (error) {
+      return next(error);
+    }
+  });
+
   // Atualizacao do sistema pelo GitHub.
   app.get('/api/sistema/atualizacao', async (_req, res, next) => {
     try {

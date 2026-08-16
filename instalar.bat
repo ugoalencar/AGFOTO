@@ -9,7 +9,17 @@ rem
 rem  Seguro rodar numa pasta que ja esta em uso: nao apaga foto, nao apaga
 rem  configuracao e nao desfaz trabalho nenhum.
 rem ===========================================================================
-cd /d "%~dp0"
+rem Este .bat faz parte do repositorio e, ao ligar a pasta ao GitHub, pode ser
+rem sobrescrito por uma versao nova ENQUANTO ainda esta rodando - o cmd.exe se
+rem perde lendo um arquivo que mudou debaixo dele. Por isso roda a partir de uma
+rem copia no TEMP.
+if not "%~1"=="_copia" (
+  copy /y "%~f0" "%TEMP%\agfoto-instalar.bat" >nul
+  call "%TEMP%\agfoto-instalar.bat" _copia "%~dp0"
+  exit /b %errorlevel%
+)
+cd /d "%~2"
+
 echo.
 echo   AG Fotografia - instalacao
 echo   ==========================
@@ -87,8 +97,23 @@ if "!TEMGIT!"=="0" goto :atalhos
 
 echo.
 if not exist .git (
-  echo   [!] Esta pasta nao e uma copia do repositorio.
-  echo       Para atualizar por dentro, ela precisa vir de um "git clone".
+  echo   Ligando esta pasta ao repositorio de atualizacoes...
+  rem O repositorio e so leitura para o terminal: git fetch/pull funciona sem
+  rem senha nem chave, e ninguem daqui consegue empurrar nada de volta.
+  git init -q
+  git remote add origin https://github.com/ugoalencar/AGFOTO.git
+  git fetch -q --depth 1 origin master
+  if errorlevel 1 (
+    echo   [X] Nao deu para falar com o GitHub. Confira a internet e rode de novo.
+    pause
+    exit /b 1
+  )
+  rem O reset alinha os arquivos de CODIGO com o repositorio. Foto, configuracao
+  rem e dados nao fazem parte dele e ficam intocados - estao no .gitignore.
+  git reset -q --hard origin/master
+  git branch -q -M master
+  git branch -q --set-upstream-to=origin/master master
+  echo   [ok] pasta ligada - o botao Atualizar ja funciona
   goto :atalhos
 )
 

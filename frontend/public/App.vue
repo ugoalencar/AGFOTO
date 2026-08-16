@@ -56,7 +56,10 @@
         </button>
       </template>
 
-      <div class="ag-rail-foot">{{ plataforma === 'carros' ? 'Carros' : 'Fase 1' }}<br>{{ plataforma === 'carros' ? 'ADSET' : 'Produtos' }}</div>
+      <div class="ag-rail-foot">
+        {{ plataforma === 'carros' ? 'Carros' : 'Fase 1' }}<br>{{ plataforma === 'carros' ? 'ADSET' : 'Produtos' }}
+        <div class="ag-versao" :title="`Versao do sistema - diga este numero ao pedir ajuda`">{{ versaoRotulo }}</div>
+      </div>
     </nav>
 
     <div class="ag-main">
@@ -1019,8 +1022,9 @@
           <div class="ag-table-wrap">
             <table class="ag-table">
               <tbody>
-                <tr><td>Versao aqui</td><td>{{ atualizacao.versaoLocal || '-' }}</td></tr>
-                <tr><td>Versao no GitHub</td><td>{{ atualizacao.versaoRemota || '-' }}</td></tr>
+                <tr><td>Versao</td><td><b>{{ versaoRotulo || '-' }}</b></td></tr>
+                <tr><td>Commit aqui</td><td>{{ atualizacao.versaoLocal || '-' }}</td></tr>
+                <tr><td>Commit no GitHub</td><td>{{ atualizacao.versaoRemota || '-' }}</td></tr>
                 <tr><td>Branch</td><td>{{ atualizacao.branch || '-' }}</td></tr>
                 <tr>
                   <td>Situacao</td>
@@ -1973,6 +1977,18 @@ export default {
       await verificarCamera();
     };
 
+    // Versao do sistema, para o usuario saber em que ponto esta.
+    const versaoRotulo = ref('');
+
+    const onCarregarVersao = async () => {
+      try {
+        const response = await this.$api.request('/api/sistema/versao');
+        if (response.ok) versaoRotulo.value = response.data.rotulo;
+      } catch {
+        versaoRotulo.value = '';
+      }
+    };
+
     // Atualizacao do sistema pelo GitHub.
     const atualizacao = ref({
       conectado: false, temNovidade: false, atualizacoesPendentes: 0,
@@ -2005,6 +2021,7 @@ export default {
     };
 
     const onAtualizarSistema = async () => {
+      await onCarregarVersao();
       await onVerificarAtualizacao({ silencioso: true });
 
       if (!atualizacao.value.temNovidade) {
@@ -3166,6 +3183,7 @@ export default {
       adsetModo,
       adsetUsuario,
       onEnviarAoAdset,
+      versaoRotulo,
       atualizacao,
       atualizando,
       atualizacaoTitulo,

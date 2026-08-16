@@ -2360,3 +2360,14 @@ select {
   font-size: 12px;
   text-align: center;
 }
+
+/* Versao no rodape do menu: presente para quem procura, discreta para quem
+   nao esta procurando. */
+.ag-versao {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--ag-line);
+  color: var(--ag-muted-2);
+  font-size: 10px;
+  letter-spacing: .02em;
+}

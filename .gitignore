@@ -67,3 +67,4 @@ temp_docx_content/
 # todo e o "git pull --ff-only" do botao Atualizar abortaria sempre.
 dados/auditoria/
 dados/jsons/
+dist/
