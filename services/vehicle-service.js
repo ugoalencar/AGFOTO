@@ -5,7 +5,7 @@ import { promisify } from 'util';
 
 const execFileAsync = promisify(execFile);
 import { VehicleBatch, Vehicle } from '../domain/vehicle.js';
-import { config, ROOT } from '../server/config.js';
+import { config } from '../server/config.js';
 import { createSecureDirectory, assertInsideRoot, validateImageSignature } from '../server/secure-filesystem.js';
 import { lerDataDeCaptura } from '../server/exif-data.js';
 import { FastAlprProvider } from './fast-alpr-provider.js';
@@ -192,36 +192,6 @@ export class VehicleService {
       return { ok: true, data: { pasta, fotos, total: fotos.length, semExif, placasLidas } };
     } catch (err) {
       return { ok: false, error: `Nao foi possivel ler a pasta: ${err.message}` };
-    }
-  }
-
-  /**
-   * Abre o dialogo nativo de pasta do Windows e devolve o que o usuario
-   * escolheu. Mais pratico que o navegador de pastas embutido na tela: o
-   * usuario ja conhece o Explorador e navega mais rapido nele.
-   *
-   * Interativo - fica esperando o usuario decidir, entao sem prazo curto
-   * feito comPrazo(). null quando o usuario cancela; nao e erro.
-   */
-  static async escolherPastaNativa(pastaInicial) {
-    if (process.platform !== 'win32') {
-      return { ok: false, error: 'Dialogo de pasta so disponivel no Windows' };
-    }
-    if (config.server?.lanEnabled) {
-      return { ok: false, error: 'Escolha de pasta indisponivel com a LAN ligada' };
-    }
-
-    try {
-      const script = path.join(ROOT, 'server', 'escolher-pasta.ps1');
-      const { stdout } = await execFileAsync(
-        'powershell',
-        ['-NoProfile', '-NonInteractive', '-STA', '-File', script, '-PastaInicial', String(pastaInicial || '')],
-        { windowsHide: true, timeout: 5 * 60 * 1000 }
-      );
-      const escolhida = stdout.trim();
-      return { ok: true, data: { pasta: escolhida || null } };
-    } catch (err) {
-      return { ok: false, error: `Nao foi possivel abrir o dialogo de pasta: ${err.message}` };
     }
   }
 

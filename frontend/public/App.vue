@@ -1849,21 +1849,6 @@ export default {
     };
 
     const onAbrirExplorador = async () => {
-      // Dialogo nativo do Windows e mais pratico - o usuario ja conhece o
-      // Explorador. So cai no navegador embutido se o nativo nao der (fora
-      // do Windows, ou LAN ligada).
-      try {
-        const response = await this.$api.request('/api/carros/escolher-pasta', {
-          query: carrosPasta.value ? { inicial: carrosPasta.value } : {}
-        });
-        if (response.ok) {
-          if (response.data.pasta) carrosPasta.value = response.data.pasta;
-          return;
-        }
-      } catch {
-        // cai no plano B abaixo
-      }
-
       explorerAberto.value = true;
       // Abre onde o caminho digitado aponta, se houver; senao, nas unidades.
       await onExplorar(carrosPasta.value || '');

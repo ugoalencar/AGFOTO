@@ -25,18 +25,6 @@ router.get('/navegar', async (req, res, next) => {
 });
 
 /**
- * GET /api/carros/escolher-pasta?inicial=
- * Abre o dialogo nativo do Windows para escolher a pasta de origem.
- */
-router.get('/escolher-pasta', async (req, res, next) => {
-  try {
-    responder(res, await VehicleService.escolherPastaNativa(req.query.inicial));
-  } catch (err) {
-    next(err);
-  }
-});
-
-/**
  * GET /api/carros/pasta?caminho=E:/DCIM/100CANON
  * Le a pasta de origem (cartao de memoria ou outra) e devolve as fotos na
  * sequencia em que foram tiradas.
