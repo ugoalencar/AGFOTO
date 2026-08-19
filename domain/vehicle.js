@@ -14,7 +14,15 @@ export class PlateOcrResult {
   }
 
   /**
-   * Valida se placa é confiável (>80%)
+   * Valida se placa é confiável (>=80).
+   *
+   * A confiança bruta do Tesseract não presta (cai a zero mesmo com o texto
+   * certo) - por isso o provider de OCR não usa mais o valor do Tesseract
+   * aqui. Em vez disso, `confidence` passou a medir concordância entre
+   * variantes de pré-processamento independentes: 90 quando duas variantes
+   * leram exatamente o mesmo texto, 40 quando nenhuma concordou (formato
+   * fechou, mas é só um palpite - erros sistemáticos tipo Q lido como O têm
+   * formato válido mesmo estando errados, por isso format sozinho não basta).
    */
   isReliable() {
     return this.confidence >= 80;

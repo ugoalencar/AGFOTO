@@ -1363,11 +1363,32 @@ export default {
         const anterior = atual?.fotos[atual.fotos.length - 1];
         const pausa = anterior ? instante - new Date(anterior.capturadaEm).getTime() : Infinity;
 
-        // Placa lida na foto abre um carro - e o sinal mais forte. Sem leitura,
-        // a pausa entre as fotos decide.
-        const abrePorPlaca = !!foto.placaSugerida;
+        // Placa lida na foto abre um carro - e o sinal mais forte. Sem leitura
+        // confiavel, a pausa entre as fotos decide. Uma leitura de baixa
+        // confianca (foto interna com texto que por acidente bateu o formato
+        // de placa) nao pode abrir carro sozinha - senao as fotos seguintes,
+        // que sao do MESMO carro, ficam grudadas nesse carro fantasma.
+        const placaConfiavel = !!foto.placaSugerida && (foto.placaConfianca ?? 0) >= 80;
 
-        if (!atual || abrePorPlaca || pausa > limite) {
+        // Mesma placa lida de novo antes de qualquer foto do carro (o
+        // fotografo bateu duas fotos seguidas da placa por engano) - nao abre
+        // carro novo, e so mais uma foto de placa no carro que ja esta aberto.
+        const repeteAMesmaPlacaAindaSemFotosDoCarro = atual
+          && placaConfiavel
+          && atual.lida === foto.placaSugerida
+          && atual.fotos.every(f => !!f.placaSugerida && (f.placaConfianca ?? 0) >= 80);
+
+        const abrePorPlaca = placaConfiavel && !repeteAMesmaPlacaAindaSemFotosDoCarro;
+
+        // A pausa so decide quando o carro atual ainda nao tem placa lida -
+        // e o fallback pra quando nao ha sinal nenhum. Um carro que ja foi
+        // identificado por placa fica aberto ate a PROXIMA placa confiavel,
+        // nunca por causa de pausa: interior e o resto do externo tem pausas
+        // naturais (reposicionar, trocar de angulo) que nao podem fatiar o
+        // mesmo carro em "carros sem placa" fantasmas.
+        const abrePorPausa = pausa > limite && !(atual && atual.lida);
+
+        if (!atual || abrePorPlaca || abrePorPausa) {
           const indice = grupos.length;
           grupos.push({
             // O usuario pode ter corrigido a placa: a correcao vence a leitura.

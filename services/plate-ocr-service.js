@@ -161,6 +161,22 @@ export class PlateOcrService {
       const result = await this.processPlatPhoto(photo.path);
 
       if (result.ok && result.data.detected && result.data.reliable) {
+        // Mesma placa repetida antes de qualquer foto do carro (ex.: o
+        // fotografo bateu duas fotos seguidas da placa por engano) - nao
+        // conta como veiculo novo, so mais uma foto de placa no mesmo grupo.
+        const repeticaoDaMesmaPlaca = currentGroup
+          && currentGroup.plate === result.data.text
+          && currentGroup.photos.every(p => p.isPlatePhoto);
+
+        if (repeticaoDaMesmaPlaca) {
+          currentGroup.photos.push({
+            ...photo,
+            isPlatePhoto: true,
+            sequence: currentGroup.photos.length + 1
+          });
+          continue;
+        }
+
         // Nova placa detectada
         if (currentGroup) {
           groups.push(currentGroup);

@@ -75,6 +75,36 @@ if errorlevel 1 (
   echo   [ok] navegador pronto
 )
 
+rem --- 4b. Leitura de placa (Fast-ALPR) ----------------------------------------
+rem Motor de OCR roda em Python, separado do resto (Node). Sem isso o sistema
+rem abre normal, so a leitura de placa na importacao nao funciona.
+echo.
+set TEMPYTHON=1
+where python >nul 2>&1
+if errorlevel 1 (
+  set TEMPYTHON=0
+  echo   [!] Python nao encontrado - a leitura de placa nao vai funcionar.
+  echo       Instale em https://python.org ^(marque "Add to PATH" na instalacao^)
+  echo       e rode este arquivo de novo.
+) else (
+  if not exist python-alpr\venv (
+    echo   Preparando o ambiente de leitura de placa ^(so na primeira vez^)...
+    python -m venv python-alpr\venv
+  )
+  if exist python-alpr\venv\Scripts\python.exe (
+    python-alpr\venv\Scripts\python.exe -m pip install --quiet --upgrade pip >nul
+    python-alpr\venv\Scripts\python.exe -m pip install --quiet -r python-alpr\requirements.txt onnxruntime
+    if errorlevel 1 (
+      echo   [!] Nao deu para instalar as dependencias de leitura de placa.
+      echo       O sistema roda, mas a leitura automatica na importacao nao.
+    ) else (
+      echo   [ok] leitura de placa pronta
+    )
+  ) else (
+    echo   [!] Nao foi possivel criar o ambiente Python. Confira a instalacao.
+  )
+)
+
 rem --- 5. Pastas de trabalho -------------------------------------------------
 for %%d in (Finalizadas Entrega Carros images\temp dados\jsons dados\xlsx dados\auditoria logs) do (
   if not exist "%%d" mkdir "%%d"

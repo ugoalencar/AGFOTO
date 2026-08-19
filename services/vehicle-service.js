@@ -8,13 +8,17 @@ import { VehicleBatch, Vehicle } from '../domain/vehicle.js';
 import { config } from '../server/config.js';
 import { createSecureDirectory, assertInsideRoot, validateImageSignature } from '../server/secure-filesystem.js';
 import { lerDataDeCaptura } from '../server/exif-data.js';
-import { TesseractPlateOcrProvider } from './tesseract-plate-provider.js';
+import { FastAlprProvider } from './fast-alpr-provider.js';
 import { PlateOcrService, MockPlateOcrProvider } from './plate-ocr-service.js';
 import { VehicleRepository } from '../repositories/vehicle-repository.js';
 import { auditLogger } from '../server/audit-logger.js';
 
-// Leitura de placa roda na propria maquina, sem servico externo.
-const ocrProvider = new TesseractPlateOcrProvider();
+// Leitura de placa roda na propria maquina, sem servico externo. Fast-ALPR
+// (deteccao + OCR treinados especificamente em placa) substituiu o Tesseract
+// (feito para texto de documento) depois de testado contra fotos reais: 8/8
+// certas, incluindo casos onde o Tesseract confundia caracteres de forma
+// sistematica mesmo com pre-processamento e votacao entre variantes.
+const ocrProvider = new FastAlprProvider();
 
 // Extensoes aceitas na pasta de origem (JPG da camera e RAW).
 const EXTENSOES_FOTO = ['.jpg', '.jpeg', '.png', '.webp', '.cr2', '.cr3', '.nef', '.arw', '.dng'];

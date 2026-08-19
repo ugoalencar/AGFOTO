@@ -145,7 +145,8 @@ export class UpdateService {
         : (await git('diff', '--name-only', antes, depois)).split('\n').filter(Boolean);
 
       const precisaReiniciar = arquivos.some(f => PRECISA_REINICIAR.some(re => re.test(f)));
-      const mexeuEmDependencia = arquivos.some(f => f === 'package.json' || f === 'package-lock.json');
+      const mexeuEmDependencia = arquivos.some(f => f === 'package.json' || f === 'package-lock.json'
+        || f === 'python-alpr/requirements.txt');
 
       await auditLogger.log('SISTEMA_ATUALIZADO', {
         de: antes.slice(0, 7), para: depois.slice(0, 7), arquivos: arquivos.length

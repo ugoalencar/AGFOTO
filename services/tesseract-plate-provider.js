@@ -2,6 +2,7 @@ import { Jimp } from 'jimp';
 import { createWorker, PSM } from 'tesseract.js';
 import { PlateOcrProvider } from './plate-ocr-service.js';
 import { PlateOcrResult } from '../domain/vehicle.js';
+import { classificarLayoutPlaca } from './plate-layout-classifier.js';
 
 /**
  * Leitura de placa com Tesseract, rodando na propria maquina.
@@ -15,6 +16,22 @@ import { PlateOcrResult } from '../domain/vehicle.js';
 // para esta largura foi o que fez a leitura sair exata nos testes com foto real:
 // em tamanho original a mesma placa devolvia lixo.
 const LARGURA_ALVO = 480;
+
+// Fotos reais vem com uma marca d'agua diagonal ("MERCOSUL BRASIL" repetido)
+// sobre o fundo da placa, que atrapalha a binarizacao do Tesseract de jeitos
+// diferentes dependendo do brilho/nitidez da foto. Nenhum preparo unico
+// funciona pra todas: testado contra um lote real, cada variante abaixo
+// resolve um subconjunto diferente de casos. Rodamos todas e so aceitamos o
+// resultado quando pelo menos duas concordam exatamente no mesmo texto -
+// senao um erro sistematico de uma unica variante (ex.: confundir Q com O)
+// passaria batido por ter formato valido.
+const VARIANTES_PREPARO = [
+  { largura: LARGURA_ALVO, contraste: 0.3 },
+  { largura: 320, blur: 1, contraste: 0.5 },
+  { largura: LARGURA_ALVO, blur: 2, limiar: 140 },
+  { largura: LARGURA_ALVO, blur: 2, limiar: 180 },
+  { largura: 700, blur: 2, limiar: 140 }
+];
 
 // Placa antiga (AAA1234) e Mercosul (AAA1A23).
 const PADRAO_PLACA = /^[A-Z]{3}\d[A-Z0-9]\d{2}$/;
@@ -46,14 +63,21 @@ export async function encerrarOcr() {
 }
 
 /**
- * Reduz e tira a cor: e o preparo que faz a leitura funcionar.
+ * Recorta pelo enquadramento ideal (tira do caminho outra placa, reflexo ou
+ * texto de fundo) e aplica uma das variantes de preparo.
  */
-async function prepararImagem(caminho) {
+async function prepararImagem(caminho, boundingBox, variante) {
   const imagem = await Jimp.read(caminho);
-  if (imagem.bitmap.width > LARGURA_ALVO) {
-    imagem.resize({ w: LARGURA_ALVO });
+  if (boundingBox && boundingBox.width > 0 && boundingBox.height > 0) {
+    imagem.crop({ x: boundingBox.x, y: boundingBox.y, w: boundingBox.width, h: boundingBox.height });
   }
-  imagem.greyscale().contrast(0.3);
+  if (imagem.bitmap.width > variante.largura) {
+    imagem.resize({ w: variante.largura });
+  }
+  imagem.greyscale();
+  if (variante.blur) imagem.blur(variante.blur);
+  if (variante.limiar) imagem.threshold({ max: variante.limiar });
+  else if (variante.contraste) imagem.contrast(variante.contraste);
   return imagem.getBuffer('image/png');
 }
 
@@ -93,20 +117,43 @@ function extrairPlacas(texto) {
 export class TesseractPlateOcrProvider extends PlateOcrProvider {
   async detectPlate(imagePath) {
     try {
-      const buffer = await prepararImagem(imagePath);
+      // Antes de gastar tempo com OCR, checa se a foto tem cara de foto de
+      // placa dedicada (faixa azul Mercosul + corpo claro ocupando area
+      // relevante do quadro). Fotos aleatorias do meio do lote nem chegam a
+      // rodar o Tesseract - o que tambem evita ler placa de fundo/tampada.
+      const layout = await classificarLayoutPlaca(imagePath);
+      if (!layout.isPlateLayout) return null;
+
       const worker = await obterWorker();
-      const { data } = await worker.recognize(buffer);
 
-      const placas = extrairPlacas(data.text || '');
-      if (placas.length === 0) return null;
+      // Cada variante e um primeiro candidato (o texto mais frequente lido
+      // naquele preparo); a contagem de votos e por variante concordante,
+      // nao por trecho de texto repetido dentro da mesma leitura.
+      const votos = new Map();
+      for (const variante of VARIANTES_PREPARO) {
+        const buffer = await prepararImagem(imagePath, layout.boundingBox, variante);
+        const { data } = await worker.recognize(buffer);
+        const placas = extrairPlacas(data.text || '');
+        if (placas.length === 0) continue;
 
-      const texto = placas[0];
+        const texto = placas[0];
+        votos.set(texto, (votos.get(texto) || 0) + 1);
+
+        // Duas variantes ja concordaram: para por aqui, sem gastar as demais.
+        if (votos.get(texto) >= 2) {
+          const formato = /^[A-Z]{3}\d[A-Z]\d{2}$/.test(texto) ? 'mercosul' : 'old';
+          return new PlateOcrResult(texto, texto, formato, 90);
+        }
+      }
+
+      if (votos.size === 0) return null;
+
+      // Nenhuma concordancia: nenhuma variante bateu duas vezes no mesmo
+      // texto. Ainda devolve o melhor palpite (mais votado), mas com
+      // confianca baixa - isReliable() vai mandar para revisao manual.
+      const [texto] = [...votos.entries()].sort((a, b) => b[1] - a[1])[0];
       const formato = /^[A-Z]{3}\d[A-Z]\d{2}$/.test(texto) ? 'mercosul' : 'old';
-
-      // A confianca do Tesseract cai muito com o ruido em volta da placa, mesmo
-      // quando o texto sai certo. O que sustenta o resultado aqui e o formato
-      // ter fechado; a confianca vai junto so como indicacao.
-      return new PlateOcrResult(texto, texto, formato, Math.max(0, Math.round(data.confidence)));
+      return new PlateOcrResult(texto, texto, formato, 40);
     } catch (err) {
       console.warn(`[OCR] Falha ao ler ${imagePath}: ${err.message}`);
       return null;
